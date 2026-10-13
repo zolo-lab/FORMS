@@ -101,11 +101,12 @@ export async function submit(token: string, input: Answers): Promise<SubmitResul
 
   for (const f of allFields(ctx.definition)) {
     if (f.type !== "signature") continue;
-    const image = (cleaned[f.id] as { image?: string } | undefined)?.image;
+    const sig = cleaned[f.id] as { image?: string; kind?: string; text?: string } | undefined;
+    const image = sig?.image;
     const m = image ? /^data:image\/png;base64,(.+)$/.exec(image) : null;
     if (!m) continue;
     const file = await putFile({ name: `signature-${ctx.step.id}-${f.id}.png`, mime: "image/png", bytes: new Uint8Array(Buffer.from(m[1]!, "base64")) });
-    await db.insert(signatures).values({ stepId: ctx.step.id, fieldId: f.id, kind: "drawn", fileId: file.id });
+    await db.insert(signatures).values({ stepId: ctx.step.id, fieldId: f.id, kind: sig?.kind === "typed" ? "typed" : "drawn", fileId: file.id, typedText: sig?.kind === "typed" ? (sig.text ?? null) : null });
   }
   await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
   return { ok: true };
