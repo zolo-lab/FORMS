@@ -129,7 +129,7 @@ export function FieldSettings({
           {(field.type === "radio" || field.type === "checkboxes") && (
             <label className="flex items-center gap-3 text-sm">
               <Checkbox checked={!!field.allowOther} onChange={(e) => onPatch({ allowOther: e.target.checked || undefined })} />
-              הוספת אפשרות "אחר"
+              הוספת אפשרות &quot;אחר&quot;
             </label>
           )}
         </Section>
