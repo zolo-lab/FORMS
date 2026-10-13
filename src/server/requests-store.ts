@@ -4,7 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
@@ -32,7 +32,7 @@ const { requests, signingSteps, stepTokens, submissions, events, notifications, 
 type StepRow = typeof signingSteps.$inferSelect;
 
 const DEFAULT_EXPIRY_DAYS = 30;
-const appUrl = () => process.env.APP_URL ?? "https://gybs-forms.vercel.app";
+export const appUrl = () => process.env.APP_URL ?? "https://gybs-forms.vercel.app";
 
 export interface Subject {
   name: string;
@@ -364,4 +364,36 @@ export async function expireOverdue(now = new Date()) {
 
 export async function listOrganizations() {
   return db.select().from(organizations).orderBy(asc(organizations.name));
+}
+
+/**
+ * A fresh one-time link for an open step; the previous link stops working. The plain token is never
+ * stored, so this is how an admin gets a link to copy or share after the request was created.
+ */
+export async function issueLink(stepId: string): Promise<{ url: string } | null> {
+  const [step] = await db.select().from(signingSteps).where(eq(signingSteps.id, stepId));
+  if (!step || (step.status !== "active" && step.status !== "in_progress")) return null;
+  const [req] = await db.select().from(requests).where(eq(requests.id, step.requestId));
+  if (!req) return null;
+  await db.update(stepTokens).set({ revokedAt: new Date() }).where(eq(stepTokens.stepId, stepId));
+  const { token, hash } = createToken();
+  await db.insert(stepTokens).values({ stepId, tokenHash: hash, expiresAt: req.expiresAt });
+  return { url: `${appUrl()}/s/${token}` };
+}
+
+export async function listRequests(limit = 50) {
+  return db
+    .select({
+      id: requests.id,
+      subjectName: requests.subjectName,
+      status: requests.status,
+      createdAt: requests.createdAt,
+      organizationName: organizations.name,
+      packageName: packageTemplates.name,
+    })
+    .from(requests)
+    .innerJoin(organizations, eq(requests.organizationId, organizations.id))
+    .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
+    .orderBy(desc(requests.createdAt))
+    .limit(limit);
 }

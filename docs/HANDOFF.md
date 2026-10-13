@@ -97,6 +97,16 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 - **Deviations from the plan:** invalid/expired links render a Hebrew page with HTTP 200 (API returns 410); the PDF copy download on the completion page waits for the final PDF (phase 5); the `thankYou` rules/redirect object arrives with phase 8.
 - **Secrets:** Claude could not create the GitHub Actions secret `DATABASE_URL` (blocked by the auto-mode classifier). Until Israel adds it (dev branch connection string), `tests/requests-store.test.ts` skips in CI.
 
-## 8. Next step
+## 8. Phase 5 (in progress) — request wizard, outbox, share links
 
-**Phase 5 in `docs/build-plan-v3.md`** (request wizard, notifications via Resend/SMS, final PDF + certificate, Priority export). Needs from Israel: SMS provider choice (before 5.3), Priority export sample (5.6), Vercel Blob connection (before phase 5 PDFs).
+Done and merged: **storage on Blob**, **5.2 outbox/templates**, **5.1 wizard + 5.4 share**.
+- `src/server/storage.ts`: private Blob object `files/<id>` when `BLOB_READ_WRITE_TOKEN` is set; metadata stays in `stored_files` (`data_base64 = ""` for Blob rows; older rows keep inline data). Blob store `gybs-forms-files` is connected to the project in all environments. **Not yet verified at runtime** (no token locally): upload a logo / PDF on a preview deployment and open it.
+- CI: the `DATABASE_URL` repo secret (dev branch) is passed to unit tests and e2e, so `tests/requests-store.test.ts` and `tests/e2e/request-wizard.spec.ts` run against dev. Vitest timeout is 60 s because of neon-http round trips.
+- 5.2: `src/lib/notifications/templates.ts` (pure render, defaults, retry rule), `src/server/notifications.ts` (`enqueue`, `deliverQueued` over Resend `fetch`; without `RESEND_API_KEY` it only logs and leaves rows queued). **Nothing calls `deliverQueued` yet** (no cron/trigger) and `message_templates` DB overrides are not read yet; defaults only. Needs `RESEND_API_KEY` and a verified sender before real mail.
+- 5.1/5.4: `/admin/requests` (list), `/admin/requests/new` (4 steps: package+org, employee details, requester fields, summary/send), `/admin/requests/[id]`. Plain tokens are never stored, so the page offers "create fresh links" (revokes the old link, including an emailed one). Right after sending, the wizard shows the links that were just emailed. WhatsApp: `src/lib/whatsapp.ts`.
+- Deviation: the plan's step 3 "approver + channel" is a read-only summary of the workflow (assignees are fixed in the package); there is no channel choice yet. Path is under `/admin/requests` (auth), not `/requests/new`.
+- The seeded package "קליטת עובד רגיל" has no forms attached, so the requester step has no fields on dev.
+
+## 9. Next step
+
+Remaining in phase 5: **5.3 SMS** (needs the provider choice: InforU or 019), **5.5 final PDF + certificate**, **5.6 Priority export** (needs a real export sample). Also: trigger for `deliverQueued`, read `message_templates` overrides, attach real forms to the seeded package.
