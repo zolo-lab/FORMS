@@ -66,11 +66,11 @@ The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubuserco
 - **File storage:** interim `stored_files` table (base64) behind `src/server/storage.ts`. Vercel Blob store `gybs-forms-files` (`store_nIynlk5Qa0UuVZNQ`) exists but is **not connected** to the project (no token). To switch: connect it in Vercel → Storage, `pnpm add @vercel/blob` is already in package.json (2.8.1), reimplement `putFile/getFile`.
 - **Tests:** vitest (session, wizard, builder, condition-ui, coords, pdf-items + phase 1). Playwright e2e in `tests/e2e` (mobile fill of sample form; PDF placement demo at `/preview/pdf-placement`). CI job `e2e` builds the app with test-only env.
 - **CI tips:** lint findings are printed as annotations by `scripts/eslint-annotations.mjs`. `gh pr create` and merging need REST (`gh api repos/$R/pulls ...`); GraphQL is blocked.
-- **Migrations:** `0000` and `0001` applied to Neon **dev** only. **Production has no tables yet** — needs the user's approval, then apply 0000 and 0001 in order and record in `schema_migrations`.
+- **Migrations:** `0000` and `0001` applied to Neon **dev and production** (production applied 2026-10-13 by pasting the SQL in the Neon console, with the user's approval; recorded in `schema_migrations`). Production also contains a stray sample table `playing_with_neon` (created by the Neon console's default query) — harmless, can be dropped.
 
-### Not verified end-to-end yet (needs a DB-backed run)
-Save draft / publish / version 2 / PDF upload / PDF preview were written and typechecked but not exercised against a real database (CI has no DB secret). First thing to do after the user approves: open the Vercel preview of a branch (uses Neon dev), create a form, publish, edit, upload a real PDF.
+### Smoke test on production (2026-10-13) — passed
+Create form → autosave → publish v1 → edit creates draft v2 while v1 stays unchanged (checked in the DB) → PDF upload (`/api/admin/pdf`) → server preview with Hebrew font (`/api/admin/pdf-preview`) all worked on `gybs-forms.vercel.app`. Not yet exercised by a human: drag-and-drop placement on a real government PDF (e2e covers it on a generated PDF) and the file_upload field with a real backend (no filler page exists yet; arrives with phase 4/5).
 
 ## 6. Next step
 
-Phase 3 in `docs/build-plan.md` (core data + dashboard). Before it: a DB-backed smoke test of phase 2 (above), and the user's visual check of the builder on a real device.
+Phase 3 in `docs/build-plan.md` (core data + dashboard). Before it: the user's visual check of the builder on a real device and a first real PDF placement.
