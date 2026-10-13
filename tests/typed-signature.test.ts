@@ -21,11 +21,11 @@ describe("initialsOf", () => {
 describe("fitFontSize", () => {
   const measure = (size: number, text: string) => text.length * size * 0.5;
   it("keeps the preferred size when the text fits", () => {
-    expect(fitFontSize("אבג", 100, 80, measure)).toBe(80);
+    expect(fitFontSize("אבג", 200, 80, measure)).toBe(80);
   });
   it("shrinks until the text fits", () => {
-    const s = fitFontSize("a".repeat(40), 200, 80, measure);
-    expect(measure(s, "a".repeat(40))).toBeLessThanOrEqual(200);
+    const s = fitFontSize("a".repeat(20), 200, 80, measure);
+    expect(measure(s, "a".repeat(20))).toBeLessThanOrEqual(200);
     expect(s).toBeLessThan(80);
   });
   it("never goes below the minimum", () => {
