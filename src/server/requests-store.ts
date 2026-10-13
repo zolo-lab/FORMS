@@ -4,7 +4,9 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
+import { afterResponse } from "./after";
 import { kickDelivery } from "./notifications";
+import { nearestDue } from "@/lib/requests/list";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
@@ -51,6 +53,10 @@ export interface CreateRequestInput {
   createdBy?: string;
   kind?: string;
   expiresInDays?: number;
+  /** Absolute deadline (API); wins over `expiresInDays`. */
+  expiresAt?: Date;
+  /** Extra things the API caller wants kept with the request (stored next to the requester answers). */
+  extra?: { redirectUrl?: string; custom?: Record<string, unknown> };
 }
 
 function toEngine(r: StepRow): EngineStep {
@@ -96,7 +102,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
   }
 
   const id = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + (input.expiresInDays ?? DEFAULT_EXPIRY_DAYS) * 86_400_000);
+  const expiresAt = input.expiresAt ?? new Date(Date.now() + (input.expiresInDays ?? DEFAULT_EXPIRY_DAYS) * 86_400_000);
   await db.insert(requests).values({
     id,
     organizationId: input.organizationId,
@@ -108,7 +114,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     subjectPhone: input.subject.phone,
     createdBy: input.createdBy,
     expiresAt,
-    apiParams: { requesterAnswers: input.requesterAnswers ?? {} },
+    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}) },
   });
   if (docs.length) await db.insert(packageDocuments).values(docs.map((d) => ({ ...d, requestId: id })));
   await db.insert(events).values({ requestId: id, actorType: input.createdBy ? "user" : "system", actorId: input.createdBy, type: "request_created" });
@@ -120,11 +126,18 @@ async function loadSteps(requestId: string): Promise<StepRow[]> {
 }
 
 /** All answers collected so far (requester answers + every submission), used for skipIf and assignees. */
-export async function collectedAnswers(requestId: string): Promise<Answers> {
+/**
+ * Requester answers plus every *submitted* step's answers, in submission order (later steps win).
+ * Drafts are autosaves that may never be submitted, so they only count for the signer who owns
+ * them (`draftStepId`), e.g. to restore the form after a refresh.
+ */
+export async function collectedAnswers(requestId: string, opts: { draftStepId?: string } = {}): Promise<Answers> {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   const subs = await db.select().from(submissions).where(eq(submissions.requestId, requestId));
   const out: Answers = { ...((req?.apiParams as { requesterAnswers?: Answers } | null)?.requesterAnswers ?? {}) };
-  for (const s of subs) Object.assign(out, s.answers);
+  const usable = subs.filter((s) => s.status === "submitted" || (opts.draftStepId !== undefined && s.stepId === opts.draftStepId));
+  usable.sort((a, b) => (a.submittedAt ?? a.savedAt).getTime() - (b.submittedAt ?? b.savedAt).getTime());
+  for (const s of usable) Object.assign(out, s.answers);
   return out;
 }
 
@@ -147,6 +160,13 @@ async function persist(
   if (!req) throw new Error("request not found");
   const known = new Map(before.map((r) => [r.id, r]));
   const now = new Date();
+  const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  /** When a step that just became active is due, from the route's `dueHours`. */
+  const dueFor = (s: { order: number; role: string }): Date | null => {
+    const h = pkg?.workflow.steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours;
+    return h ? new Date(now.getTime() + h * 3_600_000) : null;
+  };
+  const dueByStep = new Map<string, Date | null>();
   const writes: Promise<unknown>[] = [];
 
   const activatedIds = new Set(result.events.filter((e) => e.type === "step_activated").map((e) => e.stepId!));
@@ -155,6 +175,7 @@ async function persist(
   for (const s of result.steps) {
     const prev = known.get(s.id);
     const patch = stepPatch[s.id] ?? {};
+    if (activatedIds.has(s.id)) dueByStep.set(s.id, dueFor(s));
     const common = {
       status: s.status,
       assigneeName: s.assigneeName ?? null,
@@ -163,7 +184,7 @@ async function persist(
       declineReason: s.declineReason ?? null,
       returnReason: s.returnReason ?? null,
       returnedToStepId: s.returnedToStepId ?? null,
-      ...(activatedIds.has(s.id) ? { activatedAt: now } : {}),
+      ...(activatedIds.has(s.id) ? { activatedAt: now, dueAt: dueByStep.get(s.id) ?? null } : {}),
       ...(s.status === "completed" && prev?.status !== "completed" ? { completedAt: now } : {}),
       ...patch,
     };
@@ -248,6 +269,7 @@ async function persist(
     .set({
       status,
       currentOrder: currentOrder(result.steps),
+      dueAt: nearestDue(result.steps.filter((s) => s.status === "active" || s.status === "in_progress").map((s) => (dueByStep.has(s.id) ? (dueByStep.get(s.id) ?? null) : (known.get(s.id)?.dueAt ?? null)))),
       ...(status === "completed" ? { completedAt: now } : {}),
       ...(status === "cancelled" ? { cancelledAt: now } : {}),
     })
@@ -377,6 +399,18 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
       console.error("[finalize] failed", row.requestId, e);
     }
   }
+  // Webhooks go out after the final PDFs exist (request.completed links to them) and after the response.
+  const exposed = result.events.filter((e) => e.type === "request_completed" || e.type === "step_completed" || e.type === "request_declined");
+  if (exposed.length) {
+    await afterResponse(async () => {
+      try {
+        const { emitWebhooks } = await import("./webhooks");
+        await emitWebhooks(row.requestId, exposed);
+      } catch (e) {
+        console.error("[webhooks] failed", row.requestId, e);
+      }
+    });
+  }
   return out;
 }
 
@@ -385,6 +419,12 @@ export async function cancelRequest(requestId: string, reason: string, actor: { 
   if (!req) throw new Error("request not found");
   // A finished request must stay finished: cancelling it would rewrite its history.
   if (req.status !== "draft" && req.status !== "in_progress" && req.status !== "returned") throw new Error(`request is ${req.status}`);
+  if (req.status === "draft") {
+    // Never sent: no steps to cancel, just close the request.
+    await db.update(requests).set({ status: "cancelled", cancelReason: reason, cancelledAt: new Date() }).where(and(eq(requests.id, requestId), eq(requests.status, "draft")));
+    await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_cancelled", payload: { reason } });
+    return { status: "cancelled" as const, tokens: [] };
+  }
   const before = await loadSteps(requestId);
   const result = cancelAll(before.map(toEngine), reason);
   await db.update(requests).set({ cancelReason: reason }).where(eq(requests.id, requestId));

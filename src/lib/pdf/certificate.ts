@@ -40,7 +40,7 @@ export function certificateRows(d: CertificateData): CertificateRow[] {
     { group: "fact", label: "מסמך", value: d.documentTitle },
     { group: "fact", label: "מזהה בקשה", value: d.requestId },
     { group: "fact", label: "נוצר", value: fmtDate(d.generatedAt) },
-    { group: "fact", label: "SHA-256 של המסמך", value: d.documentSha256 },
+    { group: "fact", label: "SHA-256 של תוכן המסמך (ללא עמוד האסמכתא)", value: d.documentSha256 },
   ];
   const steps = d.steps.map<CertificateRow>((s) => ({
     group: "step",
@@ -74,5 +74,5 @@ export async function appendCertificate(doc: PDFDocument, data: CertificateData)
     const lines = drawHebrew(page, row.value, { x: left, y, width: 320, size: 10, font, multiline: true });
     y -= Math.max(1, lines) * 14 + 8;
   }
-  drawHebrew(page, "מסמך זה נחתם אלקטרונית. ניתן לאמת את תקינותו באמצעות ערך ה-SHA-256 שלמעלה.", { x: left, y: 60, width, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+  drawHebrew(page, "מסמך זה נחתם אלקטרונית. ערך ה-SHA-256 שלמעלה מחושב על המסמך לפני הוספת עמוד זה; טביעת האצבע של הקובץ המלא נשמרת במערכת.", { x: left, y: 60, width, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
 }

@@ -40,6 +40,8 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     let base: Uint8Array;
     const [pdf] = version.pdfFileId ? await db.select().from(pdfFiles).where(eq(pdfFiles.id, version.pdfFileId)) : [];
     const stored = pdf && version.pdfMapping ? await getFile(pdf.blobUrl.split("/").pop()!) : null;
+    // A form built on a PDF must never silently turn into the plain summary: fail so it is retried/fixed.
+    if (version.pdfFileId && version.pdfMapping && !stored) throw new Error(`PDF template file missing for "${title}" (file ${version.pdfFileId})`);
     if (stored && version.pdfMapping) {
       base = await stampPdf(stored.bytes, version.pdfMapping, version.definition, answers, { signedAt });
     } else {

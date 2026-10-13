@@ -14,6 +14,7 @@ import { shouldLogSave, tokenState, type TokenState } from "@/lib/workflow/signi
 import { applyStepAction, collectedAnswers, StepConflictError } from "./requests-store";
 import { getFile, putFile } from "./storage";
 import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
+import { delegateError } from "@/lib/workflow/delegate";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 
 const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
@@ -56,7 +57,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .orderBy(packageDocuments.order);
   const docs: PackageDoc[] = docRows.map((d) => ({ title: d.title, definition: d.definition }));
   const role = step.role as FillerRole;
-  const answers = await collectedAnswers(request.id);
+  const answers = await collectedAnswers(request.id, { draftStepId: step.id });
   const merged = docs.length ? mergedDefinitionForStep(docs, role) : { schemaVersion: 1 as const, title: request.subjectName, pages: [] };
   const view = roleView(merged, answers, role);
 
@@ -241,7 +242,10 @@ export async function performAction(token: string, cookieHeader: string | null, 
   if (!otpPassed(ctx, cookieHeader)) return { ok: false, reason: "otp_required" };
   try {
     if (action.type === "return" && !ctx.returnTargets.some((t) => t.id === action.toStepId)) return { ok: false, reason: "bad_target" };
-    if (action.type === "delegate" && !action.assignee.name.trim()) return { ok: false, reason: "name_required" };
+    if (action.type === "delegate") {
+      const bad = delegateError(action.assignee);
+      if (bad) return { ok: false, reason: bad };
+    }
     await applyStepAction(ctx.step.id, action, { type: "signer" });
     return { ok: true };
   } catch (e) {
