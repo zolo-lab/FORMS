@@ -19,7 +19,7 @@ test("create a package, edit its route, validate steps, archive", async ({ page 
   await step3.getByLabel("תפקיד").selectOption("payroll");
   await step3.getByRole("button", { name: "שמירת שלב 3" }).click();
   // A payroll step needs a named assignee.
-  await expect(page.getByRole("alert")).toContainText("השלב לא נשמר");
+  await expect(page.locator('p[role="alert"]')).toContainText("השלב לא נשמר");
 
   const again = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
   await again.getByLabel("תפקיד").selectOption("payroll");
