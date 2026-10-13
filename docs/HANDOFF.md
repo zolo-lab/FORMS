@@ -99,7 +99,7 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 
 ## 8. Phase 5 (in progress) — request wizard, outbox, share links
 
-Done and merged: **storage on Blob**, **5.2 outbox/templates**, **5.1 wizard + 5.4 share**.
+Done and merged: **storage on Blob**, **5.1 wizard**, **5.2 outbox/templates**, **5.3 SMS interface**, **5.4 share**, **5.5 final PDF + reference page**.
 - `src/server/storage.ts`: private Blob object `files/<id>` when `BLOB_READ_WRITE_TOKEN` is set; metadata stays in `stored_files` (`data_base64 = ""` for Blob rows; older rows keep inline data). Blob store `gybs-forms-files` is connected to the project in all environments. **Not yet verified at runtime** (no token locally): upload a logo / PDF on a preview deployment and open it.
 - CI: the `DATABASE_URL` repo secret (dev branch) is passed to unit tests and e2e, so `tests/requests-store.test.ts` and `tests/e2e/request-wizard.spec.ts` run against dev. Vitest timeout is 60 s because of neon-http round trips.
 - 5.2: `src/lib/notifications/templates.ts` (pure render, defaults, retry rule), `src/server/notifications.ts` (`enqueue`, `deliverQueued` over Resend `fetch`; without `RESEND_API_KEY` it only logs and leaves rows queued). **Nothing calls `deliverQueued` yet** (no cron/trigger) and `message_templates` DB overrides are not read yet; defaults only. Needs `RESEND_API_KEY` and a verified sender before real mail.
@@ -107,6 +107,9 @@ Done and merged: **storage on Blob**, **5.2 outbox/templates**, **5.1 wizard + 5
 - Deviation: the plan's step 3 "approver + channel" is a read-only summary of the workflow (assignees are fixed in the package); there is no channel choice yet. Path is under `/admin/requests` (auth), not `/requests/new`.
 - The seeded package "קליטת עובד רגיל" has no forms attached, so the requester step has no fields on dev.
 
+- 5.3: `src/server/sms/provider.ts` (interface, `getSmsProvider`, console provider that only logs). A step with a phone but no email gets an `sms` outbox row. Real provider (InforU / 019) is a new case in `getSmsProvider`, waiting for Israel's choice.
+- 5.5: `src/server/finalize.ts` (`finalizeRequest`: stamped template, or `src/lib/pdf/summary.ts` answers summary when the form has no PDF; then `src/lib/pdf/certificate.ts` reference page with sha256), runs after the last step completes (failure is logged, not fatal) and from the request page button. Admin download: `/api/admin/requests/[id]/documents/[docId]`. Reference page PNG is rendered in `ci-previews` (`certificate-sample-1.png`, reviewed). `date_signed` stamps and AcroForm flattening need 7.1/7.3. The signer's completion page still has no download (decision needed: public link vs admin only).
+
 ## 9. Next step
 
-Remaining in phase 5: **5.3 SMS** (needs the provider choice: InforU or 019), **5.5 final PDF + certificate**, **5.6 Priority export** (needs a real export sample). Also: trigger for `deliverQueued`, read `message_templates` overrides, attach real forms to the seeded package.
+Remaining in phase 5: **5.6 Priority export** (needs a real export sample from Israel) and the phase-5 exit test (a real email in production, with Israel's approval; needs `RESEND_API_KEY`, a verified sender, and something that calls `deliverQueued`). Then **phase 6** (dashboard, reminders, integrations). Known gaps for review feedback: the builder has no per-field styling/feedback text and no "view the published form" link; the PDF designer (phase 7) is where drawing fields on a PDF arrives.
