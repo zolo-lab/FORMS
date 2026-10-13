@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAGE_SIZE, daysSince, eventLabel, filtersToQuery, median, parseFilters, progress } from "@/lib/requests/list";
+import { PAGE_SIZE, daysSince, nearestDue, eventLabel, filtersToQuery, median, parseFilters, progress } from "@/lib/requests/list";
 
 const UUID = "11111111-2222-3333-4444-555555555555";
 
@@ -89,5 +89,15 @@ describe("board columns", () => {
     expect(parseFilters({ view: "board" }).view).toBe("board");
     expect(parseFilters({ view: "x" }).view).toBeUndefined();
     expect(filtersToQuery({ page: 1, view: "board" })).toBe("view=board");
+  });
+});
+
+describe("nearestDue", () => {
+  it("returns the earliest date, ignoring steps without a due date", () => {
+    const a = new Date("2026-10-15T10:00:00Z");
+    const b = new Date("2026-10-14T10:00:00Z");
+    expect(nearestDue([a, null, b])).toEqual(b);
+    expect(nearestDue([null, null])).toBeNull();
+    expect(nearestDue([])).toBeNull();
   });
 });
