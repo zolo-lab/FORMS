@@ -149,7 +149,9 @@ Open items from the plan are listed in the audit document (P1-2 what the signer 
 
 Done since the audit: P1-2 (answers sent to the signer are filtered; HTTP 410 for dead links is NOT done, a page cannot set it), P1-7 (streamed ZIP, label headers), P1-11, P1-16 (opt-in), P1-14 only the initials label (hiding PDF-only fields from the normal form is still open), 8.8 (package "סיום העסקה" is seeded without forms).
 
-Still open: P1-9/10/15 (formulas, jumps and piping across roles / merged docs), the rest of P1-14, the P2 list, 8.4 `section`/typed `grid` (needs a decision on how a collapsible section groups following fields), 8.7 i18n, 5.6 Priority export (needs a sample), 6.10.
+Also done: P1-9 (other roles' formulas refreshed on submit), P1-10 (jumps with role filtering and merged docs), P1-15 (piping of other roles' fields), numeric answers stored as numbers, rename-field updates all references, wider publish checks, signing-page e2e smoke tests (`tests/e2e/signing.spec.ts`).
+
+Still open: the rest of P1-14, the P2 list, 8.4 `section`/typed `grid` (needs a decision on how a collapsible section groups following fields), 8.7 i18n, 5.6 Priority export (needs a sample), 6.10.
 
 Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms (attach forms to "סיום העסקה"), Google OAuth credentials or a decision on the password, `AUTO_MIGRATE=1` if he wants deploy-time migrations, removing `AUTH_DISABLED`.
 
