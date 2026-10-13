@@ -81,13 +81,15 @@ async function renderTyped(text: string): Promise<string> {
 function TypedSignature({ onSave, onCancel }: { onSave: (dataUrl: string, text: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   const [initials, setInitials] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [rendered, setRendered] = useState<{ text: string; url: string } | null>(null);
   const text = initials ? initialsOf(name) : name.trim();
+  // Only show a preview that belongs to the current text.
+  const preview = text && rendered?.text === text ? rendered.url : null;
 
   useEffect(() => {
     let alive = true;
-    if (!text) { setPreview(null); return; }
-    renderTyped(text).then((u) => { if (alive) setPreview(u); });
+    if (!text) return;
+    renderTyped(text).then((url) => { if (alive) setRendered({ text, url }); });
     return () => { alive = false; };
   }, [text]);
 
