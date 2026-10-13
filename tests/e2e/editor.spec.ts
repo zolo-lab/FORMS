@@ -19,11 +19,15 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 
   // Style this field only.
   await page.getByLabel("גודל", { exact: true }).selectOption({ label: "גדול מאוד" });
+  // The draft autosaves ~1s after the last edit; wait for that request before leaving the editor.
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes(`/admin/forms/${id}`));
   await page.getByRole("switch", { name: "בולד" }).click();
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/text-2xl/);
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/font-bold/);
 
-  // Autosave runs after a short debounce; the full-screen preview shows the saved version.
+  await saved;
+
+  // The full-screen preview shows the saved version.
   await expect(async () => {
     await page.goto(`/preview/form/${id}`);
     const label = page.locator("label", { hasText: "שם מלא" });
