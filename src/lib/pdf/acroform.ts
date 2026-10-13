@@ -78,7 +78,9 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
       const options = pdfField.getOptions().map((o) => ({ value: o, label: o }));
       fields.push({ id, type: "radio", label, options, settings: { pdfOnly: true, acroName: label } });
       ws.forEach((w, i) => {
-        const on = w.widget.getOnValue()?.decodeText() ?? options[i]?.value;
+        // Prefer the widget's own export value when it names an option; otherwise assume widgets follow option order.
+        const raw = w.widget.getOnValue()?.decodeText();
+        const on = options.some((o) => o.value === raw) ? raw : options[i]?.value;
         if (on) stamps.push({ ...base, id: `${id}_s${i}`, kind: "check", whenValue: on, page: w.page, ...w.rect });
       });
     } else if (pdfField instanceof PDFDropdown) {
