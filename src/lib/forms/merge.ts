@@ -14,6 +14,7 @@ export interface PackageDoc {
 export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): FormDefinition {
   const seen = new Set<string>();
   const pages: FormPage[] = [];
+  const docOfPage: number[] = [];
   docs.forEach((d, di) => {
     for (const page of d.definition.pages) {
       const fields = page.fields.filter((f) => {
@@ -22,6 +23,7 @@ export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): F
         return true;
       });
       if (fields.length === 0) continue;
+      docOfPage.push(di);
       pages.push({
         ...page,
         id: docs.length > 1 ? `d${di}_${page.id}` : page.id,
@@ -32,6 +34,15 @@ export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): F
       });
     }
   });
+  // "end" inside document N finishes that document only: continue with the first page of the next document.
+  if (docs.length > 1) {
+    pages.forEach((page, i) => {
+      if (!page.nextPage?.some((r) => r.goTo === "end")) return;
+      const nextDoc = docOfPage.findIndex((d) => d > docOfPage[i]!);
+      const target = nextDoc === -1 ? "end" : pages[nextDoc]!.id;
+      pages[i] = { ...page, nextPage: page.nextPage.map((r) => (r.goTo === "end" ? { ...r, goTo: target } : r)) };
+    });
+  }
   return {
     schemaVersion: 1,
     title: docs.length === 1 ? docs[0]!.definition.title : docs.map((d) => d.title).join(" + "),
