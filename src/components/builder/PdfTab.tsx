@@ -117,6 +117,10 @@ export function PdfTab({
             if (def !== definition) onDefinitionChange(def);
             onChange({ ...pdf, mapping });
           }}
+          onFieldPatch={(fieldId, patch) => {
+            const patched = { ...definition, pages: definition.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) };
+            onDefinitionChange(patched);
+          }}
           onDrawElement={(entry, page, at) => {
             const { definition: next, stamp } = addPdfOnlyElement(definition, entry, page, at, () => nanoid(8));
             if (next !== definition) onDefinitionChange(next);
