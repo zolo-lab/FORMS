@@ -226,6 +226,18 @@ export function FieldSettings({
 
       {meta.hasAnswer && <ValidationSection field={field} v={v} setV={setV} />}
 
+      {field.type === "short_text" && (
+        <Section title="מסכת קלט וייחודיות">
+          <Row label="מסכה" hint='9 = ספרה, a = אות, * = אות או ספרה. למשל 999-9999999'>
+            <Input dir="ltr" aria-label="מסכה" value={field.mask ?? ""} onChange={(e) => onPatch({ mask: e.target.value || undefined })} />
+          </Row>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={!!field.unique} onCheckedChange={(c) => onPatch({ unique: c || undefined })} label="ערך ייחודי" />
+            ערך ייחודי (לא יתקבל ערך שכבר הוגש בבקשה אחרת)
+          </label>
+        </Section>
+      )}
+
       {meta.hasAnswer && !["signature", "file_upload", "repeating_table", "consent"].includes(field.type) && (
         <Section title="נוסחה (שדה מחושב)">
           <FormulaEditor def={def} field={field} onChange={(formula) => onPatch({ formula })} />

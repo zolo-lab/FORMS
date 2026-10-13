@@ -108,6 +108,10 @@ export interface FormField {
   exportKey?: string;
   /** Computed field: see formula.ts. The value is recalculated on the server and the field is read-only for the filler. */
   formula?: string;
+  /** Input mask for short_text, e.g. "999-9999999". See mask.ts. */
+  mask?: string;
+  /** No other request of the same templates may hold the same value (checked on the server at submit). */
+  unique?: boolean;
   /** Layout width hint on desktop. */
   width?: "full" | "half" | "third";
   /** Look of the label / text block (size, weight, color, alignment, highlight). */
@@ -137,6 +141,8 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     fields: z.array(fieldSchema).optional(),
     exportKey: z.string().optional(),
     formula: z.string().optional(),
+    mask: z.string().max(60).optional(),
+    unique: z.boolean().optional(),
     width: z.enum(["full", "half", "third"]).optional(),
     style: fieldStyleSchema.optional(),
   }),

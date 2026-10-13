@@ -10,6 +10,7 @@
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
 import { reachedPageIndexes } from "./paths";
+import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import {
@@ -35,6 +36,7 @@ const MSG = {
   max: (n: number) => `ערך מקסימלי: ${n}`,
   minLength: (n: number) => `לפחות ${n} תווים`,
   maxLength: (n: number) => `עד ${n} תווים`,
+  mask: "הערך אינו תואם לתבנית הנדרשת",
   pattern: "הערך אינו בפורמט הנדרש",
   option: "יש לבחור מהאפשרויות",
   minSelected: (n: number) => `יש לבחור לפחות ${n}`,
@@ -98,6 +100,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
     case "long_text":
     case "hidden": {
       if (typeof value !== "string") return field.type === "hidden" ? null : MSG.pattern;
+      if (field.mask && !matchesMask(value, field.mask)) return MSG.mask;
       if (v.minLength !== undefined && value.trim().length < v.minLength) return MSG.minLength(v.minLength);
       if (v.maxLength !== undefined && value.length > v.maxLength) return MSG.maxLength(v.maxLength);
       if (v.pattern && !new RegExp(v.pattern).test(value)) return v.patternMessage ?? MSG.pattern;
