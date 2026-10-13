@@ -120,11 +120,18 @@ async function loadSteps(requestId: string): Promise<StepRow[]> {
 }
 
 /** All answers collected so far (requester answers + every submission), used for skipIf and assignees. */
-export async function collectedAnswers(requestId: string): Promise<Answers> {
+/**
+ * Requester answers plus every *submitted* step's answers, in submission order (later steps win).
+ * Drafts are autosaves that may never be submitted, so they only count for the signer who owns
+ * them (`draftStepId`), e.g. to restore the form after a refresh.
+ */
+export async function collectedAnswers(requestId: string, opts: { draftStepId?: string } = {}): Promise<Answers> {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   const subs = await db.select().from(submissions).where(eq(submissions.requestId, requestId));
   const out: Answers = { ...((req?.apiParams as { requesterAnswers?: Answers } | null)?.requesterAnswers ?? {}) };
-  for (const s of subs) Object.assign(out, s.answers);
+  const usable = subs.filter((s) => s.status === "submitted" || (opts.draftStepId !== undefined && s.stepId === opts.draftStepId));
+  usable.sort((a, b) => (a.submittedAt ?? a.savedAt).getTime() - (b.submittedAt ?? b.savedAt).getTime());
+  for (const s of usable) Object.assign(out, s.answers);
   return out;
 }
 
