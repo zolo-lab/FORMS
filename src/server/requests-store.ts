@@ -117,7 +117,7 @@ async function loadSteps(requestId: string): Promise<StepRow[]> {
 }
 
 /** All answers collected so far (requester answers + every submission), used for skipIf and assignees. */
-async function collectedAnswers(requestId: string): Promise<Answers> {
+export async function collectedAnswers(requestId: string): Promise<Answers> {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   const subs = await db.select().from(submissions).where(eq(submissions.requestId, requestId));
   const out: Answers = { ...((req?.apiParams as { requesterAnswers?: Answers } | null)?.requesterAnswers ?? {}) };
