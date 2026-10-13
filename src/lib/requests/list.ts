@@ -14,6 +14,8 @@ export interface RequestFilters {
   to?: string;
   overdue?: boolean;
   q?: string;
+  /** Table (default) or kanban board. */
+  view?: "board";
   page: number;
 }
 
@@ -39,6 +41,7 @@ export function parseFilters(sp: SearchParams): RequestFilters {
   if (first(sp.overdue) === "1") f.overdue = true;
   const q = first(sp.q)?.trim();
   if (q) f.q = q.slice(0, 80);
+  if (first(sp.view) === "board") f.view = "board";
   const page = Number.parseInt(first(sp.page) ?? "1", 10);
   f.page = Number.isFinite(page) && page >= 1 ? page : 1;
   return f;
@@ -56,6 +59,7 @@ export function filtersToQuery(f: RequestFilters, override: Partial<RequestFilte
   if (m.to) p.set("to", m.to);
   if (m.overdue) p.set("overdue", "1");
   if (m.q) p.set("q", m.q);
+  if (m.view) p.set("view", m.view);
   if (m.page > 1) p.set("page", String(m.page));
   return p.toString();
 }
@@ -103,4 +107,35 @@ export function eventLabel(type: string, payload: Record<string, unknown> = {}):
     case "otp_verified": return "קוד האימות אומת";
     default: return type;
   }
+}
+
+export interface BoardRow {
+  id: string;
+  status: string;
+  waitingFor: { role: string }[];
+}
+export interface BoardColumn<T extends BoardRow> {
+  key: string;
+  title: string;
+  rows: T[];
+}
+
+/**
+ * Kanban columns: one per role someone is waiting on (a request waiting on two roles shows in both),
+ * then requests with no open step, completed, and stopped (declined/cancelled/expired). Empty columns are omitted.
+ */
+export function boardColumns<T extends BoardRow>(rows: T[]): BoardColumn<T>[] {
+  const cols: BoardColumn<T>[] = [];
+  for (const [role, title] of Object.entries(ROLE_LABELS)) {
+    const list = rows.filter((r) => r.waitingFor.some((w) => w.role === role));
+    if (list.length) cols.push({ key: role, title: `ממתין ל${title}`, rows: list });
+  }
+  const open = ["draft", "in_progress", "returned"];
+  const idle = rows.filter((r) => open.includes(r.status) && r.waitingFor.length === 0);
+  if (idle.length) cols.push({ key: "idle", title: "ללא שלב פעיל", rows: idle });
+  const done = rows.filter((r) => r.status === "completed");
+  if (done.length) cols.push({ key: "completed", title: "הושלמו", rows: done });
+  const stopped = rows.filter((r) => ["declined", "cancelled", "expired"].includes(r.status));
+  if (stopped.length) cols.push({ key: "stopped", title: "נעצרו", rows: stopped });
+  return cols;
 }

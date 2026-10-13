@@ -19,3 +19,18 @@ test("requests dashboard shows KPIs and filters by search", async ({ page }) => 
   await page.getByRole("link", { name: "ניקוי" }).click();
   await expect(page).toHaveURL(/\/admin\/requests$/);
 });
+
+test("switches between table and board and opens the inbox by role", async ({ page }) => {
+  await login(page, "/admin/requests");
+  await page.getByRole("link", { name: "לוח", exact: true }).click();
+  await expect(page).toHaveURL(/view=board/);
+  await expect(page.getByRole("list", { name: "לוח בקשות" }).or(page.getByText("אין בקשות להצגה."))).toBeVisible();
+  await page.getByRole("link", { name: "טבלה", exact: true }).click();
+  await expect(page).not.toHaveURL(/view=board/);
+
+  await page.goto("/admin/inbox");
+  await expect(page.getByRole("heading", { name: "ממתינים לטיפול" })).toBeVisible();
+  await page.getByRole("navigation", { name: "תפקיד" }).getByRole("link", { name: /מאשר/ }).click();
+  await expect(page).toHaveURL(/role=approver/);
+  await expect(page.getByRole("list", { name: "לוח בקשות" }).or(page.getByText(/אין בקשות שממתינות/))).toBeVisible();
+});

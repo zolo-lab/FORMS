@@ -49,10 +49,10 @@ export interface RequestRow {
   overdue: boolean;
 }
 
-export async function queryRequests(f: RequestFilters, now = new Date()): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
+export async function queryRequests(f: RequestFilters, now = new Date(), pageSize = PAGE_SIZE): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
   const where = and(...conditions(f, now));
   const [{ n } = { n: 0 }] = await db.select({ n: sql<number>`count(*)::int` }).from(requests).where(where);
-  const pageCount = Math.max(1, Math.ceil(n / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(n / pageSize));
   const page = Math.min(f.page, pageCount);
   const base = await db
     .select({
@@ -69,8 +69,8 @@ export async function queryRequests(f: RequestFilters, now = new Date()): Promis
     .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
     .where(where)
     .orderBy(desc(requests.createdAt))
-    .limit(PAGE_SIZE)
-    .offset((page - 1) * PAGE_SIZE);
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
 
   const ids = base.map((r) => r.id);
   const steps = ids.length

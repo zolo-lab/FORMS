@@ -62,3 +62,32 @@ describe("eventLabel", () => {
     expect(PAGE_SIZE).toBeGreaterThanOrEqual(10);
   });
 });
+
+describe("board columns", () => {
+  const row = (id: string, status: string, roles: string[] = []) => ({ id, status, waitingFor: roles.map((role) => ({ role })) });
+  it("groups by waiting role, then idle, completed and stopped", async () => {
+    const { boardColumns } = await import("@/lib/requests/list");
+    const cols = boardColumns([
+      row("a", "in_progress", ["employee"]),
+      row("b", "in_progress", ["approver", "payroll"]),
+      row("c", "in_progress", ["employee"]),
+      row("d", "draft"),
+      row("e", "completed"),
+      row("f", "cancelled"),
+    ]);
+    expect(cols.map((c) => [c.key, c.rows.map((r) => r.id)])).toEqual([
+      ["employee", ["a", "c"]],
+      ["approver", ["b"]],
+      ["payroll", ["b"]],
+      ["idle", ["d"]],
+      ["completed", ["e"]],
+      ["stopped", ["f"]],
+    ]);
+  });
+  it("parses and writes the view param", async () => {
+    const { parseFilters, filtersToQuery } = await import("@/lib/requests/list");
+    expect(parseFilters({ view: "board" }).view).toBe("board");
+    expect(parseFilters({ view: "x" }).view).toBeUndefined();
+    expect(filtersToQuery({ page: 1, view: "board" })).toBe("view=board");
+  });
+});
