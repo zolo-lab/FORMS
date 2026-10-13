@@ -71,6 +71,8 @@ function isBlank(v: unknown): boolean {
   return false;
 }
 
+const NUMERIC_TYPES = new Set(["number", "currency", "percent", "linear_scale", "rating"]);
+
 function toNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "") {
@@ -255,6 +257,8 @@ function validateFieldList(
       errors[key] = err;
       continue;
     }
+    // Numeric fields are stored as numbers, not as the text the browser sent ("21" -> 21).
+    if (NUMERIC_TYPES.has(field.type)) cleaned[field.id] = toNumber(value);
     // Nested rows of a repeating table: each row is its own scope for conditions.
     if (field.type === "repeating_table" && field.fields && Array.isArray(value)) {
       const rowsOut: Answers[] = [];

@@ -243,3 +243,20 @@ describe("full_name field", () => {
     expect(formatAnswer(def.pages[0]!.fields[0]!, ok.cleaned.who, "last")).toBe("כהן");
   });
 });
+
+describe("numeric answers are stored as numbers", () => {
+  it("converts text input to a number in cleaned", () => {
+    const def = parseFormDefinition({
+      schemaVersion: 1,
+      title: "t",
+      pages: [{ id: "p", title: "", fields: [
+        { id: "n", type: "number", label: "n" },
+        { id: "c", type: "currency", label: "c" },
+        { id: "t", type: "short_text", label: "t" },
+      ] }],
+    }).data!;
+    const res = validateAnswers(def, { n: "21", c: "1,250", t: "007" });
+    expect(res.ok).toBe(true);
+    expect(res.cleaned).toEqual({ n: 21, c: 1250, t: "007" });
+  });
+});
