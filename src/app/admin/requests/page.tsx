@@ -37,6 +37,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   const sp = await searchParams;
   const filters = parseFilters(sp);
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
+  const skipped = typeof sp.skipped === "string" ? Number(sp.skipped) : 0;
   const [orgs, packages, kpis, result] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined)]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
@@ -156,7 +157,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         </div>
       </form>
 
-      {cancelled !== null && Number.isFinite(cancelled) && <p role="status" className="rounded-md bg-muted p-3 text-sm">בוטלו {cancelled} בקשות.</p>}
+      {cancelled !== null && Number.isFinite(cancelled) && <p role="status" className="rounded-md bg-muted p-3 text-sm">בוטלו {cancelled} בקשות.{skipped > 0 && ` ${skipped} דולגו (כבר הסתיימו או בוטלו).`}</p>}
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {result.total} בקשות
       </p>
