@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
+import { computeFormulas } from "@/lib/forms/compute";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
@@ -27,9 +28,12 @@ export interface FormRendererProps {
 }
 
 export function FormRenderer({
-  definition, answers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today,
+  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today,
 }: FormRendererProps) {
   const readonly = mode === "readonly";
+  const todayStr = today ?? new Date().toISOString().slice(0, 10);
+  // Computed (formula) fields are filled live; the server recomputes them on submit.
+  const answers = useMemo(() => computeFormulas(definition, rawAnswers, todayStr), [definition, rawAnswers, todayStr]);
   const wizard = (definition.settings?.layout ?? "wizard") === "wizard" && !readonly;
   const [pageIndex, setPageIndex] = useState(0);
   const [localErrors, setLocalErrors] = useState<FieldErrors>({});
@@ -48,11 +52,11 @@ export function FormRenderer({
     onUpload,
     errors,
     readonlyAll: readonly,
-    roleReadOnly: (f) => !!role && (f.filledBy ?? "employee") !== role,
+    roleReadOnly: (f) => !!f.formula || (!!role && (f.filledBy ?? "employee") !== role),
   };
 
   const setField = (id: string, v: unknown) => {
-    const nextAnswers = { ...answers, [id]: v };
+    const nextAnswers = { ...rawAnswers, [id]: v };
     if (v === undefined) delete nextAnswers[id];
     onChange(nextAnswers);
     // Clear this field's local errors as soon as the user edits it.

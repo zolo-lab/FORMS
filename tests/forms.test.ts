@@ -176,3 +176,37 @@ describe("PDF stamping", () => {
     expect(pdfMappingSchema.safeParse(bad).success).toBe(false);
   });
 });
+
+describe("computed fields", () => {
+  const def = parseFormDefinition({
+    schemaVersion: 1,
+    title: "t",
+    pages: [{
+      id: "p", title: "",
+      fields: [
+        { id: "price", type: "number", label: "מחיר" },
+        { id: "qty", type: "number", label: "כמות" },
+        { id: "total", type: "currency", label: "סה״כ", formula: "{price} * {qty}", required: true },
+        { id: "rows", type: "repeating_table", label: "שורות", fields: [
+          { id: "amount", type: "number", label: "סכום" },
+          { id: "double", type: "number", label: "כפול", formula: "{amount} * 2" },
+        ] },
+        { id: "sumRows", type: "number", label: "סכום שורות", formula: "sum({rows.double})" },
+      ],
+    }],
+  }).data!;
+
+  it("recomputes on the server whatever the client sent", () => {
+    const r = validateAnswers(def, { price: 12, qty: 3, total: 999999, rows: [{ amount: 5 }, { amount: 7, double: 1 }] }, { today });
+    expect(r.ok).toBe(true);
+    expect(r.cleaned.total).toBe(36);
+    expect(r.cleaned.rows).toEqual([{ amount: 5, double: 10 }, { amount: 7, double: 14 }]);
+    expect(r.cleaned.sumRows).toBe(24);
+  });
+
+  it("never reports an error for a formula field, even a required one with empty inputs", () => {
+    const r = validateAnswers(def, { rows: [] }, { today });
+    expect(r.errors.total).toBeUndefined();
+    expect(r.cleaned.total).toBeUndefined();
+  });
+});
