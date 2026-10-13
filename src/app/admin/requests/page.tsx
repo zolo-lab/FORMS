@@ -7,6 +7,7 @@ import { PAGE_SIZE, filtersToQuery, parseFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
+import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
 import { bulkCancelAction } from "./actions";
@@ -36,7 +37,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   const sp = await searchParams;
   const filters = parseFilters(sp);
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
-  const [orgs, packages, kpis, result] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters)]);
+  const [orgs, packages, kpis, result] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined)]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
   const link = (over: Parameters<typeof filtersToQuery>[1]) => {
@@ -49,9 +50,15 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">בקשות</h1>
-        <Link href="/admin/requests/new" className={buttonVariants()}>
-          בקשה חדשה
-        </Link>
+        <div className="flex items-center gap-2">
+          <nav aria-label="תצוגה" className="flex overflow-hidden rounded-md border text-sm">
+            <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`px-3 py-1.5 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
+            <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`px-3 py-1.5 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
+          </nav>
+          <Link href="/admin/requests/new" className={buttonVariants()}>
+            בקשה חדשה
+          </Link>
+        </div>
       </div>
 
       <section aria-label="מדדים" className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -78,6 +85,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
       </section>
 
       <form method="get" className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="סינון">
+        {filters.view && <input type="hidden" name="view" value={filters.view} />}
         <div className="space-y-1 lg:col-span-2">
           <Label htmlFor="q">חיפוש (שם, ת&quot;ז, מייל)</Label>
           <Input id="q" name="q" defaultValue={filters.q ?? ""} />
@@ -152,6 +160,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {result.total} בקשות
       </p>
+      {filters.view === "board" ? <Board rows={result.rows} /> : (
       <form id="bulk" method="get" action="/api/admin/requests/export" className="space-y-3">
         {[...new URLSearchParams(filtersToQuery(filters, { page: 1 })).entries()].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
@@ -213,6 +222,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         </table>
       </Card>
       </form>
+      )}
 
       {result.pageCount > 1 && (
         <nav className="flex items-center justify-center gap-3 text-sm" aria-label="עימוד">
