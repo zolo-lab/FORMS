@@ -9,6 +9,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { nextPageIndex, prevPageIndex, reachedPageIndexes, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { pipeText } from "@/lib/forms/piping";
+import { CardFlow } from "./CardFlow";
 import { FieldRow } from "./fields/registry";
 import type { RenderCtx, UploadFn } from "./fields/types";
 
@@ -36,7 +37,9 @@ export function FormRenderer({
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
   // Computed (formula) fields are filled live; the server recomputes them on submit.
   const answers = useMemo(() => computeFormulas(definition, rawAnswers, todayStr), [definition, rawAnswers, todayStr]);
-  const wizard = (definition.settings?.layout ?? "wizard") === "wizard" && !readonly;
+  const layout = definition.settings?.layout ?? "wizard";
+  const wizard = layout === "wizard" && !readonly;
+  const cardMode = layout === "card" && !readonly;
   const [pageIndex, setPageIndex] = useState(0);
   const [localErrors, setLocalErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -120,7 +123,11 @@ export function FormRenderer({
         {definition.description && <p className="mt-1 text-muted-foreground">{definition.description}</p>}
       </div>
 
-      {wizard && visible.length > 1 && (
+      {cardMode && (
+        <CardFlow definition={definition} answers={answers} onField={setField} ctx={ctx} role={role} today={today} serverErrors={serverErrors} onSubmit={onSubmit} />
+      )}
+
+      {!cardMode && wizard && visible.length > 1 && (
         <div aria-label={`שלב ${step + 1} מתוך ${visible.length}`}>
           <div className="mb-1 flex justify-between text-sm text-muted-foreground">
             <span>{definition.pages[current]?.title}</span>
@@ -132,7 +139,7 @@ export function FormRenderer({
         </div>
       )}
 
-      {pages.map((page) => (
+      {!cardMode && pages.map((page) => (
         <section key={page.id} className="space-y-4" aria-label={page.title}>
           {(!wizard || visible.length <= 1) && page.title && <h2 className="text-xl font-semibold">{page.title}</h2>}
           {page.description && <p className="text-sm text-muted-foreground">{page.description}</p>}
@@ -144,11 +151,11 @@ export function FormRenderer({
         </section>
       ))}
 
-      {Object.keys(errors).length > 0 && (
+      {!cardMode && Object.keys(errors).length > 0 && (
         <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש שדות שדורשים תיקון</p>
       )}
 
-      {!readonly && (
+      {!readonly && !cardMode && (
         <div className="flex justify-between gap-2 border-t pt-4">
           {wizard && prev !== null ? <Button variant="outline" onClick={() => go(prev)}>הקודם</Button> : <span />}
           {lastStep ? (
