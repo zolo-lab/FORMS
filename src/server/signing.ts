@@ -57,7 +57,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .orderBy(packageDocuments.order);
   const docs: PackageDoc[] = docRows.map((d) => ({ title: d.title, definition: d.definition }));
   const role = step.role as FillerRole;
-  const answers = await collectedAnswers(request.id);
+  const answers = await collectedAnswers(request.id, { draftStepId: step.id });
   const merged = docs.length ? mergedDefinitionForStep(docs, role) : { schemaVersion: 1 as const, title: request.subjectName, pages: [] };
   const view = roleView(merged, answers, role);
 
