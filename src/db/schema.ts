@@ -76,8 +76,8 @@ export const users = pgTable("users", {
 });
 
 /**
- * File bytes (base64) for PDFs and uploads. Interim storage until Vercel Blob is connected;
- * all access goes through src/server/storage.ts so swapping the backend is local.
+ * File metadata for PDFs and uploads. Bytes live in a private Vercel Blob object `files/<id>` (data_base64 = "");
+ * rows written before Blob was connected keep inline base64. All access goes through src/server/storage.ts.
  */
 export const storedFiles = pgTable("stored_files", {
   id: uuid("id").primaryKey().defaultRandom(),
