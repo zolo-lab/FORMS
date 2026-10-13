@@ -405,6 +405,12 @@ export async function cancelRequest(requestId: string, reason: string, actor: { 
   if (!req) throw new Error("request not found");
   // A finished request must stay finished: cancelling it would rewrite its history.
   if (req.status !== "draft" && req.status !== "in_progress" && req.status !== "returned") throw new Error(`request is ${req.status}`);
+  if (req.status === "draft") {
+    // Never sent: no steps to cancel, just close the request.
+    await db.update(requests).set({ status: "cancelled", cancelReason: reason, cancelledAt: new Date() }).where(and(eq(requests.id, requestId), eq(requests.status, "draft")));
+    await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_cancelled", payload: { reason } });
+    return { status: "cancelled" as const, tokens: [] };
+  }
   const before = await loadSteps(requestId);
   const result = cancelAll(before.map(toEngine), reason);
   await db.update(requests).set({ cancelReason: reason }).where(eq(requests.id, requestId));

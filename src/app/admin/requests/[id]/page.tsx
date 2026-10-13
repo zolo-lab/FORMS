@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
+import { Button } from "@/components/ui/button";
+import { discardDraftAction, sendDraftAction } from "../actions";
 import { Badge, Card } from "@/components/ui/card";
 import { eventLabel } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/workflow/labels";
@@ -15,8 +17,9 @@ export const dynamic = "force-dynamic";
 const ACTOR: Record<string, string> = { user: "מנהל", signer: "חותם", system: "מערכת", api: "API" };
 const stepTone = (s: string) => (s === "completed" ? "success" : s === "active" || s === "in_progress" ? "warning" : "muted");
 
-export default async function RequestPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RequestPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const data = /^[0-9a-f-]{36}$/i.test(id) ? await getRequest(id) : null;
   if (!data) notFound();
   const { request, steps, events, documents } = data;
@@ -62,6 +65,24 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
           </ol>
         )}
       </section>
+
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "send" ? "השליחה נכשלה. בדקו שהערכה מוגדרת ושכל הטפסים בה פורסמו." : "המחיקה נכשלה."}</p>}
+
+      {request.status === "draft" && (
+        <section className="space-y-2" aria-label="טיוטה">
+          <h2 className="font-semibold">הבקשה עדיין לא נשלחה</h2>
+          <div className="flex gap-2">
+            <form action={sendDraftAction}>
+              <input type="hidden" name="id" value={request.id} />
+              <Button type="submit" size="sm">שליחה עכשיו</Button>
+            </form>
+            <form action={discardDraftAction}>
+              <input type="hidden" name="id" value={request.id} />
+              <Button type="submit" size="sm" variant="destructive">מחיקת הטיוטה</Button>
+            </form>
+          </div>
+        </section>
+      )}
 
       {(live || request.status === "expired") && (
         <section className="space-y-2" aria-label="פעולות">
