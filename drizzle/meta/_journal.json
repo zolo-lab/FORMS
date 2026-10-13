@@ -15,6 +15,13 @@
       "when": 1791872647076,
       "tag": "0001_clumsy_ezekiel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791882462417,
+      "tag": "0002_sloppy_madame_web",
+      "breakpoints": true
     }
   ]
 }
