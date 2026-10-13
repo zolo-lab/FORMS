@@ -24,6 +24,7 @@ import {
   type EngineResult,
   type EngineStep,
 } from "@/lib/workflow/engine";
+import { renderDefault } from "@/lib/notifications/templates";
 import type { StepRole } from "@/lib/workflow/types";
 
 const { requests, signingSteps, stepTokens, submissions, events, notifications, packageTemplates, packageTemplateItems, packageDocuments, formTemplates, formTemplateVersions, organizations } = schema;
@@ -125,11 +126,8 @@ export async function collectedAnswers(requestId: string): Promise<Answers> {
   return out;
 }
 
-function inviteMessage(subjectName: string, role: string, link: string) {
-  return {
-    subject: `מסמכים הממתינים לך – ${subjectName}`,
-    body: `שלום,\nממתין לך מסמך עבור ${subjectName} (${role}).\nלמעבר למסמך: ${link}`,
-  };
+function inviteMessage(vars: { name: string; org: string; link: string; dueDate: string }) {
+  return renderDefault("step_invite", vars);
 }
 
 /**
@@ -206,7 +204,13 @@ async function persist(
     tokensToLink.push({ stepId: id, token });
     const to = s.assigneeEmail;
     if (to) {
-      const msg = inviteMessage(req.subjectName, s.role, `${appUrl()}/s/${token}`);
+      const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
+      const msg = inviteMessage({
+        name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
+        org: org?.name ?? "",
+        link: `${appUrl()}/s/${token}`,
+        dueDate: req.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(req.expiresAt) : "",
+      });
       await db.insert(notifications).values({
         organizationId: req.organizationId,
         requestId,
