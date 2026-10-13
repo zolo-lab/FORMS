@@ -12,13 +12,24 @@ import { appUrl } from "./requests-store";
 const { signingSteps, requests, organizations, notifications, stepTokens } = schema;
 
 /** Queues a reminder for every open step whose turn has come. Returns how many were queued. */
-export async function runReminders(now = new Date()): Promise<number> {
+export async function runReminders(now = new Date(), opts: { organizationId?: string } = {}): Promise<number> {
   const open = await db
     .select({ step: signingSteps, request: requests, org: organizations })
     .from(signingSteps)
     .innerJoin(requests, eq(requests.id, signingSteps.requestId))
     .innerJoin(organizations, eq(organizations.id, requests.organizationId))
-    .where(and(inArray(signingSteps.status, ["active", "in_progress"]), inArray(requests.status, ["in_progress", "returned"])));
+    .where(and(inArray(signingSteps.status, ["active", "in_progress"]), inArray(requests.status, ["in_progress", "returned"]), opts.organizationId ? eq(requests.organizationId, opts.organizationId) : undefined));
+
+  // One query for every earlier reminder, instead of one per step.
+  const sentByStep = new Map<string, Date[]>();
+  if (open.length) {
+    const past = await db
+      .select({ stepId: notifications.stepId, createdAt: notifications.createdAt })
+      .from(notifications)
+      .where(and(eq(notifications.templateKey, "reminder"), inArray(notifications.stepId, open.map((o) => o.step.id))))
+      .orderBy(desc(notifications.createdAt));
+    for (const n of past) if (n.stepId) sentByStep.set(n.stepId, [...(sentByStep.get(n.stepId) ?? []), n.createdAt]);
+  }
 
   let queued = 0;
   for (const { step, request, org } of open) {
@@ -28,12 +39,8 @@ export async function runReminders(now = new Date()): Promise<number> {
     if (!email && !sms) continue;
     const policy = org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
 
-    const past = await db
-      .select({ createdAt: notifications.createdAt })
-      .from(notifications)
-      .where(and(eq(notifications.stepId, step.id), eq(notifications.templateKey, "reminder")))
-      .orderBy(desc(notifications.createdAt));
-    if (!reminderDue({ activatedAt: step.activatedAt, sent: past.length, lastSentAt: past[0]?.createdAt ?? null }, policy, now)) continue;
+    const past = sentByStep.get(step.id) ?? [];
+    if (!reminderDue({ activatedAt: step.activatedAt, sent: past.length, lastSentAt: past[0] ?? null }, policy, now)) continue;
 
     // A second valid link, so a reminder never kills a tab the person already has open.
     const { token, hash } = createToken();

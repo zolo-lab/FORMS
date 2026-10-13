@@ -32,21 +32,21 @@ describe.skipIf(!hasDb)("runReminders (dev DB)", () => {
     const step = (await store.getRequest(id))!.steps[0]!;
 
     const count = async () => (await db.select().from(schema.notifications).where(and(eq(schema.notifications.stepId, step.id), eq(schema.notifications.templateKey, "reminder")))).length;
-    await runReminders();
+    await runReminders(new Date(), { organizationId: org!.id });
     expect(await count()).toBe(0); // activated just now
 
     await db.update(schema.signingSteps).set({ activatedAt: new Date(Date.now() - 3 * 3_600_000) }).where(eq(schema.signingSteps.id, step.id));
-    await runReminders();
+    await runReminders(new Date(), { organizationId: org!.id });
     expect(await count()).toBe(1);
-    await runReminders(); // the next one is an hour away
+    await runReminders(new Date(), { organizationId: org!.id }); // the next one is an hour away
     expect(await count()).toBe(1);
 
     // Pretend the first reminder went out 2 hours ago.
     await db.update(schema.notifications).set({ createdAt: new Date(Date.now() - 2 * 3_600_000) }).where(and(eq(schema.notifications.stepId, step.id), eq(schema.notifications.templateKey, "reminder")));
-    await runReminders();
+    await runReminders(new Date(), { organizationId: org!.id });
     expect(await count()).toBe(2);
     await db.update(schema.notifications).set({ createdAt: new Date(Date.now() - 5 * 3_600_000) }).where(and(eq(schema.notifications.stepId, step.id), eq(schema.notifications.templateKey, "reminder")));
-    await runReminders();
+    await runReminders(new Date(), { organizationId: org!.id });
     expect(await count()).toBe(2); // maxCount reached
 
     // The invite link and the two reminder links are all still valid.
