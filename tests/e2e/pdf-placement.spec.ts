@@ -48,7 +48,7 @@ test("draws elements straight onto the PDF and styles them", async ({ page }) =>
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; kind: string; bold?: boolean; color?: string; comb?: { cells: number }; dateFormat?: string }[];
 
   for (const label of ['ת"ז בתאים', "תאריך חתימה", "חתימה", "טקסט", "ראשי תיבות"]) {
-    await page.getByRole("button", { name: `הוספת ${label}` }).click();
+    await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   }
   const stamps = await mapping();
   expect(stamps.map((s) => s.kind)).toEqual(["comb", "date_signed", "signature", "text", "initials"]);
