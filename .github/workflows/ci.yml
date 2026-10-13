@@ -31,6 +31,17 @@ jobs:
           name: hebrew-sample
           path: artifacts/
           if-no-files-found: ignore
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i -g pnpm@10
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
   # reviewed from environments that cannot download Actions artifacts.
   previews:
