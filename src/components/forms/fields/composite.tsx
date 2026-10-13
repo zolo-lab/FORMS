@@ -68,3 +68,17 @@ export function BankAccountInput({ field, domId, value, onChange, disabled, inva
     </div>
   );
 }
+
+export function FullNameInput({ domId, value, onChange, disabled, invalid }: FieldProps) {
+  const obj = asObject(value);
+  return (
+    <div id={domId} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {([["first", "שם פרטי"], ["last", "שם משפחה"]] as const).map(([k, label]) => (
+        <div key={k} className="space-y-1">
+          <Label htmlFor={`${domId}-${k}`} className="text-muted-foreground">{label}</Label>
+          <Input id={`${domId}-${k}`} value={obj[k] ?? ""} disabled={disabled} aria-invalid={invalid && !obj[k]} autoComplete={k === "first" ? "given-name" : "family-name"} onChange={(e) => onChange({ ...obj, [k]: e.target.value })} />
+        </div>
+      ))}
+    </div>
+  );
+}

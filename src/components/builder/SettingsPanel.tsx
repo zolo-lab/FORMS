@@ -334,7 +334,7 @@ function ValidationSection({ field, v, setV }: { field: FormField; v: FieldValid
   return <Section title="בדיקות תקינות">{rows}</Section>;
 }
 
-const TABLE_COLUMN_TYPES = FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].hasAnswer && !["repeating_table", "radio_grid", "checkbox_grid", "signature", "file_upload", "hidden", "bank_account"].includes(t));
+const TABLE_COLUMN_TYPES = FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].hasAnswer && !["repeating_table", "radio_grid", "checkbox_grid", "signature", "file_upload", "hidden", "bank_account", "full_name"].includes(t));
 
 function TableColumns({ columns, onChange }: { columns: FormField[]; onChange: (cols: FormField[]) => void }) {
   const patch = (i: number, p: Partial<FormField>) => onChange(columns.map((c, j) => (j === i ? { ...c, ...p } : c)));

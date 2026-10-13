@@ -36,6 +36,7 @@ export const FIELD_TYPES = [
   "phone",
   "id_number",
   "bank_account",
+  "full_name",
   "address",
   // Advanced
   "signature",
@@ -94,6 +95,13 @@ export const FIELD_TYPE_META: Record<FieldType, FieldTypeMeta> = {
 
   phone: { label: "טלפון", category: "israeli", icon: "Phone", hasAnswer: true, hasOptions: false, pdf: "text" },
   id_number: { label: "תעודת זהות", category: "israeli", icon: "IdCard", hasAnswer: true, hasOptions: false, pdf: "text" },
+  full_name: {
+    label: "שם מלא", category: "israeli", icon: "User", hasAnswer: true, hasOptions: false, pdf: "text",
+    parts: [
+      { key: "first", label: "שם פרטי" },
+      { key: "last", label: "שם משפחה" },
+    ],
+  },
   bank_account: {
     label: "חשבון בנק", category: "israeli", icon: "Landmark", hasAnswer: true, hasOptions: false, pdf: "text",
     parts: [

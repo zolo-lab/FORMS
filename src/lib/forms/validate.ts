@@ -153,6 +153,11 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       return typeof value === "string" && isValidIsraeliPhone(value) ? null : MSG.phone;
     case "id_number":
       return typeof value === "string" && isValidIsraeliId(value) ? null : MSG.id;
+    case "full_name": {
+      if (typeof value !== "object" || value === null) return MSG.required;
+      const n = value as Record<string, string | undefined>;
+      return n.first?.trim() && n.last?.trim() ? null : MSG.required;
+    }
     case "bank_account":
       return typeof value === "object" && value !== null && isValidBankAccount(value as Record<string, string>)
         ? null
