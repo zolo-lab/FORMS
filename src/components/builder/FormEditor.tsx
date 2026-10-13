@@ -16,6 +16,7 @@ import type { Answers } from "@/lib/forms/conditions";
 import type { FieldType } from "@/lib/forms/field-types";
 import { parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { Canvas, type Selection } from "./Canvas";
+import { FormSettings } from "./FormSettings";
 import { Palette } from "./Palette";
 import { FieldSettings, PageSettings } from "./SettingsPanel";
 import { PdfTab, type PdfState } from "./PdfTab";
@@ -138,6 +139,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         />
         <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
+        <Button variant="outline" size="sm" onClick={() => { setTab("edit"); setSelection(null); }}>הגדרות הטופס</Button>
         <a
           href={`/preview/form/${templateId}`}
           target="_blank"
@@ -210,7 +212,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               ) : selection?.kind === "page" && def.pages[selection.index] ? (
                 <PageSettings def={def} index={selection.index} onPatch={(patch) => commit(updatePage(def, (selection as { index: number }).index, patch))} />
               ) : (
-                <p className="text-sm text-muted-foreground">בחרו שדה או עמוד כדי לערוך את ההגדרות שלו.</p>
+                <FormSettings def={def} onPatch={(patch) => commit({ ...def, ...patch })} />
               )}
             </aside>
           </div>

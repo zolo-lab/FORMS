@@ -36,3 +36,21 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
     await expect(page.getByText("כפי שמופיע בתעודת הזהות")).toBeVisible();
   }).toPass({ timeout: 20_000 });
 });
+
+test("form settings: layout, description and thank-you message", async ({ page }) => {
+  await login(page, "/admin/forms");
+  await page.getByPlaceholder("שם הטופס החדש").fill(`הגדרות ${Date.now()}`);
+  await page.getByRole("button", { name: "טופס חדש" }).click();
+  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}/);
+  await page.getByRole("button", { name: "הגדרות הטופס" }).click();
+  await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
+  await page.getByLabel("אופן המילוי").selectOption("card");
+  await page.getByLabel("הודעה אחרי השליחה").fill("תודה רבה");
+  // One question: after a short-text field exists the preview shows it as a card, then the review screen.
+  await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
+  await page.getByRole("tab", { name: "תצוגה מקדימה" }).click();
+  await expect(page.getByText("מלאו בבקשה את כל השדות")).toBeVisible();
+  await expect(page.getByRole("button", { name: "לסיכום" })).toBeVisible();
+  await page.getByRole("button", { name: "לסיכום" }).click();
+  await expect(page.getByRole("heading", { name: "בדקו את התשובות" })).toBeVisible();
+});

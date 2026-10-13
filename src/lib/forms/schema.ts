@@ -172,8 +172,8 @@ export const formDefinitionSchema = z
     pages: z.array(pageSchema).min(1),
     settings: z
       .object({
-        /** Show one page at a time (wizard) or everything on one page. */
-        layout: z.enum(["wizard", "single"]).default("wizard"),
+        /** wizard: one page at a time · single: everything on one page · card: one question per screen with a review at the end. */
+        layout: z.enum(["wizard", "single", "card"]).default("wizard"),
         submitLabel: z.string().optional(),
         /** Text shown after submit. */
         thankYou: z.string().optional(),

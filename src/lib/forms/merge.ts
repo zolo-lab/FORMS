@@ -26,6 +26,8 @@ export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): F
         ...page,
         id: docs.length > 1 ? `d${di}_${page.id}` : page.id,
         title: docs.length > 1 ? `${d.title} – ${page.title}` : page.title,
+        // Page ids are prefixed when several documents are merged, so jump targets must be too.
+        ...(docs.length > 1 && page.nextPage ? { nextPage: page.nextPage.map((r) => ({ ...r, goTo: r.goTo === "end" ? "end" : `d${di}_${r.goTo}` })) } : {}),
         fields: fields.map((f) => ((f.filledBy ?? "employee") !== role ? { ...f, readOnly: true } : f)),
       });
     }
@@ -34,7 +36,8 @@ export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): F
     schemaVersion: 1,
     title: docs.length === 1 ? docs[0]!.definition.title : docs.map((d) => d.title).join(" + "),
     pages,
-    settings: { layout: "wizard" },
+    // The first document decides how the merged form is presented.
+    settings: { layout: docs[0]?.definition.settings?.layout ?? "wizard" },
   };
 }
 

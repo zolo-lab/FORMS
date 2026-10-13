@@ -274,7 +274,7 @@ export function validateAnswers(form: FormDefinition, rawAnswers: Answers, optio
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.
-  const wizard = (form.settings?.layout ?? "wizard") === "wizard";
+  const wizard = (form.settings?.layout ?? "wizard") !== "single";
   const reached = wizard ? new Set(reachedPageIndexes(form, answers)) : null;
   form.pages.forEach((page, i) => {
     if (!evaluateCondition(page.visibleIf, answers)) return;
