@@ -24,6 +24,7 @@ export function sampleValue(f: FormField): unknown {
     case "id_number": return "000000018";
     case "date": return "1990-05-01";
     case "time": return "09:30";
+    case "full_name": return { first: "ישראל", last: "ישראלי" };
     case "bank_account": return { bank: "10", branch: "912", account: "12345678" };
     case "address": return { city: "בית שאן", street: "הרצל", house: "12", apartment: "4", zip: "1090000" };
     case "consent": return true;

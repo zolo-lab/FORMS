@@ -222,3 +222,17 @@ describe("masked text fields", () => {
     expect(validateAnswers(def, { code: "1234x" }, { today }).errors.code).toBeDefined();
   });
 });
+
+describe("full_name field", () => {
+  const def = parseFormDefinition({
+    schemaVersion: 1, title: "t",
+    pages: [{ id: "p", title: "", fields: [{ id: "who", type: "full_name", label: "שם", required: true }] }],
+  }).data!;
+  it("needs both parts and formats as one name", () => {
+    expect(validateAnswers(def, { who: { first: "דנה" } }, { today }).errors.who).toBeDefined();
+    const ok = validateAnswers(def, { who: { first: "דנה", last: "כהן" } }, { today });
+    expect(ok.ok).toBe(true);
+    expect(formatAnswer(def.pages[0]!.fields[0]!, ok.cleaned.who)).toBe("דנה כהן");
+    expect(formatAnswer(def.pages[0]!.fields[0]!, ok.cleaned.who, "last")).toBe("כהן");
+  });
+});

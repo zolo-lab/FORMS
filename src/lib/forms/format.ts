@@ -45,6 +45,10 @@ export function formatAnswer(field: FormField, value: unknown, part?: string): s
       return `${value}%`;
     case "number":
       return typeof value === "number" ? formatNumberIL(value) : String(value);
+    case "full_name": {
+      const n = value as Record<string, string>;
+      return [n.first, n.last].filter(Boolean).join(" ");
+    }
     case "bank_account": {
       const b = value as Record<string, string>;
       return [b.bank && `בנק ${b.bank}`, b.branch && `סניף ${b.branch}`, b.account && `חשבון ${b.account}`].filter(Boolean).join(", ");

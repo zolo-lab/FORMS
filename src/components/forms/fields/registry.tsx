@@ -5,7 +5,7 @@ import type { FormField } from "@/lib/forms/schema";
 import { fieldIsRequired } from "@/lib/forms/wizard";
 import { cn } from "@/lib/utils";
 import { CheckboxesInput, ConsentInput, DropdownInput, LinearScaleInput, RadioInput, RatingInput, YesNoInput } from "./choices";
-import { AddressInput, BankAccountInput } from "./composite";
+import { AddressInput, FullNameInput, BankAccountInput } from "./composite";
 import { FileUploadInput } from "./file";
 import { GridInput } from "./grids";
 import { LongTextInput, TextLikeInput } from "./inputs";
@@ -32,6 +32,7 @@ function Control(props: FieldProps & { renderChild: Parameters<typeof RepeatingT
     case "rating": return <RatingInput {...props} />;
     case "consent": return <ConsentInput {...props} />;
     case "radio_grid": case "checkbox_grid": return <GridInput {...props} />;
+    case "full_name": return <FullNameInput {...props} />;
     case "bank_account": return <BankAccountInput {...props} />;
     case "address": return <AddressInput {...props} />;
     case "signature": return <SignatureInput {...props} />;
