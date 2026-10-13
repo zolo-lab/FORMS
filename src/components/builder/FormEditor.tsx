@@ -18,6 +18,7 @@ import { parseFormDefinition, type FormDefinition, type FormField } from "@/lib/
 import { Canvas, type Selection } from "./Canvas";
 import { Palette } from "./Palette";
 import { FieldSettings, PageSettings } from "./SettingsPanel";
+import { PdfTab, type PdfState } from "./PdfTab";
 
 type TabId = "edit" | "preview" | "pdf" | "json";
 type SaveState = "saved" | "saving" | "dirty" | "error";
@@ -27,11 +28,10 @@ export interface FormEditorProps {
   initial: FormDefinition;
   initialVersion: number;
   initiallyPublished: boolean;
-  /** Extra tab content for the PDF tab (phase 2.3). */
-  pdfTab?: React.ReactNode;
+  initialPdf: PdfState | null;
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, pdfTab }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf }: FormEditorProps) {
   const [def, setDef] = useState(initial);
   const [past, setPast] = useState<FormDefinition[]>([]);
   const [future, setFuture] = useState<FormDefinition[]>([]);
@@ -40,6 +40,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
+  const [pdf, setPdf] = useState<PdfState | null>(initialPdf);
   const [issues, setIssues] = useState<string[]>([]);
   const [previewAnswers, setPreviewAnswers] = useState<Answers>({});
   const [jsonText, setJsonText] = useState("");
@@ -72,14 +73,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setSave("dirty");
     const t = setTimeout(async () => {
       setSave("saving");
-      const r = await saveDraftAction(templateId, def);
+      const r = await saveDraftAction(templateId, def, { pdfFileId: pdf?.file.id ?? null, pdfMapping: pdf?.mapping ?? null });
       if ("error" in r) { setSave("error"); return; }
       setVersion(r.version);
       setPublished(false);
       setSave("saved");
     }, 1200);
     return () => clearTimeout(t);
-  }, [def, templateId]);
+  }, [def, pdf, templateId]);
 
   const selectedField: FormField | null = useMemo(() => {
     if (selection?.kind !== "field") return null;
@@ -111,7 +112,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     const problems = publishIssues(def);
     if (problems.length) { setIssues(problems.map((p) => p.message)); return; }
     setSave("saving");
-    const saved = await saveDraftAction(templateId, def);
+    const saved = await saveDraftAction(templateId, def, { pdfFileId: pdf?.file.id ?? null, pdfMapping: pdf?.mapping ?? null });
     if ("error" in saved) { setSave("error"); setIssues([saved.error]); return; }
     const r = await publishAction(templateId);
     if (!r.ok) { setSave("error"); setIssues(r.issues); return; }
@@ -212,7 +213,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4">{pdfTab ?? <p className="text-muted-foreground">מיפוי PDF יתווסף בשלב 2.3.</p>}</div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab definition={def} pdf={pdf} onChange={setPdf} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

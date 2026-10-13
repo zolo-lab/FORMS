@@ -5,7 +5,7 @@ import { blankForm, publishIssues } from "@/lib/forms/builder";
 import { parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 
-const { formTemplates, formTemplateVersions } = schema;
+const { formTemplates, formTemplateVersions, pdfFiles } = schema;
 
 export async function listTemplates() {
   return db.select().from(formTemplates).orderBy(desc(formTemplates.updatedAt));
@@ -102,4 +102,10 @@ export async function setArchived(templateId: string, archived: boolean) {
     .update(formTemplates)
     .set({ status: archived ? "archived" : data.template.publishedVersion ? "active" : "draft" })
     .where(eq(formTemplates.id, templateId));
+}
+
+export async function getPdfFile(id: string | null) {
+  if (!id) return null;
+  const [row] = await db.select().from(pdfFiles).where(eq(pdfFiles.id, id));
+  return row ?? null;
 }
