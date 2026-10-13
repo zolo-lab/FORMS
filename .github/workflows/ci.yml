@@ -17,7 +17,7 @@ jobs:
       # No lockfile is committed yet (dev environment has no npm access); versions are pinned in package.json.
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm lint
+      - run: node scripts/eslint-annotations.mjs
       - run: pnpm test
       - name: Hebrew PDF sample
         if: always()

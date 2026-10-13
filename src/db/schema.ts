@@ -53,6 +53,20 @@ export const users = pgTable("users", {
   ...timestamps,
 });
 
+/**
+ * File bytes (base64) for PDFs and uploads. Interim storage until Vercel Blob is connected;
+ * all access goes through src/server/storage.ts so swapping the backend is local.
+ */
+export const storedFiles = pgTable("stored_files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  mime: text("mime").notNull(),
+  size: integer("size").notNull(),
+  sha256: text("sha256").notNull(),
+  dataBase64: text("data_base64").notNull(),
+  ...timestamps,
+});
+
 /** Uploaded PDF files used as stamping backgrounds. Bytes live in Vercel Blob. */
 export const pdfFiles = pgTable("pdf_files", {
   id: uuid("id").primaryKey().defaultRandom(),
