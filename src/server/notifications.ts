@@ -25,7 +25,41 @@ export async function enqueue(input: EnqueueInput & { channel?: "email" | "sms" 
     .insert(notifications)
     .values({ ...input, channel: input.channel ?? "email" })
     .returning({ id: notifications.id });
+  await kickDelivery();
   return row!.id;
+}
+
+/**
+ * Best effort: send what is due right after the response, so mail doesn't wait for the next cron tick.
+ * Outside a request (scripts, tests) there is nothing to hook into and the cron picks the rows up.
+ */
+export async function kickDelivery(): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(async () => {
+      await deliverQueued(10).catch((e) => console.error("[notifications] kick failed", e));
+    });
+  } catch {
+    // Not inside a request scope.
+  }
+}
+
+/** Real mail goes out only from production (or when explicitly allowed); other environments just log. */
+export function realMailAllowed(): boolean {
+  if (process.env.ALLOW_REAL_EMAIL === "1") return true;
+  return !process.env.VERCEL_ENV || process.env.VERCEL_ENV === "production";
+}
+
+const LEASE_MS = 5 * 60_000;
+
+/** Atomically takes a queued row: pushes `scheduledAt` forward so no other runner (cron + kick) picks it too. */
+async function claim(id: string, now: Date): Promise<boolean> {
+  const got = await db
+    .update(notifications)
+    .set({ scheduledAt: new Date(now.getTime() + LEASE_MS) })
+    .where(and(eq(notifications.id, id), eq(notifications.status, "queued"), lte(notifications.scheduledAt, now)))
+    .returning({ id: notifications.id });
+  return got.length > 0;
 }
 
 interface Sender {
@@ -63,20 +97,21 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
   const apiKey = process.env.RESEND_API_KEY;
   const out = { sent: 0, failed: 0, skipped: 0 };
   for (const n of rows) {
+    if (n.channel === "email" && (!apiKey || !realMailAllowed())) {
+      console.log(`[notifications] (mail disabled here) would send "${n.subject ?? n.templateKey}" to ${n.to}`);
+      out.skipped++;
+      continue;
+    }
+    if (!(await claim(n.id, now))) continue;
     let result: { ok: boolean; id?: string; error?: string };
     if (n.channel === "sms") {
       result = await getSmsProvider()
         .send(n.to, n.body)
         .catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     } else {
-      if (!apiKey) {
-        console.log(`[notifications] (no RESEND_API_KEY) would send "${n.subject ?? n.templateKey}" to ${n.to}`);
-        out.skipped++;
-        continue;
-      }
       const from = await senderFor(n.organizationId);
       if (!from.email) result = { ok: false, error: "no sender email (set the organization sender or MAIL_FROM)" };
-      else result = await sendViaResend(apiKey, from, n.to, n.subject ?? "", n.body).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+      else result = await sendViaResend(apiKey!, from, n.to, n.subject ?? "", n.body).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     }
     const next = afterAttempt(n.attempts, result.ok);
     await db

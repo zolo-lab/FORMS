@@ -47,3 +47,25 @@ describe("afterAttempt", () => {
     expect(afterAttempt(MAX_ATTEMPTS - 1, false)).toEqual({ status: "failed", attempts: MAX_ATTEMPTS });
   });
 });
+
+describe("realMailAllowed", () => {
+  it("allows local runs (no VERCEL_ENV) and production, blocks preview/development unless forced", async () => {
+    const { realMailAllowed } = await import("@/server/notifications");
+    const save = { v: process.env.VERCEL_ENV, a: process.env.ALLOW_REAL_EMAIL };
+    try {
+      delete process.env.ALLOW_REAL_EMAIL;
+      process.env.VERCEL_ENV = "preview";
+      expect(realMailAllowed()).toBe(false);
+      process.env.VERCEL_ENV = "development";
+      expect(realMailAllowed()).toBe(false);
+      process.env.VERCEL_ENV = "production";
+      expect(realMailAllowed()).toBe(true);
+      process.env.VERCEL_ENV = "preview";
+      process.env.ALLOW_REAL_EMAIL = "1";
+      expect(realMailAllowed()).toBe(true);
+    } finally {
+      if (save.v === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = save.v;
+      if (save.a === undefined) delete process.env.ALLOW_REAL_EMAIL; else process.env.ALLOW_REAL_EMAIL = save.a;
+    }
+  });
+});

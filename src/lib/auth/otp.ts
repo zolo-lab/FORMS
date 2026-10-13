@@ -3,6 +3,7 @@ import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto"
 
 export const OTP_TTL_MS = 10 * 60_000;
 export const OTP_MAX_ATTEMPTS = 5;
+export const OTP_MAX_SENDS_PER_DAY = 5;
 export const OTP_COOKIE_TTL_MS = 2 * 60 * 60_000;
 
 export function hashOtp(code: string, stepId: string): string {

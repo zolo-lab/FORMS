@@ -4,6 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
+import { kickDelivery } from "./notifications";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
@@ -224,6 +225,7 @@ async function persist(
         subject: to ? msg.subject : null,
         body: msg.body,
       });
+      await kickDelivery();
     }
   }
 
