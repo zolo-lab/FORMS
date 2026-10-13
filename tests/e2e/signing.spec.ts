@@ -35,7 +35,7 @@ test.describe("with a real request", () => {
     const ctx = await browser.newContext({ baseURL: new URL(url).origin });
     const guest = await ctx.newPage();
     await guest.goto(new URL(url).pathname);
-    await expect(guest.getByText(`עבור: ${name}`).or(guest.getByRole("button", { name: /שלחו קוד|קוד אימות/ }))).toBeVisible({ timeout: 20_000 });
+    await expect(guest.getByText(`עבור: ${name}`).or(guest.getByRole("heading", { name: "אימות זהות" }))).toBeVisible({ timeout: 20_000 });
     await ctx.close();
   });
 });
