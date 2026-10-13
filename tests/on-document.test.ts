@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coversAll, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { coversAll, inputAttrs, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields } from "@/lib/forms/schema";
 import { sampleForm } from "./fixtures/sample-form";
@@ -71,5 +71,31 @@ describe("coversAll", () => {
   });
   it("is false when a field has no stamp", () => {
     expect(coversAll(m(["firstName"]), employeeDef)).toBe(false);
+  });
+});
+
+describe("comb, initials and computed fields", () => {
+  const def = { ...sampleForm, pages: [{ id: "p", title: "p", fields: [f("idNumber"), f("firstName"), { id: "total", type: "number" as const, label: "סך", formula: "1 + 1" }, f("sig")] }] };
+  const mapping: PdfMapping = {
+    schemaVersion: 1,
+    pages: [{ width: 1, height: 1 }],
+    stamps: [
+      { id: "c", fieldId: "idNumber", kind: "comb", comb: { cells: 9 }, ...base },
+      { id: "i", fieldId: "firstName", kind: "initials", ...base },
+      { id: "d", fieldId: "firstName", kind: "date_signed", ...base },
+      { id: "g", fieldId: "sig", kind: "signature", ...base },
+    ],
+  };
+  it("treats comb and initials as inputs but not date_signed", () => {
+    expect(simpleStamps(mapping, def).map((s) => s.id)).toEqual(["c", "i", "g"]);
+  });
+  it("is covered even though the formula field has no stamp", () => {
+    expect(coversAll(mapping, def)).toBe(true);
+  });
+  it("picks input attributes by field type", () => {
+    expect(inputAttrs(f("birthDate")).type).toBe("date");
+    expect(inputAttrs(f("idNumber")).inputMode).toBe("numeric");
+    expect(inputAttrs(f("mobile")).type).toBe("tel");
+    expect(inputAttrs(f("firstName")).type).toBe("text");
   });
 });
