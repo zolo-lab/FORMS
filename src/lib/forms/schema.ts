@@ -104,6 +104,8 @@ export interface FormField {
   fields?: FormField[];
   /** Export key for Priority/CSV. Defaults to id. */
   exportKey?: string;
+  /** Computed field: see formula.ts. The value is recalculated on the server and the field is read-only for the filler. */
+  formula?: string;
   /** Layout width hint on desktop. */
   width?: "full" | "half" | "third";
   /** Look of the label / text block (size, weight, color, alignment, highlight). */
@@ -131,6 +133,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     settings: z.record(z.string(), z.unknown()).optional(),
     fields: z.array(fieldSchema).optional(),
     exportKey: z.string().optional(),
+    formula: z.string().optional(),
     width: z.enum(["full", "half", "third"]).optional(),
     style: fieldStyleSchema.optional(),
   }),

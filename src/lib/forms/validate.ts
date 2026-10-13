@@ -8,6 +8,7 @@
  *  - Error messages are Hebrew and user-facing.
  */
 import { evaluateCondition, type Answers } from "./conditions";
+import { computeFormulas } from "./compute";
 import { FIELD_TYPE_META } from "./field-types";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import {
@@ -216,6 +217,11 @@ function validateFieldList(
     if (!evaluateCondition(field.visibleIf, scopeAnswers)) continue;
     const value = answers[field.id];
     const key = prefix + field.id;
+    // Computed fields: the server-side value wins, nothing to validate.
+    if (field.formula) {
+      if (value !== undefined) cleaned[field.id] = value;
+      continue;
+    }
     const mine = !opts.role || (field.filledBy ?? "employee") === opts.role;
 
     // Keep values of visible fields regardless of role (other signers' data is preserved).
@@ -255,8 +261,10 @@ export interface ValidationResult {
   cleaned: Answers;
 }
 
-export function validateAnswers(form: FormDefinition, answers: Answers, options: ValidateOptions = {}): ValidationResult {
+export function validateAnswers(form: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
+  // Formula fields are always recomputed here, whatever the client sent.
+  const answers = computeFormulas(form, rawAnswers, today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   for (const page of form.pages) {

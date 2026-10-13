@@ -11,6 +11,7 @@ import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinitio
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
 import { ConditionEditor } from "./ConditionEditor";
+import { FormulaEditor } from "./FormulaEditor";
 
 const ROLE_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
 const TEXT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown"];
@@ -219,6 +220,12 @@ export function FieldSettings({
       )}
 
       {meta.hasAnswer && <ValidationSection field={field} v={v} setV={setV} />}
+
+      {meta.hasAnswer && !["signature", "file_upload", "repeating_table", "consent"].includes(field.type) && (
+        <Section title="נוסחה (שדה מחושב)">
+          <FormulaEditor def={def} field={field} onChange={(formula) => onPatch({ formula })} />
+        </Section>
+      )}
 
       {meta.hasAnswer && (
         <Section title="מי ממלא ומיקום">
