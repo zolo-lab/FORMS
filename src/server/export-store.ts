@@ -63,8 +63,8 @@ export async function loadExport(sel: { ids?: string[]; filters?: RequestFilters
     });
 }
 
-/** Final signed PDFs of the selected requests, as ZIP entries `<subject> - <document>.pdf`. */
-export async function loadFinalPdfs(sel: { ids?: string[]; filters?: RequestFilters }): Promise<{ name: string; data: Uint8Array }[]> {
+/** Final signed PDFs of the selected requests: names first (cheap), file bytes fetched one at a time. */
+export async function listFinalPdfs(sel: { ids?: string[]; filters?: RequestFilters }): Promise<{ name: string; fileId: string }[]> {
   const ids = await requestIds(sel);
   if (ids.length === 0) return [];
   const rows = await db
@@ -80,16 +80,28 @@ export async function loadFinalPdfs(sel: { ids?: string[]; filters?: RequestFilt
     .where(inArray(packageDocuments.requestId, ids))
     .orderBy(asc(requests.subjectName), asc(packageDocuments.order));
   const used = new Set<string>();
-  const out: { name: string; data: Uint8Array }[] = [];
+  const out: { name: string; fileId: string }[] = [];
   for (const r of rows) {
     if (!r.fileId) continue;
-    const file = await getFile(r.fileId);
-    if (!file) continue;
     const base = `${r.subject} - ${r.title}`.replace(/[\\/:*?"<>|]+/g, "_");
     let name = `${base}.pdf`;
     for (let n = 2; used.has(name); n++) name = `${base} (${n}).pdf`;
     used.add(name);
-    out.push({ name, data: file.bytes });
+    out.push({ name, fileId: r.fileId });
   }
+  return out;
+}
+
+/** Entries for `zipStream`; files that went missing are skipped. */
+export async function* finalPdfEntries(list: { name: string; fileId: string }[]): AsyncGenerator<{ name: string; data: Uint8Array }> {
+  for (const item of list) {
+    const file = await getFile(item.fileId);
+    if (file) yield { name: item.name, data: file.bytes };
+  }
+}
+
+export async function loadFinalPdfs(sel: { ids?: string[]; filters?: RequestFilters }): Promise<{ name: string; data: Uint8Array }[]> {
+  const out: { name: string; data: Uint8Array }[] = [];
+  for await (const e of finalPdfEntries(await listFinalPdfs(sel))) out.push(e);
   return out;
 }

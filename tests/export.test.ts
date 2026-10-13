@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { toCsv } from "@/lib/export/csv";
 import { buildExportTable } from "@/lib/export/rows";
 import { buildXlsx, columnName } from "@/lib/export/xlsx";
-import { crc32, zipList, zipStore } from "@/lib/export/zip";
+import { crc32, zipList, zipStore, zipStream } from "@/lib/export/zip";
 import { parseFormDefinition } from "@/lib/forms/schema";
 
 describe("export", () => {
@@ -40,6 +40,25 @@ describe("export", () => {
     expect(names).toEqual(expect.arrayContaining(["[Content_Types].xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml"]));
   });
 
+  it("streams the same archive zipStore builds", async () => {
+    const entries = [
+      { name: "א.pdf", data: new Uint8Array([1, 2, 3]) },
+      { name: "b.pdf", data: new Uint8Array([4, 5]) },
+    ];
+    async function* gen() {
+      for (const e of entries) yield e;
+    }
+    const parts: Uint8Array[] = [];
+    for await (const c of zipStream(gen())) parts.push(c);
+    const out = new Uint8Array(parts.reduce((n, c) => n + c.length, 0));
+    let p = 0;
+    for (const c of parts) {
+      out.set(c, p);
+      p += c.length;
+    }
+    expect(zipList(out)).toEqual(zipList(zipStore(entries)));
+  });
+
   it("builds a table with a column per export key", () => {
     const def = parseFormDefinition({
       schemaVersion: 1, title: "t",
@@ -54,7 +73,7 @@ describe("export", () => {
       createdAt: new Date("2026-10-13T10:00:00Z"), expiresAt: null, answers, definitions: [def],
     });
     const table = buildExportTable([mk("r1", "א", { firstName: "דנה", city: "חיפה" }), mk("r2", "ב", { firstName: "יוסי" })]);
-    expect(table[0]!.slice(-2)).toEqual(["FNAME", "city"]);
+    expect(table[0]!.slice(-2)).toEqual(["FNAME", "עיר"]);
     expect(table[1]!.slice(-2)).toEqual(["דנה", "חיפה"]);
     expect(table[2]!.slice(-2)).toEqual(["יוסי", ""]);
     expect(table[1]![6]).toBe("2026-10-13");
