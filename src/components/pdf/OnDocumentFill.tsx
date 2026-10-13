@@ -9,7 +9,9 @@ import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
-import { readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { evaluateCondition } from "@/lib/forms/conditions";
+import { computeFormulas } from "@/lib/forms/compute";
+import { inputAttrs, isComputedOrLocked, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument } from "./usePdfDocument";
@@ -48,6 +50,9 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 
   const stamps = useMemo(() => simpleStamps(pdf.mapping, rest.definition), [pdf.mapping, rest.definition]);
   const fields = useMemo(() => new Map(allFields(rest.definition).map((f) => [f.id, f])), [rest.definition]);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Formula fields are shown computed (the server recomputes them on submit).
+  const shown = useMemo(() => computeFormulas(rest.definition, rest.answers, today), [rest.definition, rest.answers, today]);
   const errorFields = new Set(Object.keys(rest.errors).map((k) => k.split(".")[0]));
 
   function setField(id: string, v: unknown) {
@@ -72,23 +77,28 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                 .map((s) => {
                   const field = fields.get(s.fieldId)!;
                   const b = pdfBoxToScreen(s, pg.height, scale);
-                  const value = rest.answers[s.fieldId];
+                  const value = shown[s.fieldId];
+                  const locked = isComputedOrLocked(field) || evaluateCondition(field.disabledIf, shown);
+                  if (!evaluateCondition(field.visibleIf, shown)) return null;
                   const invalid = errorFields.has(s.fieldId);
                   const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(10, Math.min(b.height * 0.7, 16)) } as const;
                   const ring = cn("absolute rounded-sm border bg-primary/10 focus-visible:outline-2 focus-visible:outline-ring", invalid ? "border-destructive bg-destructive/10" : "border-primary/40");
                   const label = `${field.label}${s.part ? ` – ${s.part}` : ""}`;
-                  if (s.kind === "text") {
+                  if (s.kind === "text" || s.kind === "comb" || s.kind === "initials") {
+                    const attrs = inputAttrs(field);
+                    const comb = s.kind === "comb" ? { maxLength: s.comb?.cells, className: "tracking-[0.35em] text-center" } : { maxLength: undefined, className: "" };
+                    const title = s.kind === "initials" ? `${label} (יוצג כראשי תיבות)` : label;
                     return s.multiline ? (
-                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={label} className={cn(ring, "resize-none p-0.5")} style={style}
+                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} className={cn(ring, "resize-none p-0.5")} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s.fieldId, writeText(field, value, s, e.target.value))} />
                     ) : (
-                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={label} className={cn(ring, "px-0.5")} style={style}
+                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5", comb.className)} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s.fieldId, writeText(field, value, s, e.target.value))} />
                     );
                   }
                   if (s.kind === "check") {
                     return (
-                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} type="checkbox" aria-label={label} className={cn(ring, "accent-primary")} style={style}
+                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} type="checkbox" aria-label={label} disabled={locked} className={cn(ring, "accent-primary")} style={style}
                         checked={readCheck(field, value, s)} onChange={(e) => setField(s.fieldId, writeCheck(field, value, s, e.target.checked))} />
                     );
                   }
