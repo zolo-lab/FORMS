@@ -184,5 +184,31 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     r = (await store.getRequest(id))!;
     expect(r.request.status).toBe("cancelled");
     await expect(store.changeAssignee(step.id, { name: "x" })).rejects.toThrow();
+    // A request that is already cancelled can't be cancelled again (no new event, same history).
+    const eventsBefore = r.events.length;
+    await expect(store.cancelRequest(id, "שוב")).rejects.toThrow();
+    expect((await store.getRequest(id))!.events.length).toBe(eventsBefore);
+  });
+
+  it("cancelRequest leaves a completed request untouched", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-cancel-${Date.now()}`, workflow: { steps: [{ order: 1, role: "requester", action: "fill" }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const done = (await store.getRequest(id))!;
+    expect(done.request.status).toBe("completed");
+    await expect(store.cancelRequest(id, "לא אמור לעבוד")).rejects.toThrow();
+    const after = (await store.getRequest(id))!;
+    expect(after.request.status).toBe("completed");
+    expect(after.request.completedAt?.getTime()).toBe(done.request.completedAt?.getTime());
+    expect(after.events.length).toBe(done.events.length);
   });
 });

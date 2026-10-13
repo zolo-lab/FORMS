@@ -151,14 +151,16 @@ export async function bulkCancelAction(formData: FormData) {
   const reason = String(formData.get("reason") ?? "").trim() || "בוטל בפעולה מרוכזת";
   const ids = formData.getAll("id").map(String).filter((i) => /^[0-9a-f-]{36}$/i.test(i));
   let cancelled = 0;
+  let skipped = 0;
   for (const id of ids) {
     try {
       await cancelRequest(id, reason);
       cancelled++;
     } catch {
-      // Already completed/cancelled: skip.
+      // Already completed/cancelled/expired: left untouched.
+      skipped++;
     }
   }
   revalidatePath("/admin/requests");
-  redirect(`/admin/requests?cancelled=${cancelled}`);
+  redirect(`/admin/requests?cancelled=${cancelled}&skipped=${skipped}`);
 }

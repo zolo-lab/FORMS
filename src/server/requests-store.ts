@@ -362,6 +362,10 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
 }
 
 export async function cancelRequest(requestId: string, reason: string, actor: { type: "user" | "api"; id?: string } = { type: "user" }) {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) throw new Error("request not found");
+  // A finished request must stay finished: cancelling it would rewrite its history.
+  if (req.status !== "draft" && req.status !== "in_progress" && req.status !== "returned") throw new Error(`request is ${req.status}`);
   const before = await loadSteps(requestId);
   const result = cancelAll(before.map(toEngine), reason);
   await db.update(requests).set({ cancelReason: reason }).where(eq(requests.id, requestId));
