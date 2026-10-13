@@ -12,15 +12,27 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    canvas.width = canvas.offsetWidth * ratio;
-    canvas.height = canvas.offsetHeight * ratio;
-    canvas.getContext("2d")!.scale(ratio, ratio);
     // Ink colour is data (burned into the PNG that is stamped on the PDF), not a theme token.
     const pad = new SignaturePad(canvas, { penColor: "rgb(0,0,0)", minWidth: 0.8, maxWidth: 2.4 });
     pad.addEventListener("endStroke", () => setEmpty(pad.isEmpty()));
     padRef.current = pad;
-    return () => pad.off();
+    // The <dialog> is laid out after this effect runs, so size the bitmap whenever the box changes.
+    const resize = () => {
+      if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) return;
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      canvas.width = canvas.offsetWidth * ratio;
+      canvas.height = canvas.offsetHeight * ratio;
+      canvas.getContext("2d")!.scale(ratio, ratio);
+      pad.clear();
+      setEmpty(true);
+    };
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    resize();
+    return () => {
+      ro.disconnect();
+      pad.off();
+    };
   }, []);
 
   return (
