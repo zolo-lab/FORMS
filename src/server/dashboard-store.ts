@@ -1,0 +1,138 @@
+/** Read-side queries for the requests dashboard (list with filters, KPI strip). */
+import { and, asc, desc, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { db, schema } from "@/db";
+import { PAGE_SIZE, daysSince, median, progress, type RequestFilters } from "@/lib/requests/list";
+
+const { requests, signingSteps, organizations, packageTemplates } = schema;
+
+const IN_PROGRESS = ["in_progress", "returned"] as const;
+const OPEN_STEP = ["active", "in_progress"] as const;
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+function conditions(f: RequestFilters, now: Date): SQL[] {
+  const c: SQL[] = [];
+  if (f.org) c.push(eq(requests.organizationId, f.org));
+  if (f.pkg) c.push(eq(requests.packageTemplateId, f.pkg));
+  if (f.status) c.push(eq(requests.status, f.status));
+  // Dates are Israel calendar days.
+  if (f.from) c.push(sql`${requests.createdAt} >= (${f.from}::date)::timestamp AT TIME ZONE 'Asia/Jerusalem'`);
+  if (f.to) c.push(sql`${requests.createdAt} < ((${f.to}::date + 1)::timestamp AT TIME ZONE 'Asia/Jerusalem')`);
+  if (f.overdue) c.push(and(inArray(requests.status, [...IN_PROGRESS]), lt(requests.expiresAt, now))!);
+  if (f.role) {
+    c.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(signingSteps)
+          .where(and(eq(signingSteps.requestId, requests.id), eq(signingSteps.role, f.role), inArray(signingSteps.status, [...OPEN_STEP]))),
+      ),
+    );
+  }
+  if (f.q) {
+    const like = `%${escapeLike(f.q)}%`;
+    c.push(or(ilike(requests.subjectName, like), ilike(requests.subjectIdNumber, like), ilike(requests.subjectEmail, like))!);
+  }
+  return c;
+}
+
+export interface RequestRow {
+  id: string;
+  subjectName: string;
+  status: (typeof requests.$inferSelect)["status"];
+  createdAt: Date;
+  expiresAt: Date | null;
+  organizationName: string;
+  packageName: string;
+  waitingFor: { role: string; name: string }[];
+  daysInStep: number | null;
+  progress: { done: number; total: number };
+  overdue: boolean;
+}
+
+export async function queryRequests(f: RequestFilters, now = new Date()): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
+  const where = and(...conditions(f, now));
+  const [{ n } = { n: 0 }] = await db.select({ n: sql<number>`count(*)::int` }).from(requests).where(where);
+  const pageCount = Math.max(1, Math.ceil(n / PAGE_SIZE));
+  const page = Math.min(f.page, pageCount);
+  const base = await db
+    .select({
+      id: requests.id,
+      subjectName: requests.subjectName,
+      status: requests.status,
+      createdAt: requests.createdAt,
+      expiresAt: requests.expiresAt,
+      organizationName: organizations.name,
+      packageName: packageTemplates.name,
+    })
+    .from(requests)
+    .innerJoin(organizations, eq(requests.organizationId, organizations.id))
+    .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
+    .where(where)
+    .orderBy(desc(requests.createdAt))
+    .limit(PAGE_SIZE)
+    .offset((page - 1) * PAGE_SIZE);
+
+  const ids = base.map((r) => r.id);
+  const steps = ids.length
+    ? await db
+        .select({ requestId: signingSteps.requestId, role: signingSteps.role, status: signingSteps.status, assigneeName: signingSteps.assigneeName, activatedAt: signingSteps.activatedAt })
+        .from(signingSteps)
+        .where(inArray(signingSteps.requestId, ids))
+        .orderBy(asc(signingSteps.order))
+    : [];
+
+  const rows = base.map<RequestRow>((r) => {
+    const mine = steps.filter((s) => s.requestId === r.id);
+    const open = mine.filter((s) => (OPEN_STEP as readonly string[]).includes(s.status));
+    const since = open.map((s) => s.activatedAt).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0];
+    return {
+      ...r,
+      waitingFor: open.map((s) => ({ role: s.role, name: s.assigneeName ?? "" })),
+      daysInStep: since ? daysSince(since, now) : null,
+      progress: progress(mine),
+      overdue: (IN_PROGRESS as readonly string[]).includes(r.status) && !!r.expiresAt && r.expiresAt < now,
+    };
+  });
+  return { rows, total: n, pageCount };
+}
+
+export interface Kpis {
+  active: number;
+  waitingByRole: { role: string; count: number }[];
+  overdue: number;
+  completed30: number;
+  medianDaysToComplete: number | null;
+}
+
+export async function requestKpis(orgId?: string, now = new Date()): Promise<Kpis> {
+  const org = orgId ? eq(requests.organizationId, orgId) : undefined;
+  const since = new Date(now.getTime() - 30 * 86_400_000);
+  const [[active], [overdue], waiting, completed] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, inArray(requests.status, [...IN_PROGRESS]))),
+    db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, inArray(requests.status, [...IN_PROGRESS]), lt(requests.expiresAt, now))),
+    db
+      .select({ role: signingSteps.role, count: sql<number>`count(*)::int` })
+      .from(signingSteps)
+      .innerJoin(requests, eq(signingSteps.requestId, requests.id))
+      .where(and(org, inArray(requests.status, [...IN_PROGRESS]), inArray(signingSteps.status, [...OPEN_STEP])))
+      .groupBy(signingSteps.role),
+    db
+      .select({ createdAt: requests.createdAt, completedAt: requests.completedAt })
+      .from(requests)
+      .where(and(org, eq(requests.status, "completed"), gte(requests.completedAt, since)))
+      .limit(5000),
+  ]);
+  const durations = completed.filter((c) => c.completedAt).map((c) => (c.completedAt!.getTime() - c.createdAt.getTime()) / 86_400_000);
+  const med = median(durations);
+  return {
+    active: active?.n ?? 0,
+    waitingByRole: waiting.sort((a, b) => b.count - a.count),
+    overdue: overdue?.n ?? 0,
+    completed30: completed.length,
+    medianDaysToComplete: med === null ? null : Math.round(med * 10) / 10,
+  };
+}
+
+export async function listPackages() {
+  return db.select({ id: packageTemplates.id, name: packageTemplates.name }).from(packageTemplates).orderBy(asc(packageTemplates.name));
+}
