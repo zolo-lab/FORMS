@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
-import { loadByToken, markOpened } from "@/server/signing";
+import { loadByToken, markOpened, otpPassed } from "@/server/signing";
+import { OtpGate } from "./otp-gate";
 import { SigningClient } from "./signing-client";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,15 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
     );
   }
   const h = await headers();
+  if (!otpPassed(ctx, h.get("cookie"))) {
+    return (
+      <main className="mx-auto max-w-md px-4 py-10">
+        <OrgTheme org={ctx.org}>
+          <OtpGate token={token} />
+        </OrgTheme>
+      </main>
+    );
+  }
   await markOpened(ctx, { ip: h.get("x-forwarded-for")?.split(",")[0]?.trim(), userAgent: h.get("user-agent") ?? undefined });
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
@@ -41,6 +51,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           role={ctx.role}
           subjectName={ctx.request.subjectName}
           action={ctx.step.action}
+          returnTargets={ctx.returnTargets}
         />
       </OrgTheme>
     </main>

@@ -10,8 +10,10 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { shouldLogSave, tokenState, type TokenState } from "@/lib/workflow/signing";
 import { applyStepAction, collectedAnswers } from "./requests-store";
 import { putFile } from "./storage";
+import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
+import { ROLE_LABELS } from "@/lib/workflow/labels";
 
-const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures } = schema;
+const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
 
 export type SigningContext = {
   state: "ok";
@@ -23,6 +25,8 @@ export type SigningContext = {
   definition: FormDefinition;
   filled: FilledItem[];
   answers: Answers;
+  /** Earlier completed steps this step may send the request back to. */
+  returnTargets: { id: string; label: string }[];
 };
 export type SigningLookup = SigningContext | { state: Exclude<TokenState, "ok"> };
 
@@ -49,8 +53,13 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   const merged = docs.length ? mergedDefinitionForStep(docs, role) : { schemaVersion: 1 as const, title: request.subjectName, pages: [] };
   const view = roleView(merged, answers, role);
 
+  const siblings = await db.select().from(signingSteps).where(eq(signingSteps.requestId, request.id)).orderBy(signingSteps.order);
+  const returnTargets = siblings
+    .filter((s) => s.order < step.order && s.status === "completed")
+    .map((s) => ({ id: s.id, label: `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}` }));
+
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
-  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers };
+  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers, returnTargets };
 }
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
@@ -67,9 +76,10 @@ function ownAnswers(def: FormDefinition, input: Answers): Answers {
   return Object.fromEntries(Object.entries(input).filter(([k]) => own.has(k)));
 }
 
-export async function saveDraft(token: string, input: Answers): Promise<{ ok: boolean; state?: TokenState }> {
+export async function saveDraft(token: string, input: Answers, cookieHeader: string | null = null): Promise<{ ok: boolean; state?: TokenState | "otp_required" }> {
   const ctx = await loadByToken(token);
   if (ctx.state !== "ok") return { ok: false, state: ctx.state };
+  if (!otpPassed(ctx, cookieHeader)) return { ok: false, state: "otp_required" };
   const answers = ownAnswers(ctx.definition, input);
   const now = new Date();
   await db
@@ -88,11 +98,12 @@ export async function saveDraft(token: string, input: Answers): Promise<{ ok: bo
   return { ok: true };
 }
 
-export type SubmitResult = { ok: true } | { ok: false; errors: FieldErrors } | { ok: false; state: TokenState };
+export type SubmitResult = { ok: true } | { ok: false; errors: FieldErrors } | { ok: false; state: TokenState | "otp_required" };
 
-export async function submit(token: string, input: Answers): Promise<SubmitResult> {
+export async function submit(token: string, input: Answers, cookieHeader: string | null = null): Promise<SubmitResult> {
   const ctx = await loadByToken(token);
   if (ctx.state !== "ok") return { ok: false, state: ctx.state };
+  if (!otpPassed(ctx, cookieHeader)) return { ok: false, state: "otp_required" };
   const mine = ownAnswers(ctx.definition, input);
   // Conditions may depend on earlier steps' answers, so validate against everything known.
   const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role });
@@ -110,4 +121,87 @@ export async function submit(token: string, input: Answers): Promise<SubmitResul
   }
   await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
   return { ok: true };
+}
+
+// ───────────────────────── OTP ─────────────────────────
+
+const secret = () => process.env.SESSION_SECRET ?? "";
+
+function readCookie(header: string | null | undefined, name: string): string | undefined {
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return undefined;
+}
+
+/** True when the step needs no OTP, or this browser already passed it. */
+export function otpPassed(ctx: SigningContext, cookieHeader: string | null | undefined): boolean {
+  if (!ctx.step.otpRequired) return true;
+  return verifyOtpCookie(secret(), ctx.step.id, readCookie(cookieHeader, otpCookieName(ctx.step.id)));
+}
+
+export type OtpSendResult = { ok: true; sentTo: string } | { ok: false; reason: "no_email" | "too_soon" | TokenState };
+
+export async function sendOtp(token: string, now = new Date()): Promise<OtpSendResult> {
+  const ctx = await loadByToken(token, now);
+  if (ctx.state !== "ok") return { ok: false, reason: ctx.state };
+  const email = ctx.step.assigneeEmail;
+  if (!email) return { ok: false, reason: "no_email" };
+  // Resend cooldown: 60 seconds.
+  if (ctx.step.otpExpiresAt && ctx.step.otpExpiresAt.getTime() - now.getTime() > 9 * 60_000) return { ok: false, reason: "too_soon" };
+  const otp = createOtp(ctx.step.id, now);
+  await db.update(signingSteps).set({ otpHash: otp.hash, otpExpiresAt: otp.expiresAt, otpAttempts: 0 }).where(eq(signingSteps.id, ctx.step.id));
+  await db.insert(notifications).values({
+    organizationId: ctx.request.organizationId,
+    requestId: ctx.request.id,
+    stepId: ctx.step.id,
+    channel: "email",
+    to: email,
+    templateKey: "otp",
+    subject: "קוד אימות",
+    body: `קוד האימות שלך: ${otp.code}\nהקוד תקף ל-10 דקות.`,
+  });
+  await db.insert(events).values({ requestId: ctx.request.id, stepId: ctx.step.id, actorType: "signer", type: "otp_sent", payload: {} });
+  return { ok: true, sentTo: email.replace(/^(.).*(@.*)$/, "$1***$2") };
+}
+
+export type OtpVerifyResult = { ok: true; cookie: { name: string; value: string; maxAgeSeconds: number } } | { ok: false; reason: "wrong" | "expired" | "locked" | "missing" | TokenState };
+
+export async function verifyOtp(token: string, code: string, now = new Date()): Promise<OtpVerifyResult> {
+  const ctx = await loadByToken(token, now);
+  if (ctx.state !== "ok") return { ok: false, reason: ctx.state };
+  const r = checkOtp({ hash: ctx.step.otpHash, expiresAt: ctx.step.otpExpiresAt, attempts: ctx.step.otpAttempts, code: code.trim(), stepId: ctx.step.id, now });
+  if (r !== "ok") {
+    if (r === "wrong") await db.update(signingSteps).set({ otpAttempts: ctx.step.otpAttempts + 1 }).where(eq(signingSteps.id, ctx.step.id));
+    return { ok: false, reason: r };
+  }
+  await db.update(signingSteps).set({ otpHash: null, otpExpiresAt: null, otpAttempts: 0 }).where(eq(signingSteps.id, ctx.step.id));
+  await db.insert(events).values({ requestId: ctx.request.id, stepId: ctx.step.id, actorType: "signer", type: "otp_verified", payload: {} });
+  return {
+    ok: true,
+    cookie: { name: otpCookieName(ctx.step.id), value: otpCookieValue(secret(), ctx.step.id, now.getTime() + OTP_COOKIE_TTL_MS), maxAgeSeconds: OTP_COOKIE_TTL_MS / 1000 },
+  };
+}
+
+// ───────────────────────── Approver actions ─────────────────────────
+
+export type SignerAction =
+  | { type: "decline"; reason: string }
+  | { type: "return"; toStepId: string; reason: string }
+  | { type: "delegate"; assignee: { name: string; email?: string; phone?: string } };
+
+export async function performAction(token: string, cookieHeader: string | null, action: SignerAction): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const ctx = await loadByToken(token);
+  if (ctx.state !== "ok") return { ok: false, reason: ctx.state };
+  if (!otpPassed(ctx, cookieHeader)) return { ok: false, reason: "otp_required" };
+  try {
+    if (action.type === "return" && !ctx.returnTargets.some((t) => t.id === action.toStepId)) return { ok: false, reason: "bad_target" };
+    if (action.type === "delegate" && !action.assignee.name.trim()) return { ok: false, reason: "name_required" };
+    await applyStepAction(ctx.step.id, action, { type: "signer" });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : "failed" };
+  }
 }
