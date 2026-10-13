@@ -1,4 +1,5 @@
 /** Server side of the public signing page /s/[token]: resolve the link, autosave, submit. */
+import { duplicateErrors } from "./unique";
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashToken } from "@/lib/auth/tokens";
@@ -126,6 +127,8 @@ export async function submit(token: string, input: Answers, cookieHeader: string
   const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role });
   if (!result.ok) return { ok: false, errors: result.errors };
   const cleaned = ownAnswers(ctx.definition, result.cleaned);
+  const duplicates = await duplicateErrors(ctx.request.id, ctx.definition, cleaned);
+  if (Object.keys(duplicates).length) return { ok: false, errors: duplicates };
 
   for (const f of allFields(ctx.definition)) {
     if (f.type !== "signature") continue;

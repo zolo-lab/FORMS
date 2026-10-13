@@ -210,3 +210,15 @@ describe("computed fields", () => {
     expect(r.cleaned.total).toBeUndefined();
   });
 });
+
+describe("masked text fields", () => {
+  const def = parseFormDefinition({
+    schemaVersion: 1, title: "t",
+    pages: [{ id: "p", title: "", fields: [{ id: "code", type: "short_text", label: "קוד", mask: "aa-999", required: true }] }],
+  }).data!;
+  it("accepts a complete value and rejects the rest", () => {
+    expect(validateAnswers(def, { code: "דנ123" }, { today }).ok).toBe(true);
+    expect(validateAnswers(def, { code: "דנ12" }, { today }).errors.code).toBe("הערך אינו תואם לתבנית הנדרשת");
+    expect(validateAnswers(def, { code: "1234x" }, { today }).errors.code).toBeDefined();
+  });
+});

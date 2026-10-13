@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Input, Textarea } from "@/components/ui/input";
 import { formatIsraeliPhone, isValidIsraeliId } from "@/lib/validators/israeli";
+import { applyMask, stripMask } from "@/lib/forms/mask";
 import type { FieldProps } from "./types";
 
 const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
@@ -24,7 +25,9 @@ const MODES: Record<string, Mode> = {
 export function TextLikeInput({ field, domId, value, onChange, disabled, invalid }: FieldProps) {
   const mode = MODES[field.type] ?? {};
   const [touched, setTouched] = useState(false);
-  const text = str(value);
+  const masked = field.type === "short_text" && field.mask ? field.mask : null;
+  // With a mask the stored value is the bare characters; the box shows them formatted.
+  const text = masked ? applyMask(str(value), masked) : str(value);
   const live = field.type === "id_number" && touched && text !== "" && !isValidIsraeliId(text) ? "מספר תעודת זהות לא תקין" : null;
   const v = field.validation;
   return (
@@ -45,7 +48,7 @@ export function TextLikeInput({ field, domId, value, onChange, disabled, invalid
           aria-invalid={invalid || !!live}
           aria-describedby={field.description ? `${domId}-desc` : undefined}
           autoComplete={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "off"}
-          onChange={(e) => onChange(field.type === "id_number" ? e.target.value.replace(/\D/g, "") : e.target.value)}
+          onChange={(e) => onChange(field.type === "id_number" ? e.target.value.replace(/\D/g, "") : masked ? stripMask(e.target.value, masked) : e.target.value)}
           onBlur={() => {
             setTouched(true);
             if (field.type === "phone" && text) onChange(formatIsraeliPhone(text));
