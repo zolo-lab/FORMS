@@ -5,11 +5,12 @@ import { hashToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
 import { mergedDefinitionForStep, type PackageDoc } from "@/lib/forms/merge";
 import { roleView, type FilledItem } from "@/lib/forms/role-view";
+import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields, type FillerRole, type FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { shouldLogSave, tokenState, type TokenState } from "@/lib/workflow/signing";
 import { applyStepAction, collectedAnswers } from "./requests-store";
-import { putFile } from "./storage";
+import { getFile, putFile } from "./storage";
 import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 
@@ -27,6 +28,8 @@ export type SigningContext = {
   answers: Answers;
   /** Earlier completed steps this step may send the request back to. */
   returnTargets: { id: string; label: string }[];
+  /** Documents that have a PDF with placed fields (for the on-document mode). */
+  pdfDocs: { fileId: string; title: string; mapping: PdfMapping }[];
 };
 export type SigningLookup = SigningContext | { state: Exclude<TokenState, "ok"> };
 
@@ -41,7 +44,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, request.organizationId));
   const docRows = await db
-    .select({ order: packageDocuments.order, definition: formTemplateVersions.definition, title: formTemplates.title })
+    .select({ order: packageDocuments.order, definition: formTemplateVersions.definition, title: formTemplates.title, pdfFileId: formTemplateVersions.pdfFileId, pdfMapping: formTemplateVersions.pdfMapping })
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
@@ -53,13 +56,14 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   const merged = docs.length ? mergedDefinitionForStep(docs, role) : { schemaVersion: 1 as const, title: request.subjectName, pages: [] };
   const view = roleView(merged, answers, role);
 
+  const pdfDocs = docRows.flatMap((d) => (d.pdfFileId && d.pdfMapping ? [{ fileId: d.pdfFileId, title: d.title, mapping: d.pdfMapping }] : []));
   const siblings = await db.select().from(signingSteps).where(eq(signingSteps.requestId, request.id)).orderBy(signingSteps.order);
   const returnTargets = siblings
     .filter((s) => s.order < step.order && s.status === "completed")
     .map((s) => ({ id: s.id, label: `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}` }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
-  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers, returnTargets };
+  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers, returnTargets, pdfDocs };
 }
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
@@ -204,4 +208,14 @@ export async function performAction(token: string, cookieHeader: string | null, 
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "failed" };
   }
+}
+
+/** Blank template PDF bytes for the on-document mode; only files that belong to this request's documents. */
+export async function getPdfForToken(token: string, fileId: string): Promise<{ bytes: Uint8Array } | null> {
+  const ctx = await loadByToken(token);
+  if (ctx.state !== "ok" || !ctx.pdfDocs.some((d) => d.fileId === fileId)) return null;
+  const [row] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.id, fileId));
+  const storedId = row ? /([0-9a-f-]{36})$/.exec(row.blobUrl)?.[1] : undefined;
+  const file = storedId ? await getFile(storedId) : null;
+  return file ? { bytes: file.bytes } : null;
 }
