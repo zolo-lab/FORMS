@@ -53,6 +53,10 @@ export interface CreateRequestInput {
   createdBy?: string;
   kind?: string;
   expiresInDays?: number;
+  /** Absolute deadline (API); wins over `expiresInDays`. */
+  expiresAt?: Date;
+  /** Extra things the API caller wants kept with the request (stored next to the requester answers). */
+  extra?: { redirectUrl?: string; custom?: Record<string, unknown> };
 }
 
 function toEngine(r: StepRow): EngineStep {
@@ -98,7 +102,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
   }
 
   const id = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + (input.expiresInDays ?? DEFAULT_EXPIRY_DAYS) * 86_400_000);
+  const expiresAt = input.expiresAt ?? new Date(Date.now() + (input.expiresInDays ?? DEFAULT_EXPIRY_DAYS) * 86_400_000);
   await db.insert(requests).values({
     id,
     organizationId: input.organizationId,
@@ -110,7 +114,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     subjectPhone: input.subject.phone,
     createdBy: input.createdBy,
     expiresAt,
-    apiParams: { requesterAnswers: input.requesterAnswers ?? {} },
+    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}) },
   });
   if (docs.length) await db.insert(packageDocuments).values(docs.map((d) => ({ ...d, requestId: id })));
   await db.insert(events).values({ requestId: id, actorType: input.createdBy ? "user" : "system", actorId: input.createdBy, type: "request_created" });
