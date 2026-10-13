@@ -120,6 +120,31 @@ Done and merged: **storage on Blob**, **5.1 wizard**, **5.2 outbox/templates**, 
 - **7.4-7.6**: multi-select (Shift/Ctrl-click), align/distribute (`src/lib/pdf/arrange.ts`), snap to neighbouring stamps (no grid), Ctrl+C/V/D/Z/Y (redo of a *drawn* element does not recreate its field), "בכל העמודים", role colours + legend + "מי ממלא" (`src/lib/pdf/role-style.ts`). Not done: page thumbnails, `tabIndex` on the signing screen, "view as role".
 - Vercel: preview deployments are limited to `main` in `vercel.json` (the daily deployment quota was exhausted once by branch previews).
 
-## 10. Next step
+## 10. Audit of phases 3-8 and the fixes (2026-10-14)
 
-Dashboard 6.4 (bulk + export), 6.5 (kanban/inbox), then phase 8 builder enhancements. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + sender + a trigger for `deliverQueued`, production seeding, rotating the temporary admin password. Verify Blob storage at runtime once a deployment is available.
+A hands-on run on production plus a code review produced `docs/fix-plan-audit-2026-10.md` (prioritised list, evidence, "done when"). Work through it before new phases. Status of the fixes (all via PRs, CI green):
+
+- **P0-5** `cancelRequest` refuses finished requests; bulk cancel reports skipped ones; draft requests can be cancelled (P1-12 also adds "send now"/"discard" on the request page).
+- **P0-3** OTP: attempts are claimed atomically before comparing (parallel guesses can't share a counter), max 5 codes per step per 24 h (`daily_limit`).
+- **P0-2** Mail: `GET /api/cron/deliver` (needs `CRON_SECRET`; `vercel.json` cron every 5 min) sends the outbox and expires overdue requests; `enqueue`/OTP also kick delivery after the response (`next/server` `after`). Rows are leased atomically (`scheduledAt` pushed 5 min). Real mail only when `RESEND_API_KEY` is set **and** `VERCEL_ENV` is unset/production (or `ALLOW_REAL_EMAIL=1`). **Israel still has to set `RESEND_API_KEY`, `CRON_SECRET`, a verified sender (org sender or `MAIL_FROM`).**
+- **P0-4** On-document fill: `comb` and `initials` stamps become inputs (typed attributes), formula/read-only fields are ignored for coverage and shown computed.
+- **P0-6** `/admin/packages` (+ `[id]`): create, rename, org scope, add/remove/reorder forms, route steps editor with `validateWorkflow` (`src/lib/workflow/validate-workflow.ts`, `step-form.ts`). Invalid routes show a warning, saving an invalid step is refused.
+- **P1-1** `collectedAnswers` ignores drafts except the owner's (`draftStepId`). **P1-3** signatures must be PNG data URLs ≤ 700k chars. **P1-5** certificate says which bytes the SHA-256 covers; finalize fails if a PDF form's template file is missing. **P1-6** `applyStepAction` does a compare-and-set on the step status (`StepConflictError`; submissions are written only by the winner). **P1-8** `dueAt` is written from the route's `dueHours` (step and request), overdue = `dueAt` or `expiresAt` passed. **P1-13** delegate contact validation (`src/lib/workflow/delegate.ts`).
+- Test hygiene: the wizard e2e now picks the seeded package explicitly (parallel DB tests create `test-*` packages that sort first).
+
+Open items from the plan are listed in the audit document (P1-2 what the signer may see, P1-7 streaming ZIP, P1-9/10/15 formulas, jumps and piping across roles, P1-11 return-to-requester, P0-1 Google login, P2 list). Production still has QA test data (form "בדיקה QA – טופס קליטה", request 41306ebf-c7a2-4032-b9ef-571902b0ddbf) and runs with `AUTH_DISABLED=1`.
+
+## 11. Added after the audit (2026-10-14 night)
+
+- Reminders (6.6): `src/lib/workflow/reminders.ts` (Israel clock, Shabbat Fri 15:00 - Sat 21:00 and quiet hours are skipped) and `src/server/reminders.ts`. Cron `/api/cron/deliver` (every 5 min, `vercel.json`) runs expireOverdue, runReminders, deliverQueued. Needs `CRON_SECRET`.
+- Mail only goes out from production (or `ALLOW_REAL_EMAIL=1`); needs `RESEND_API_KEY` and a verified sender / `MAIL_FROM`.
+- Packages UI (#51): `/admin/packages`, workflow validation in `src/lib/workflow/validate-workflow.ts`.
+- Webhooks (#59): `/admin/settings/webhooks`, events `request.completed`, `step.completed`, `request.declined`, HMAC `x-forms-*` headers, 3 attempts.
+- REST API v1 (#60): `/api/v1/*` with `fk_` bearer keys (`/admin/settings/api-keys`), documented in `docs/api.md`.
+- Bulk send (6.9): `src/lib/import/*` (XLSX/CSV parsing without dependencies, column mapping, validation) and `/admin/requests/bulk` (chunks of 10, progress, error CSV, `bulk_jobs` row).
+- Production still holds QA test data (form "בדיקה QA – טופס קליטה", request 41306ebf-c7a2-4032-b9ef-571902b0ddbf). Production migrations are not auto-applied (P1-16).
+- e2e on CI occasionally times out on DB-heavy pages (editor, dashboard) when several branches run against the one dev DB; rerun failed jobs before assuming a regression.
+
+## 12. Next step
+
+Remaining audit items: P1-2 (what the signer's page may see; 410 for invalid links), P1-7, P1-9/10/15, P1-11, P1-14, P1-16, the P2 list. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms, Google OAuth credentials (6.10) or a decision on the password, removing `AUTH_DISABLED`.
