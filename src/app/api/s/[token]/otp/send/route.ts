@@ -5,5 +5,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   const { token } = await params;
   const r = await sendOtp(token);
   if (r.ok) return NextResponse.json({ ok: true, sentTo: r.sentTo });
-  return NextResponse.json({ error: r.reason }, { status: r.reason === "too_soon" ? 429 : r.reason === "no_email" ? 422 : 410 });
+  return NextResponse.json({ error: r.reason }, { status: r.reason === "too_soon" || r.reason === "daily_limit" ? 429 : r.reason === "no_email" ? 422 : 410 });
 }

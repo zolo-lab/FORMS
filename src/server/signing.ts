@@ -1,6 +1,6 @@
 /** Server side of the public signing page /s/[token]: resolve the link, autosave, submit. */
 import { duplicateErrors } from "./unique";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
@@ -12,7 +12,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { shouldLogSave, tokenState, type TokenState } from "@/lib/workflow/signing";
 import { applyStepAction, collectedAnswers } from "./requests-store";
 import { getFile, putFile } from "./storage";
-import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
+import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 
 const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
@@ -162,7 +162,7 @@ export function otpPassed(ctx: SigningContext, cookieHeader: string | null | und
   return verifyOtpCookie(secret(), ctx.step.id, readCookie(cookieHeader, otpCookieName(ctx.step.id)));
 }
 
-export type OtpSendResult = { ok: true; sentTo: string } | { ok: false; reason: "no_email" | "too_soon" | TokenState };
+export type OtpSendResult = { ok: true; sentTo: string } | { ok: false; reason: "no_email" | "too_soon" | "daily_limit" | TokenState };
 
 export async function sendOtp(token: string, now = new Date()): Promise<OtpSendResult> {
   const ctx = await loadByToken(token, now);
@@ -171,6 +171,13 @@ export async function sendOtp(token: string, now = new Date()): Promise<OtpSendR
   if (!email) return { ok: false, reason: "no_email" };
   // Resend cooldown: 60 seconds.
   if (ctx.step.otpExpiresAt && ctx.step.otpExpiresAt.getTime() - now.getTime() > 9 * 60_000) return { ok: false, reason: "too_soon" };
+  // At most N codes per step per day: together with the attempt cap this bounds guessing.
+  const since = new Date(now.getTime() - 24 * 3_600_000);
+  const sent = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.stepId, ctx.step.id), eq(events.type, "otp_sent"), gte(events.createdAt, since)));
+  if (sent.length >= OTP_MAX_SENDS_PER_DAY) return { ok: false, reason: "daily_limit" };
   const otp = createOtp(ctx.step.id, now);
   await db.update(signingSteps).set({ otpHash: otp.hash, otpExpiresAt: otp.expiresAt, otpAttempts: 0 }).where(eq(signingSteps.id, ctx.step.id));
   await db.insert(notifications).values({
@@ -192,11 +199,15 @@ export type OtpVerifyResult = { ok: true; cookie: { name: string; value: string;
 export async function verifyOtp(token: string, code: string, now = new Date()): Promise<OtpVerifyResult> {
   const ctx = await loadByToken(token, now);
   if (ctx.state !== "ok") return { ok: false, reason: ctx.state };
-  const r = checkOtp({ hash: ctx.step.otpHash, expiresAt: ctx.step.otpExpiresAt, attempts: ctx.step.otpAttempts, code: code.trim(), stepId: ctx.step.id, now });
-  if (r !== "ok") {
-    if (r === "wrong") await db.update(signingSteps).set({ otpAttempts: ctx.step.otpAttempts + 1 }).where(eq(signingSteps.id, ctx.step.id));
-    return { ok: false, reason: r };
-  }
+  // Claim an attempt atomically *before* comparing: parallel guesses can't share one counter value.
+  const claimed = await db
+    .update(signingSteps)
+    .set({ otpAttempts: sql`${signingSteps.otpAttempts} + 1` })
+    .where(and(eq(signingSteps.id, ctx.step.id), lt(signingSteps.otpAttempts, OTP_MAX_ATTEMPTS)))
+    .returning({ attempts: signingSteps.otpAttempts });
+  if (claimed.length === 0) return { ok: false, reason: "locked" };
+  const r = checkOtp({ hash: ctx.step.otpHash, expiresAt: ctx.step.otpExpiresAt, attempts: 0, code: code.trim(), stepId: ctx.step.id, now });
+  if (r !== "ok") return { ok: false, reason: r };
   await db.update(signingSteps).set({ otpHash: null, otpExpiresAt: null, otpAttempts: 0 }).where(eq(signingSteps.id, ctx.step.id));
   await db.insert(events).values({ requestId: ctx.request.id, stepId: ctx.step.id, actorType: "signer", type: "otp_verified", payload: {} });
   return {
