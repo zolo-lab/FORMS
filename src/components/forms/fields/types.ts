@@ -28,4 +28,6 @@ export interface RenderCtx {
   errors: FieldErrors;
   roleReadOnly: (field: FormField) => boolean;
   readonlyAll: boolean;
+  /** Answer piping for labels and explanations ({{fieldId}}). `scope` = answers visible to the field (table row). */
+  pipe: (text: string, scope: Record<string, unknown>) => string;
 }

@@ -8,6 +8,7 @@ import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { nextPageIndex, prevPageIndex, reachedPageIndexes, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
 import { evaluateCondition } from "@/lib/forms/conditions";
+import { pipeText } from "@/lib/forms/piping";
 import { FieldRow } from "./fields/registry";
 import type { RenderCtx, UploadFn } from "./fields/types";
 
@@ -54,6 +55,7 @@ export function FormRenderer({
     onUpload,
     errors,
     readonlyAll: readonly,
+    pipe: (text, scope) => pipeText(text, { ...answers, ...scope }, definition),
     roleReadOnly: (f) => !!f.formula || (!!f.disabledIf && evaluateCondition(f.disabledIf, answers)) || (!!role && (f.filledBy ?? "employee") !== role),
   };
 

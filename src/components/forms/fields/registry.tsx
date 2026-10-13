@@ -71,7 +71,7 @@ export function FieldRow({ field, scope, rootAnswers, onField, prefix, parentDis
   );
 
   if (!meta.hasAnswer) {
-    return <div className="sm:col-span-6"><LayoutBlock field={field} /></div>;
+    return <div className="sm:col-span-6"><LayoutBlock field={field} pipe={(t) => ctx.pipe(t, condScope)} /></div>;
   }
   if (field.type === "hidden") return null;
 
@@ -79,8 +79,8 @@ export function FieldRow({ field, scope, rootAnswers, onField, prefix, parentDis
     <div className={cn("col-span-1", WIDTH[field.width ?? (field.type === "repeating_table" ? "full" : "half")])}>
       <FieldShell
         domId={domId}
-        label={field.label}
-        description={field.description}
+        label={ctx.pipe(field.label, condScope)}
+        description={field.description ? ctx.pipe(field.description, condScope) : undefined}
         required={fieldIsRequired(field, condScope)}
         error={error}
         hideLabel={field.type === "consent"}
