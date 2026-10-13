@@ -88,7 +88,7 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
                     <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/documents/${d.id}`} target="_blank" rel="noopener noreferrer">
                       פתיחת ה-PDF (כולל אסמכתא)
                     </a>
-                    <span className="ms-auto text-xs text-muted-foreground" dir="ltr" title="SHA-256">
+                    <span className="ms-auto text-xs text-muted-foreground" dir="ltr" title={`SHA-256 של הקובץ המלא: ${d.finalSha256 ?? ""}`}>
                       {d.finalSha256?.slice(0, 16)}…
                     </span>
                   </>
