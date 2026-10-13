@@ -54,6 +54,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const [guides, setGuides] = useState<{ page: number; axis: "x" | "y"; at: number }[]>([]);
   const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
   const [tableRows, setTableRows] = useState<Record<string, number>>({});
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -115,6 +116,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   function startDrag(e: React.PointerEvent, stamp: PdfStamp, mode: "move" | "resize") {
     e.preventDefault();
     e.stopPropagation();
+    // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
+    rootRef.current?.focus({ preventScroll: true });
     if (mode === "move" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       // Toggle membership in the multi-selection; no drag.
       if (group.includes(stamp.id)) {
@@ -233,7 +236,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
+    <div ref={rootRef} tabIndex={-1} className="grid gap-4 outline-none lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
       <aside className="space-y-3 lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
         <p className="text-xs text-muted-foreground">לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
