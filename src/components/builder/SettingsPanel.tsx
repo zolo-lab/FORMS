@@ -1,0 +1,324 @@
+"use client";
+import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox, Switch } from "@/components/ui/checkbox";
+import { Input, Select, Textarea } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { newField, parseOptionsText } from "@/lib/forms/builder";
+import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
+import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { ConditionEditor } from "./ConditionEditor";
+
+const ROLE_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
+const TEXT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown"];
+
+function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-muted-foreground">{label}</Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 border-t pt-3">
+      <h4 className="text-sm font-semibold">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function NumberInput({ value, onChange, ...rest }: { value: unknown; onChange: (n: number | undefined) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  return (
+    <Input
+      {...rest}
+      type="number"
+      dir="ltr"
+      className="text-start"
+      value={value === undefined ? "" : String(value)}
+      onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+    />
+  );
+}
+
+/** Edits a list of {value,label} (options, grid rows/columns) as one line per item. */
+function ListTextarea({ items, onChange, rows = 5 }: { items: FieldOption[]; onChange: (items: FieldOption[]) => void; rows?: number }) {
+  const [text, setText] = useState(items.map((o) => o.label).join("\n"));
+  return (
+    <Textarea
+      rows={rows}
+      value={text}
+      onChange={(e) => { setText(e.target.value); onChange(parseOptionsText(e.target.value, items)); }}
+      placeholder={"שורה לכל פריט.\nאפשר להדביק רשימה."}
+    />
+  );
+}
+
+export function FieldSettings({
+  def, field, onPatch, onRename,
+}: {
+  def: FormDefinition;
+  field: FormField;
+  onPatch: (patch: Partial<FormField>) => void;
+  onRename: (to: string) => string | undefined;
+}) {
+  const meta = FIELD_TYPE_META[field.type];
+  const v: FieldValidation = field.validation ?? {};
+  const setV = (patch: Partial<FieldValidation>) => {
+    const next = { ...v, ...patch };
+    for (const k of Object.keys(next) as (keyof FieldValidation)[]) if (next[k] === undefined || next[k] === "") delete next[k];
+    onPatch({ validation: Object.keys(next).length ? next : undefined });
+  };
+  const s = field.settings ?? {};
+  const setS = (patch: Record<string, unknown>) => onPatch({ settings: { ...s, ...patch } });
+  const [idDraft, setIdDraft] = useState(field.id);
+  const [idError, setIdError] = useState<string>();
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">סוג: {meta.label}</div>
+
+      <Row label={field.type === "info_text" ? "הטקסט" : "תווית"}>
+        {field.type === "info_text" ? (
+          <Textarea rows={4} value={field.label} onChange={(e) => onPatch({ label: e.target.value })} />
+        ) : (
+          <Input value={field.label} onChange={(e) => onPatch({ label: e.target.value })} />
+        )}
+      </Row>
+      {field.type !== "divider" && field.type !== "info_text" && (
+        <Row label="הסבר (אופציונלי)"><Input value={field.description ?? ""} onChange={(e) => onPatch({ description: e.target.value || undefined })} /></Row>
+      )}
+      {TEXT_TYPES.includes(field.type) && (
+        <Row label="טקסט רמז (placeholder)"><Input value={field.placeholder ?? ""} onChange={(e) => onPatch({ placeholder: e.target.value || undefined })} /></Row>
+      )}
+
+      {meta.hasAnswer && (
+        <>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={!!field.required} onCheckedChange={(c) => onPatch({ required: c || undefined })} label="שדה חובה" />
+            שדה חובה
+          </label>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={!!field.readOnly} onCheckedChange={(c) => onPatch({ readOnly: c || undefined })} label="לקריאה בלבד" />
+            לקריאה בלבד (מולא מראש)
+          </label>
+        </>
+      )}
+
+      {meta.hasOptions && (
+        <Section title="אפשרויות">
+          <Row label="מקור הרשימה">
+            <Select value={field.optionsSource ?? ""} onChange={(e) => onPatch({ optionsSource: e.target.value || undefined })}>
+              <option value="">רשימה ידנית</option>
+              <option value="banks">בנקים</option>
+              <option value="cities">יישובים (יתחבר בשלב 3)</option>
+              <option value="costCenters:1">מרכזי רווח – רמה 1 (יתחבר בשלב 3)</option>
+              <option value="costCenters:2">מרכזי רווח – רמה 2 (יתחבר בשלב 3)</option>
+              <option value="costCenters:3">מרכזי רווח – רמה 3 (יתחבר בשלב 3)</option>
+            </Select>
+          </Row>
+          {!field.optionsSource && (
+            <Row label="פריטים (שורה לכל אפשרות)">
+              <ListTextarea key={field.id} items={field.options ?? []} onChange={(options) => onPatch({ options })} />
+            </Row>
+          )}
+          {(field.type === "radio" || field.type === "checkboxes") && (
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox checked={!!field.allowOther} onChange={(e) => onPatch({ allowOther: e.target.checked || undefined })} />
+              הוספת אפשרות "אחר"
+            </label>
+          )}
+        </Section>
+      )}
+
+      {(field.type === "linear_scale" || field.type === "rating" || field.type === "long_text" || field.type === "image" || field.type === "hidden") && (
+        <Section title="הגדרות הסוג">
+          {field.type === "linear_scale" && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Row label="מ-"><NumberInput value={s.min} onChange={(n) => setS({ min: n ?? 1 })} /></Row>
+                <Row label="עד"><NumberInput value={s.max} onChange={(n) => setS({ max: n ?? 5 })} /></Row>
+              </div>
+              <Row label="תווית לקצה הנמוך"><Input value={String(s.minLabel ?? "")} onChange={(e) => setS({ minLabel: e.target.value })} /></Row>
+              <Row label="תווית לקצה הגבוה"><Input value={String(s.maxLabel ?? "")} onChange={(e) => setS({ maxLabel: e.target.value })} /></Row>
+            </>
+          )}
+          {field.type === "rating" && <Row label="מספר כוכבים"><NumberInput value={s.max} min={3} max={10} onChange={(n) => setS({ max: n ?? 5 })} /></Row>}
+          {field.type === "long_text" && <Row label="מספר שורות"><NumberInput value={s.rows} min={2} max={20} onChange={(n) => setS({ rows: n ?? 4 })} /></Row>}
+          {field.type === "image" && (
+            <>
+              <Row label="כתובת התמונה (URL)"><Input dir="ltr" value={String(s.src ?? "")} onChange={(e) => setS({ src: e.target.value })} /></Row>
+              <Row label="טקסט חלופי"><Input value={String(s.alt ?? "")} onChange={(e) => setS({ alt: e.target.value })} /></Row>
+            </>
+          )}
+          {field.type === "hidden" && <Row label="ערך ברירת מחדל"><Input value={String(field.defaultValue ?? "")} onChange={(e) => onPatch({ defaultValue: e.target.value || undefined })} /></Row>}
+        </Section>
+      )}
+
+      {(field.type === "radio_grid" || field.type === "checkbox_grid") && (
+        <Section title="שורות ועמודות">
+          <Row label="שורות (שורה לכל פריט)"><ListTextarea key={`${field.id}-r`} rows={4} items={(s.rows as FieldOption[]) ?? []} onChange={(rows) => setS({ rows })} /></Row>
+          <Row label="עמודות (שורה לכל פריט)"><ListTextarea key={`${field.id}-c`} rows={4} items={(s.columns as FieldOption[]) ?? []} onChange={(columns) => setS({ columns })} /></Row>
+        </Section>
+      )}
+
+      {field.type === "repeating_table" && (
+        <Section title="טבלה חוזרת">
+          <div className="grid grid-cols-2 gap-2">
+            <Row label="מינימום שורות"><NumberInput value={s.minRows} min={0} onChange={(n) => setS({ minRows: n ?? 0 })} /></Row>
+            <Row label="מקסימום שורות"><NumberInput value={s.maxRows} min={1} onChange={(n) => setS({ maxRows: n })} /></Row>
+          </div>
+          <Row label="טקסט כפתור ההוספה"><Input value={String(s.addLabel ?? "")} onChange={(e) => setS({ addLabel: e.target.value })} /></Row>
+          <TableColumns columns={field.fields ?? []} onChange={(fields) => onPatch({ fields })} />
+        </Section>
+      )}
+
+      {meta.hasAnswer && <ValidationSection field={field} v={v} setV={setV} />}
+
+      {meta.hasAnswer && (
+        <Section title="מי ממלא ומיקום">
+          <Row label="ממלא בשרשרת החתימות">
+            <Select value={field.filledBy ?? "employee"} onChange={(e) => onPatch({ filledBy: e.target.value === "employee" ? undefined : (e.target.value as FormField["filledBy"]) })}>
+              {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </Select>
+          </Row>
+          <Row label="רוחב בדסקטופ">
+            <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>
+              <option value="">אוטומטי</option><option value="full">מלא</option><option value="half">חצי</option><option value="third">שליש</option>
+            </Select>
+          </Row>
+          <Row label="מילוי אוטומטי מנתוני העובד/הבקשה" hint='למשל employee.firstName'>
+            <Input dir="ltr" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })} />
+          </Row>
+        </Section>
+      )}
+
+      <Section title="תנאים">
+        <ConditionEditor def={def} selfId={field.id} value={field.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג שדה זה אם" />
+        {meta.hasAnswer && !field.required && (
+          <ConditionEditor def={def} selfId={field.id} value={field.requiredIf} onChange={(c) => onPatch({ requiredIf: c })} lead="שדה חובה אם" />
+        )}
+      </Section>
+
+      <Section title="מתקדם">
+        <Row label="מזהה השדה (לא משנים אחרי שמגישים טפסים)" hint={idError}>
+          <Input
+            dir="ltr"
+            value={idDraft}
+            aria-invalid={!!idError}
+            onChange={(e) => setIdDraft(e.target.value)}
+            onBlur={() => { const err = onRename(idDraft); setIdError(err); if (err) setIdDraft(field.id); }}
+          />
+        </Row>
+        {meta.hasAnswer && <Row label="מפתח ייצוא (Priority/CSV)"><Input dir="ltr" value={field.exportKey ?? ""} onChange={(e) => onPatch({ exportKey: e.target.value || undefined })} /></Row>}
+      </Section>
+    </div>
+  );
+}
+
+function ValidationSection({ field, v, setV }: { field: FormField; v: FieldValidation; setV: (p: Partial<FieldValidation>) => void }) {
+  const t = field.type;
+  const rows: React.ReactNode[] = [];
+  if (t === "short_text" || t === "long_text") {
+    rows.push(
+      <div key="len" className="grid grid-cols-2 gap-2">
+        <Row label="אורך מינימלי"><NumberInput value={v.minLength} min={0} onChange={(n) => setV({ minLength: n })} /></Row>
+        <Row label="אורך מקסימלי"><NumberInput value={v.maxLength} min={1} onChange={(n) => setV({ maxLength: n })} /></Row>
+      </div>,
+      <Row key="pat" label="תבנית (Regex)"><Input dir="ltr" value={v.pattern ?? ""} onChange={(e) => setV({ pattern: e.target.value || undefined })} /></Row>,
+      <Row key="patm" label="הודעת שגיאה לתבנית"><Input value={v.patternMessage ?? ""} onChange={(e) => setV({ patternMessage: e.target.value || undefined })} /></Row>,
+    );
+  }
+  if (t === "number" || t === "currency" || t === "percent") {
+    rows.push(
+      <div key="mm" className="grid grid-cols-2 gap-2">
+        <Row label="מינימום"><NumberInput value={v.min} onChange={(n) => setV({ min: n })} /></Row>
+        <Row label="מקסימום"><NumberInput value={v.max} onChange={(n) => setV({ max: n })} /></Row>
+      </div>,
+    );
+  }
+  if (t === "date") {
+    rows.push(
+      <Row key="d1" label="תאריך מינימלי" hint='yyyy-mm-dd או "today"'><Input dir="ltr" value={v.minDate ?? ""} onChange={(e) => setV({ minDate: e.target.value || undefined })} /></Row>,
+      <Row key="d2" label="תאריך מקסימלי"><Input dir="ltr" value={v.maxDate ?? ""} onChange={(e) => setV({ maxDate: e.target.value || undefined })} /></Row>,
+    );
+  }
+  if (t === "checkboxes") {
+    rows.push(
+      <div key="sel" className="grid grid-cols-2 gap-2">
+        <Row label="מינימום נבחרים"><NumberInput value={v.minSelected} min={0} onChange={(n) => setV({ minSelected: n })} /></Row>
+        <Row label="מקסימום נבחרים"><NumberInput value={v.maxSelected} min={1} onChange={(n) => setV({ maxSelected: n })} /></Row>
+      </div>,
+    );
+  }
+  if (t === "file_upload") {
+    rows.push(
+      <div key="f" className="grid grid-cols-2 gap-2">
+        <Row label="מספר קבצים מקסימלי"><NumberInput value={v.maxFiles} min={1} onChange={(n) => setV({ maxFiles: n })} /></Row>
+        <Row label="גודל מקסימלי (MB)"><NumberInput value={v.maxSizeMb} min={1} onChange={(n) => setV({ maxSizeMb: n })} /></Row>
+      </div>,
+      <Row key="acc" label="סוגי קבצים מותרים" hint="למשל: .pdf,.jpg,image/*"><Input dir="ltr" value={(v.accept ?? []).join(",")} onChange={(e) => setV({ accept: e.target.value ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined })} /></Row>,
+    );
+  }
+  if (!rows.length) return null;
+  return <Section title="בדיקות תקינות">{rows}</Section>;
+}
+
+const TABLE_COLUMN_TYPES = FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].hasAnswer && !["repeating_table", "radio_grid", "checkbox_grid", "signature", "file_upload", "hidden", "bank_account"].includes(t));
+
+function TableColumns({ columns, onChange }: { columns: FormField[]; onChange: (cols: FormField[]) => void }) {
+  const patch = (i: number, p: Partial<FormField>) => onChange(columns.map((c, j) => (j === i ? { ...c, ...p } : c)));
+  return (
+    <div className="space-y-2">
+      <Label className="text-muted-foreground">עמודות הטבלה</Label>
+      {columns.map((c, i) => (
+        <div key={c.id} className="space-y-1.5 rounded-md border p-2">
+          <div className="flex gap-2">
+            <Input aria-label="שם העמודה" value={c.label} onChange={(e) => patch(i, { label: e.target.value })} className="h-9" />
+            <Button variant="ghost" size="sm" aria-label="מחיקת עמודה" disabled={columns.length <= 1} onClick={() => onChange(columns.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select aria-label="סוג העמודה" value={c.type} className="h-9" onChange={(e) => {
+              const type = e.target.value as FieldType;
+              const fresh = newField(type, new Set(columns.map((x) => x.id).filter((id) => id !== c.id)));
+              patch(i, { type, options: fresh.options, settings: fresh.settings });
+            }}>
+              {TABLE_COLUMN_TYPES.map((t) => <option key={t} value={t}>{FIELD_TYPE_META[t].label}</option>)}
+            </Select>
+            <label className="flex shrink-0 items-center gap-2 text-sm"><Checkbox checked={!!c.required} onChange={(e) => patch(i, { required: e.target.checked || undefined })} />חובה</label>
+          </div>
+          {FIELD_TYPE_META[c.type].hasOptions && (
+            <ListTextarea key={`${c.id}-${c.type}`} rows={3} items={c.options ?? []} onChange={(options) => patch(i, { options })} />
+          )}
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={() => {
+        const f = newField("short_text", new Set(columns.map((x) => x.id)));
+        onChange([...columns, { ...f, label: `עמודה ${columns.length + 1}` }]);
+      }}><Plus className="size-4" />עמודה חדשה</Button>
+    </div>
+  );
+}
+
+export function PageSettings({
+  def, index, onPatch,
+}: {
+  def: FormDefinition;
+  index: number;
+  onPatch: (patch: Partial<FormDefinition["pages"][number]>) => void;
+}) {
+  const page = def.pages[index]!;
+  return (
+    <div className="space-y-4">
+      <Row label="כותרת העמוד"><Input value={page.title} onChange={(e) => onPatch({ title: e.target.value })} /></Row>
+      <Row label="הסבר (אופציונלי)"><Textarea rows={2} value={page.description ?? ""} onChange={(e) => onPatch({ description: e.target.value || undefined })} /></Row>
+      <Section title="תנאי הצגת העמוד">
+        <ConditionEditor def={def} value={page.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג עמוד זה אם" />
+      </Section>
+    </div>
+  );
+}
