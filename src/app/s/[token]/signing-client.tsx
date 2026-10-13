@@ -46,7 +46,9 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
     setError(null);
     const res = await fetch(`/api/s/${token}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     setBusy(false);
-    if (res.ok) { setPanel(null); onDone(doneMsg); } else setError("הפעולה נכשלה. רעננו את הדף ונסו שוב.");
+    if (res.ok) { setPanel(null); onDone(doneMsg); return; }
+    const code = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "";
+    setError(ACTION_ERRORS[code] ?? "הפעולה נכשלה. רעננו את הדף ונסו שוב.");
   }
 
   return (
@@ -85,6 +87,14 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
     </div>
   );
 }
+
+const ACTION_ERRORS: Record<string, string> = {
+  name_required: "יש להזין שם",
+  contact_required: "יש להזין מייל או טלפון של האדם שאליו מעבירים",
+  bad_email: "כתובת המייל אינה תקינה",
+  bad_phone: "מספר הטלפון אינו תקין",
+  closed: "הפעולה כבר בוצעה. רעננו את הדף.",
+};
 
 export function SigningClient({ token, definition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [] }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
