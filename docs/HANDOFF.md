@@ -148,3 +148,7 @@ Open items from the plan are listed in the audit document (P1-2 what the signer 
 ## 12. Next step
 
 Remaining audit items: P1-2 (what the signer's page may see; 410 for invalid links), P1-7, P1-9/10/15, P1-11, P1-14, P1-16, the P2 list. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms, Google OAuth credentials (6.10) or a decision on the password, removing `AUTH_DISABLED`.
+
+## 13. Auto-migrations (P1-16)
+
+`vercel-build` runs `scripts/migrate.ts` before `next build`. It is opt-in: it only applies `drizzle/` migrations when `AUTO_MIGRATE=1` is set in the Vercel project env. Until Israel sets it, production migrations stay manual (`pnpm drizzle-kit migrate` against the production URL).

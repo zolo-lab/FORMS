@@ -64,7 +64,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   const pdfDocs = docRows.flatMap((d) => (d.pdfFileId && d.pdfMapping ? [{ fileId: d.pdfFileId, title: d.title, mapping: d.pdfMapping }] : []));
   const siblings = await db.select().from(signingSteps).where(eq(signingSteps.requestId, request.id)).orderBy(signingSteps.order);
   const returnTargets = siblings
-    .filter((s) => s.order < step.order && s.status === "completed")
+    .filter((s) => s.order < step.order && s.status === "completed" && s.role !== "requester") // the requester has no signing link, so a request returned to them would be stuck
     .map((s) => ({ id: s.id, label: `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}` }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
