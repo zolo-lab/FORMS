@@ -6,11 +6,11 @@ import { parseCreateBody } from "@/lib/api/create-request";
 import { REQUEST_STATUSES } from "@/lib/workflow/types";
 import { allFields } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
-import { listPackagesForWizard } from "./packages-store";
+import { getWizardPackage, listPackagesForWizard } from "./packages-store";
 import { cancelRequest, collectedAnswers, createRequest, getRequest, sendRequest } from "./requests-store";
 import { tempFileUrl } from "./webhooks";
 
-const { apiKeys, requests, packageTemplates } = schema;
+const { apiKeys, requests } = schema;
 
 export interface ApiAuth {
   organizationId: string;
@@ -106,10 +106,8 @@ export async function createApiRequest(orgId: string, raw: unknown): Promise<Api
   if (!parsed.ok) return { ok: false, status: 400, errors: parsed.errors };
   const b = parsed.value;
 
-  const [pkgRow] = await db.select({ id: packageTemplates.id, organizationId: packageTemplates.organizationId, archivedAt: packageTemplates.archivedAt }).from(packageTemplates).where(eq(packageTemplates.id, b.packageTemplateId));
-  if (!pkgRow || pkgRow.archivedAt || (pkgRow.organizationId && pkgRow.organizationId !== orgId)) return { ok: false, status: 404, errors: { packageTemplateId: "not found" } };
-  const pkg = (await listPackagesForWizard()).find((p) => p.id === pkgRow.id);
-  if (!pkg) return { ok: false, status: 404, errors: { packageTemplateId: "not found" } };
+  const pkg = await getWizardPackage(b.packageTemplateId);
+  if (!pkg || (pkg.organizationId && pkg.organizationId !== orgId)) return { ok: false, status: 404, errors: { packageTemplateId: "not found" } };
 
   const v = validateAnswers(pkg.requesterDefinition, b.answers);
   if (!v.ok) return { ok: false, status: 422, errors: Object.fromEntries(Object.entries(v.errors).map(([k, m]) => [`answers.${k}`, m])) };
