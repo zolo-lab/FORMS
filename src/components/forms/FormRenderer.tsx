@@ -26,12 +26,14 @@ export interface FormRendererProps {
   onSubmit?: (cleaned: Answers) => void | Promise<void>;
   lookups?: Lookups;
   onUpload?: UploadFn;
+  /** Fields from other roles used by `{{piping}}`, so their values can be formatted. */
+  pipeDefinition?: FormDefinition;
   /** Injectable for tests. */
   today?: string;
 }
 
 export function FormRenderer({
-  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today,
+  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition,
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
@@ -58,7 +60,7 @@ export function FormRenderer({
     onUpload,
     errors,
     readonlyAll: readonly,
-    pipe: (text, scope) => pipeText(text, { ...answers, ...scope }, definition),
+    pipe: (text, scope) => pipeText(text, { ...answers, ...scope }, pipeDefinition ? { ...definition, pages: [...definition.pages, ...pipeDefinition.pages] } : definition),
     roleReadOnly: (f) => !!f.formula || (!!f.disabledIf && evaluateCondition(f.disabledIf, answers)) || (!!role && (f.filledBy ?? "employee") !== role),
   };
 

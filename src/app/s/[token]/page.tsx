@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
-import { answersForClient } from "@/lib/forms/client-answers";
+import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
 import { SigningClient } from "./signing-client";
@@ -47,6 +47,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
         <SigningClient
           token={token}
           definition={ctx.definition}
+          pipeDefinition={pipeDefinition(ctx.definition, ctx.fullDefinition)}
           initialAnswers={answersForClient(ctx.definition, ctx.answers)}
           filled={ctx.filled}
           role={ctx.role}
