@@ -56,6 +56,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
             <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`px-3 py-1.5 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
             <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`px-3 py-1.5 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
           </nav>
+          <Link href="/admin/requests/bulk" className={buttonVariants({ variant: "ghost" })}>
+            שליחה מקובץ
+          </Link>
           <Link href="/admin/requests/new" className={buttonVariants()}>
             בקשה חדשה
           </Link>
