@@ -242,6 +242,25 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     expect(invites.filter((n) => n.templateKey === "step_invite" && n.to === "p@example.test")).toHaveLength(1);
   });
 
+  it("a draft that was never sent can be cancelled", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-draftcancel-${Date.now()}`, workflow: { steps: [{ order: 1, role: "employee", action: "fill" }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.cancelRequest(id, "טיוטה נמחקה");
+    const r = (await store.getRequest(id))!;
+    expect(r.request.status).toBe("cancelled");
+    expect(r.request.cancelledAt).toBeTruthy();
+    expect(r.events.map((e) => e.type)).toContain("request_cancelled");
+  });
+
   it("collectedAnswers ignores drafts except the owner's own", async () => {
     const { db, schema } = await import("@/db");
     const { eq } = await import("drizzle-orm");
