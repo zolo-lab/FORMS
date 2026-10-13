@@ -24,6 +24,20 @@ const ONBOARDING_WORKFLOW: Workflow = {
   ],
 };
 
+const TERMINATION_WORKFLOW: Workflow = {
+  steps: [
+    { order: 1, role: "requester", action: "fill" },
+    { order: 2, role: "employee", action: "fill_and_sign", otpRequired: false },
+    { order: 3, role: "payroll", action: "approve", assignee: { name: "חשבות שכר" } },
+  ],
+};
+
+/** Idempotent: creates the package if missing; an existing one is left alone (the admin may have edited it in the UI). */
+async function ensurePackage(name: string, description: string, workflow: Workflow) {
+  const existing = await db.select().from(schema.packageTemplates).where(eq(schema.packageTemplates.name, name));
+  if (existing.length === 0) await db.insert(schema.packageTemplates).values({ name, description, workflow });
+}
+
 async function main() {
   for (const o of ORGS) {
     await db
@@ -46,6 +60,9 @@ async function main() {
       .set({ workflow: ONBOARDING_WORKFLOW })
       .where(eq(schema.packageTemplates.id, existing[0]!.id));
   }
+
+  // Same engine, different documents: attach the termination forms to this package under /admin/packages.
+  await ensurePackage("סיום העסקה", "מבקש ממלא פרטי סיום → העובד חותם → חשבות שכר מאשרת", TERMINATION_WORKFLOW);
 
   const orgs = await db.select().from(schema.organizations);
   const pkgs = await db.select().from(schema.packageTemplates);
