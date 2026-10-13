@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { Badge, Card } from "@/components/ui/card";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/workflow/labels";
+import type { StepRole } from "@/lib/workflow/types";
 import { getRequest } from "@/server/requests-store";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
           {steps.length === 0 && <p className="p-4 text-sm text-muted-foreground">הבקשה עדיין טיוטה ולא נשלחה.</p>}
           {steps.map((s) => (
             <div key={s.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-              <span className="font-medium">{ROLE_LABELS[s.role]}</span>
+              <span className="font-medium">{ROLE_LABELS[s.role as StepRole]}</span>
               <span className="text-muted-foreground">{s.assigneeName ?? s.assigneeEmail ?? ""}</span>
               <Badge className="ms-auto" tone={s.status === "completed" ? "success" : s.status === "active" || s.status === "in_progress" ? "warning" : "muted"}>
                 {STEP_STATUS_LABEL[s.status] ?? s.status}

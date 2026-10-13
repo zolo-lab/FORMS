@@ -5,6 +5,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { renderDefault } from "@/lib/notifications/templates";
 import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
+import type { StepRole } from "@/lib/workflow/types";
 import { listPackagesForWizard } from "@/server/packages-store";
 import { appUrl, createRequest, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
@@ -85,14 +86,14 @@ export async function linksFor(requestId: string, known?: { stepId: string; toke
     const link = k ? { url: `${appUrl()}/s/${k.token}` } : await issueLink(s.id);
     if (!link) continue;
     const isEmployee = s.role === "employee";
-    const who = isEmployee ? data.request.subjectName : (s.assigneeName ?? ROLE_LABELS[s.role]);
+    const who = isEmployee ? data.request.subjectName : (s.assigneeName ?? ROLE_LABELS[s.role as StepRole]);
     const message = renderDefault("step_invite", {
       name: who,
       org: org?.name ?? "",
       link: link.url,
       dueDate: data.request.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(data.request.expiresAt) : "",
     }).body;
-    out.push({ stepId: s.id, roleLabel: ROLE_LABELS[s.role], who, url: link.url, message, phone: (isEmployee ? data.request.subjectPhone : s.assigneePhone) ?? undefined });
+    out.push({ stepId: s.id, roleLabel: ROLE_LABELS[s.role as StepRole], who, url: link.url, message, phone: (isEmployee ? data.request.subjectPhone : s.assigneePhone) ?? undefined });
   }
   return out;
 }
