@@ -66,3 +66,46 @@ test("draws elements straight onto the PDF and styles them", async ({ page }) =>
   await page.keyboard.press("Delete");
   expect(await mapping()).toHaveLength(4);
 });
+
+test("selects several stamps, aligns them, copies and undoes", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { id: string; x: number; y: number; width: number }[];
+
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
+  expect(await mapping()).toHaveLength(3);
+  // All three were dropped at the same spot; spread them by dragging two away.
+  const boxes = page.locator("[data-stamp]");
+  const first = (await boxes.nth(0).boundingBox())!;
+  await page.mouse.move(first.x + 10, first.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(first.x + 210, first.y + 8, { steps: 5 });
+  await page.mouse.up();
+  const second = (await boxes.nth(1).boundingBox())!;
+  await page.mouse.move(second.x + 10, second.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(second.x - 90, second.y + 108, { steps: 5 });
+  await page.mouse.up();
+  const xs = (await mapping()).map((s) => s.x);
+  expect(new Set(xs.map((x) => Math.round(x))).size).toBeGreaterThan(1);
+
+  // Clear the selection (the last dragged stamp is still selected), then Shift-click all three and align right: every right edge becomes equal.
+  await page.getByTestId("pdf-page-0").click({ position: { x: 5, y: 5 } });
+  await boxes.nth(0).click({ modifiers: ["Shift"] });
+  await boxes.nth(1).click({ modifiers: ["Shift"] });
+  await boxes.nth(2).click({ modifiers: ["Shift"] });
+  await page.getByRole("button", { name: "יישור לימין" }).click();
+  const edges = (await mapping()).map((s) => Math.round((s.x + s.width) * 10) / 10);
+  expect(new Set(edges).size).toBe(1);
+
+  // Ctrl+Z undoes the alignment.
+  await page.keyboard.press("Control+z");
+  const undone = (await mapping()).map((s) => Math.round((s.x + s.width) * 10) / 10);
+  expect(new Set(undone).size).toBeGreaterThan(1);
+
+  // Ctrl+C / Ctrl+V duplicates the selection.
+  await boxes.nth(0).click();
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  expect(await mapping()).toHaveLength(4);
+});

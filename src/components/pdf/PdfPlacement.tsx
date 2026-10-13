@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { alignBoxes, distributeBoxes, snapPosition, type AlignMode } from "@/lib/pdf/arrange";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
 import { DEFAULT_SIZE, orphanStamps, placeableItems, stampKey, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
@@ -48,6 +49,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Additional stamps selected with Shift/Ctrl-click (the primary one is `selected`). */
+  const [extra, setExtra] = useState<string[]>([]);
+  const [guides, setGuides] = useState<{ page: number; axis: "x" | "y"; at: number }[]>([]);
+  const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
+  const clipboard = useRef<PdfStamp[]>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
   const [tableRows, setTableRows] = useState<Record<string, number>>({});
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -61,10 +68,17 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const stampByKey = useMemo(() => new Map(mapping.stamps.map((s) => [stampKey(s), s])), [mapping.stamps]);
   const orphans = useMemo(() => orphanStamps(definition, mapping.stamps), [definition, mapping.stamps]);
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
+  const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
+  const pushHistory = () => {
+    history.current.past = [...history.current.past.slice(-49), latest.current];
+    history.current.future = [];
+  };
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
 
-  const setStamps = (stamps: PdfStamp[]) => onMappingChange({ ...mapping, stamps });
+  const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
   const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const patchMany = (patches: Map<string, Partial<PdfStamp>>) => setStamps(mapping.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)));
+  const select = (id: string | null) => { setSelected(id); setExtra([]); };
 
   function place(item: PlaceableItem, page: number, at?: { x: number; y: number }) {
     const existing = stampByKey.get(item.key);
@@ -75,7 +89,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
     if (existing) {
       patchStamp(existing.id, { page, ...box });
-      setSelected(existing.id);
+      select(existing.id);
       return;
     }
     const stamp: PdfStamp = {
@@ -86,7 +100,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (stamp.part === undefined) delete stamp.part;
     if (stamp.whenValue === undefined) delete stamp.whenValue;
     setStamps([...mapping.stamps, stamp]);
-    setSelected(stamp.id);
+    select(stamp.id);
   }
 
   function draw(entry: PaletteEntry, page: number, at?: { x: number; y: number }) {
@@ -95,48 +109,126 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const pg = pages[page]!;
     const pos = at ?? { x: (pg.width - dims.width) / 2, y: pg.height / 2 };
     const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
-    setSelected(onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) }));
+    pushHistory();
+    select(onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) }));
   }
 
   function startDrag(e: React.PointerEvent, stamp: PdfStamp, mode: "move" | "resize") {
     e.preventDefault();
     e.stopPropagation();
-    setSelected(stamp.id);
-    const pg = pages[stamp.page]!;
+    // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
+    rootRef.current?.focus({ preventScroll: true });
+    if (mode === "move" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      // Toggle membership in the multi-selection; no drag.
+      if (group.includes(stamp.id)) {
+        const rest = group.filter((id) => id !== stamp.id);
+        setSelected(rest[0] ?? null);
+        setExtra(rest.slice(1));
+      } else {
+        setExtra([...(selected ? [selected, ...extra] : extra)]);
+        setSelected(stamp.id);
+      }
+      return;
+    }
+    const moving = mode === "move" && group.includes(stamp.id) && group.length > 1 ? group : [stamp.id];
+    if (moving.length === 1) select(stamp.id);
+    pushHistory();
     const startX = e.clientX, startY = e.clientY;
-    const origin = { x: stamp.x, y: stamp.y, width: stamp.width, height: stamp.height };
+    const origins = new Map(latest.current.stamps.filter((s) => moving.includes(s.id)).map((s) => [s.id, { x: s.x, y: s.y, width: s.width, height: s.height, page: s.page }]));
     const move = (ev: PointerEvent) => {
       const dx = (ev.clientX - startX) / scale;
       const dy = -(ev.clientY - startY) / scale; // screen down = PDF down
-      const box = mode === "move"
-        ? { ...origin, x: origin.x + dx, y: origin.y + dy }
-        // Resize from the bottom-end corner: width grows with dx, the top edge stays put.
-        : { x: origin.x, width: origin.width + dx, height: origin.height - dy, y: origin.y + dy };
-      const c = clampBox(box, pg.width, pg.height);
-      patchStampLive(stamp.id, { x: round1(c.x), y: round1(c.y), width: round1(c.width), height: round1(c.height) });
+      const patches = new Map<string, Partial<PdfStamp>>();
+      const hit: { page: number; axis: "x" | "y"; at: number }[] = [];
+      for (const [id, origin] of origins) {
+        const pg = pages[origin.page]!;
+        let box = mode === "move"
+          ? { ...origin, x: origin.x + dx, y: origin.y + dy }
+          // Resize from the bottom-end corner: width grows with dx, the top edge stays put.
+          : { x: origin.x, width: origin.width + dx, height: origin.height - dy, y: origin.y + dy };
+        if (mode === "move" && origins.size === 1) {
+          const others = latest.current.stamps.filter((o) => o.id !== id && o.page === origin.page);
+          const snapped = snapPosition(box, others, { grid: 0 });
+          box = { ...box, x: snapped.x, y: snapped.y };
+          hit.push(...snapped.guides.map((g) => ({ ...g, page: origin.page })));
+        }
+        const c = clampBox(box, pg.width, pg.height);
+        patches.set(id, { x: round1(c.x), y: round1(c.y), width: round1(c.width), height: round1(c.height) });
+      }
+      setGuides(hit);
+      onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)) });
     };
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    const up = () => { setGuides([]); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }
   // During a drag the closure's `mapping` is stale, so always patch from the latest ref.
   const latest = useRef(mapping);
   useEffect(() => { latest.current = mapping; });
-  const patchStampLive = (id: string, patch: Partial<PdfStamp>) =>
-    onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+
+  const selectedBoxes = () => group.map((id) => mapping.stamps.find((s) => s.id === id)!).filter(Boolean);
+  function arrange(kind: AlignMode | "dist-x" | "dist-y") {
+    const list = selectedBoxes();
+    if (list.length < 2) return;
+    const pos = kind === "dist-x" ? distributeBoxes(list, "x") : kind === "dist-y" ? distributeBoxes(list, "y") : alignBoxes(list, kind);
+    patchMany(new Map(list.map((s, i) => [s.id, { x: round1(pos[i]!.x), y: round1(pos[i]!.y) }])));
+  }
+  function undo() {
+    const h = history.current;
+    const prev = h.past.at(-1);
+    if (!prev) return;
+    h.past = h.past.slice(0, -1);
+    h.future = [latest.current, ...h.future];
+    onMappingChange(prev);
+    select(null);
+  }
+  function redo() {
+    const h = history.current;
+    const next = h.future[0];
+    if (!next) return;
+    h.future = h.future.slice(1);
+    h.past = [...h.past, latest.current];
+    onMappingChange(next);
+  }
+  function paste() {
+    if (clipboard.current.length === 0) return;
+    const copies = clipboard.current.map((s) => {
+      const pg = pages[s.page]!;
+      const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
+      return { ...s, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+    });
+    // Shift the clipboard so repeated pastes cascade.
+    clipboard.current = copies;
+    setStamps([...mapping.stamps, ...copies]);
+    setSelected(copies[0]!.id);
+    setExtra(copies.slice(1).map((c) => c.id));
+  }
 
   function onKey(e: React.KeyboardEvent) {
-    if (!selectedStamp || (e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "SELECT") return;
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+    if (mod && e.key.toLowerCase() === "c" && group.length) { clipboard.current = selectedBoxes() as PdfStamp[]; return; }
+    if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); paste(); return; }
+    if (mod && e.key.toLowerCase() === "d" && group.length) { e.preventDefault(); clipboard.current = selectedBoxes() as PdfStamp[]; paste(); return; }
+    if (!selectedStamp) return;
     const step = e.shiftKey ? 10 : 1;
     const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
     if (d[e.key]) {
       e.preventDefault();
-      const pg = pages[selectedStamp.page]!;
-      const c = clampBox({ ...selectedStamp, x: selectedStamp.x + d[e.key]![0], y: selectedStamp.y + d[e.key]![1] }, pg.width, pg.height);
-      patchStamp(selectedStamp.id, { x: round1(c.x), y: round1(c.y) });
+      const patches = new Map<string, Partial<PdfStamp>>();
+      for (const s of selectedBoxes()) {
+        const pg = pages[s.page]!;
+        const c = clampBox({ ...s, x: s.x + d[e.key]![0], y: s.y + d[e.key]![1] }, pg.width, pg.height);
+        patches.set(s.id, { x: round1(c.x), y: round1(c.y) });
+      }
+      patchMany(patches);
     } else if (e.key === "Delete" || e.key === "Backspace") {
-      setStamps(mapping.stamps.filter((s) => s.id !== selectedStamp.id));
-      setSelected(null);
+      const gone = new Set(group);
+      setStamps(mapping.stamps.filter((s) => !gone.has(s.id)));
+      select(null);
     }
   }
 
@@ -144,7 +236,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
+    <div ref={rootRef} tabIndex={-1} className="grid gap-4 outline-none lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
       <aside className="space-y-3 lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
         <p className="text-xs text-muted-foreground">לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
@@ -217,6 +309,23 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           {[0.75, 1, 1.25, 1.5].map((z) => (
             <Button key={z} size="sm" variant={scale === z ? "default" : "outline"} onClick={() => setScale(z)}>{Math.round(z * 100)}%</Button>
           ))}
+          {group.length >= 2 && (
+            <div role="toolbar" aria-label="יישור" className="flex flex-wrap items-center gap-1 rounded-md border bg-card px-2 py-1">
+              <span className="text-xs text-muted-foreground">{group.length} נבחרו</span>
+              {([
+                ["right", "יישור לימין", "ימין"], ["left", "יישור לשמאל", "שמאל"], ["top", "יישור למעלה", "למעלה"], ["bottom", "יישור למטה", "למטה"],
+                ["center-x", "מרכוז אופקי", "מרכז ↔"], ["center-y", "מרכוז אנכי", "מרכז ↕"],
+              ] as const).map(([mode, aria, text]) => (
+                <Button key={mode} size="sm" variant="outline" aria-label={aria} onClick={() => arrange(mode)}>{text}</Button>
+              ))}
+              {group.length >= 3 && (
+                <>
+                  <Button size="sm" variant="outline" aria-label="פיזור אופקי" onClick={() => arrange("dist-x")}>פיזור ↔</Button>
+                  <Button size="sm" variant="outline" aria-label="פיזור אנכי" onClick={() => arrange("dist-y")}>פיזור ↕</Button>
+                </>
+              )}
+            </div>
+          )}
           {onPreview && <Button className="ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
         {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -230,7 +339,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 data-testid={`pdf-page-${pi}`}
                 className="relative mx-auto shadow"
                 style={{ width: pg.width * scale, height: pg.height * scale }}
-                onPointerDown={() => { setActivePage(pi); setSelected(null); }}
+                onPointerDown={() => { setActivePage(pi); select(null); }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -254,6 +363,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 {mapping.stamps.filter((s) => s.page === pi).map((s) => {
                   const b = pdfBoxToScreen(s, pg.height, scale);
                   const active = s.id === selected;
+                  const inGroup = group.includes(s.id);
                   return (
                     <div
                       key={s.id}
@@ -264,7 +374,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       onPointerDown={(e) => startDrag(e, s, "move")}
                       className={cn(
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
-                        active ? "border-primary bg-primary/25" : "border-primary/60 bg-primary/10",
+                        inGroup ? "border-primary bg-primary/25" : "border-primary/60 bg-primary/10",
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
@@ -279,6 +389,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       )}
                     </div>
                   );
+                })}
+                {guides.filter((g) => g.page === pi).map((g, gi) => {
+                  const line = g.axis === "x"
+                    ? { left: g.at * scale, top: 0, width: 1, height: "100%" }
+                    : { left: 0, top: (pg.height - g.at) * scale, width: "100%", height: 1 };
+                  return <div key={gi} aria-hidden className="pointer-events-none absolute bg-primary" style={line} />;
                 })}
               </div>
             ))}
