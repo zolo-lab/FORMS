@@ -48,8 +48,9 @@ describe("builder: fields", () => {
     def = moveField(def, ids[0]!, { page: 0, index: 3 }); // to the end
     expect(def.pages[0]!.fields.map((f) => f.id)).toEqual([ids[1], ids[2], ids[0]]);
     def = moveField(def, ids[2]!, { page: 1, index: 0 });
-    expect(def.pages[1]!.fields.map((f) => f.id)).toEqual([ids[0]]);
-    expect(findLocation(def, ids[0]!)).toEqual({ page: 1, index: 0 });
+    expect(def.pages[1]!.fields.map((f) => f.id)).toEqual([ids[2]]);
+    expect(def.pages[0]!.fields.map((f) => f.id)).toEqual([ids[1], ids[0]]);
+    expect(findLocation(def, ids[2]!)).toEqual({ page: 1, index: 0 });
   });
 });
 
