@@ -30,6 +30,8 @@ export type SigningContext = {
   returnTargets: { id: string; label: string }[];
   /** Documents that have a PDF with placed fields (for the on-document mode). */
   pdfDocs: { fileId: string; title: string; mapping: PdfMapping }[];
+  /** Message shown after submit (first document that defines one). */
+  thankYou?: string;
 };
 export type SigningLookup = SigningContext | { state: Exclude<TokenState, "ok"> };
 
@@ -63,7 +65,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .map((s) => ({ id: s.id, label: `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}` }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
-  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers, returnTargets, pdfDocs };
+  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
 }
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
@@ -102,7 +104,18 @@ export async function saveDraft(token: string, input: Answers, cookieHeader: str
   return { ok: true };
 }
 
-export type SubmitResult = { ok: true } | { ok: false; errors: FieldErrors } | { ok: false; state: TokenState | "otp_required" };
+export type DoneInfo = { message?: string; waitingFor: string[]; completed: boolean };
+/** After a step is finished: what the signer should be told. */
+async function doneInfo(ctx: SigningContext, status: string): Promise<DoneInfo> {
+  const open = await db.select().from(signingSteps).where(and(eq(signingSteps.requestId, ctx.request.id), eq(signingSteps.status, "active")));
+  return {
+    message: ctx.thankYou,
+    completed: status === "completed",
+    waitingFor: open.map((s) => `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}`),
+  };
+}
+
+export type SubmitResult = ({ ok: true } & DoneInfo) | { ok: false; errors: FieldErrors } | { ok: false; state: TokenState | "otp_required" };
 
 export async function submit(token: string, input: Answers, cookieHeader: string | null = null): Promise<SubmitResult> {
   const ctx = await loadByToken(token);
@@ -123,8 +136,8 @@ export async function submit(token: string, input: Answers, cookieHeader: string
     const file = await putFile({ name: `signature-${ctx.step.id}-${f.id}.png`, mime: "image/png", bytes: new Uint8Array(Buffer.from(m[1]!, "base64")) });
     await db.insert(signatures).values({ stepId: ctx.step.id, fieldId: f.id, kind: sig?.kind === "typed" ? "typed" : "drawn", fileId: file.id, typedText: sig?.kind === "typed" ? (sig.text ?? null) : null });
   }
-  await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
-  return { ok: true };
+  const out = await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
+  return { ok: true, ...(await doneInfo(ctx, out.status)) };
 }
 
 // ───────────────────────── OTP ─────────────────────────
