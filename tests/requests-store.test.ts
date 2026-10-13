@@ -96,4 +96,56 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     expect(r.request.status).toBe("returned");
     expect(r.steps.map((s) => s.status)).toEqual(["active", "returned"]);
   });
+
+  it("completing a request produces a final PDF per document whose sha256 matches the stored file", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const { getFile, sha256Hex } = await import("@/server/storage");
+
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [tpl] = await db
+      .insert(schema.formTemplates)
+      .values({ slug: `final-${Date.now()}`, title: "טופס סיום", status: "active", publishedVersion: 1 })
+      .returning();
+    cleanup.push(() => db.delete(schema.formTemplates).where(eq(schema.formTemplates.id, tpl!.id)));
+    await db.insert(schema.formTemplateVersions).values({
+      templateId: tpl!.id,
+      version: 1,
+      publishedAt: new Date(),
+      definition: {
+        schemaVersion: 1,
+        title: "טופס סיום",
+        pages: [{ id: "p1", title: "עמוד", fields: [{ id: "fullName", type: "short_text", label: "שם מלא", filledBy: "employee" }] }],
+        settings: { layout: "single" },
+      } as never,
+    });
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({
+        name: `test-final-${Date.now()}`,
+        workflow: { steps: [{ order: 1, role: "employee", action: "fill_and_sign" }] },
+      })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    await db.insert(schema.packageTemplateItems).values({ packageTemplateId: pkg!.id, templateId: tpl!.id, order: 1, required: true });
+
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "דנה כהן", email: "dana@example.test" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const r = (await store.getRequest(id))!;
+    await store.applyStepAction(r.steps[0]!.id, { type: "open" });
+    await store.applyStepAction(r.steps[0]!.id, { type: "submit", answers: { fullName: "דנה כהן" } });
+
+    const done = (await store.getRequest(id))!;
+    expect(done.request.status).toBe("completed");
+    expect(done.documents).toHaveLength(1);
+    const doc = done.documents[0]!;
+    expect(doc.finalFileId).toBeTruthy();
+    expect(doc.status).toBe("completed");
+    const file = (await getFile(doc.finalFileId!))!;
+    expect(sha256Hex(file.bytes)).toBe(doc.finalSha256);
+    expect(Buffer.from(file.bytes.slice(0, 5)).toString()).toBe("%PDF-");
+    cleanup.push(() => db.delete(schema.storedFiles).where(eq(schema.storedFiles.id, doc.finalFileId!)));
+  });
 });

@@ -28,6 +28,7 @@ jobs:
           pnpm pdf:sample
           sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq poppler-utils >/dev/null
           pdftoppm -png -r 110 artifacts/hebrew-sample.pdf artifacts/hebrew-sample
+          pdftoppm -png -r 110 artifacts/certificate-sample.pdf artifacts/certificate-sample
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -64,7 +65,9 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm pdf:sample
       - run: sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq poppler-utils >/dev/null
-      - run: pdftoppm -png -r 110 artifacts/hebrew-sample.pdf artifacts/hebrew-sample
+      - run: |
+          pdftoppm -png -r 110 artifacts/hebrew-sample.pdf artifacts/hebrew-sample
+          pdftoppm -png -r 110 artifacts/certificate-sample.pdf artifacts/certificate-sample
       - name: Push previews branch
         run: |
           mkdir /tmp/previews && cp artifacts/* /tmp/previews/
