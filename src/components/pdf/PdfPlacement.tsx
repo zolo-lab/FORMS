@@ -15,7 +15,16 @@ import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument, type PdfSource } from "./usePdfDocument";
 
 const ITEM_DRAG = "application/x-pdf-item";
-const KIND_LABEL = { text: "טקסט", check: "X", signature: "חתימה", image: "תמונה" } as const;
+const KIND_LABEL = {
+  text: "טקסט",
+  check: "X",
+  signature: "חתימה",
+  image: "תמונה",
+  comb: "תאים",
+  date_signed: "תאריך חתימה",
+  initials: "ראשי תיבות",
+  stamp_image: "חותמת",
+} as const;
 
 export interface PdfPlacementProps {
   definition: FormDefinition;
