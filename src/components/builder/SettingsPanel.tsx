@@ -70,7 +70,7 @@ function StyleControls({ style, sample, onChange }: { style: FieldStyle | undefi
       <div className="grid grid-cols-1 gap-2">
         {FIELD_STYLE_OPTIONS.map((g) => (
           <Row key={g.key} label={g.label}>
-            <Select value={(cur[g.key as keyof FieldStyle] as string | undefined) ?? g.options[g.key === "size" ? 1 : 0].value} onChange={(e) => set({ [g.key]: e.target.value } as Partial<FieldStyle>)}>
+            <Select aria-label={g.label} value={(cur[g.key as keyof FieldStyle] as string | undefined) ?? g.options[g.key === "size" ? 1 : 0].value} onChange={(e) => set({ [g.key]: e.target.value } as Partial<FieldStyle>)}>
               {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
           </Row>

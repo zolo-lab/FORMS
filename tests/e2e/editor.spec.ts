@@ -19,7 +19,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 
   // Style this field only.
   await page.getByLabel("גודל", { exact: true }).selectOption({ label: "גדול מאוד" });
-  await page.getByRole("checkbox", { name: "בולד" }).check();
+  await page.getByRole("switch", { name: "בולד" }).click();
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/text-2xl/);
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/font-bold/);
 
