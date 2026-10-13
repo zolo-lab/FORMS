@@ -32,7 +32,12 @@ describe("AcroForm import", () => {
     expect(imp.acroImported).toBe(true);
     expect(imp.fields.map((f) => f.type)).toEqual(["short_text", "short_text", "consent", "radio", "dropdown"]);
     const byField = (id: string) => imp.stamps.filter((s) => s.fieldId === id);
-    expect(byField("acro_1")[0]).toMatchObject({ kind: "text", page: 0, x: 50, y: 700, width: 200, height: 20 });
+    const first = byField("acro_1")[0]!;
+    expect(first).toMatchObject({ kind: "text", page: 0 });
+    // pdf-lib widens widgets slightly for the border, so compare with a tolerance.
+    expect(first.x).toBeCloseTo(50, -1);
+    expect(first.width).toBeCloseTo(200, -1);
+    expect(first.height).toBeCloseTo(20, -1);
     expect(byField("acro_2")[0]).toMatchObject({ kind: "comb", comb: { cells: 9 } });
     expect(byField("acro_3")[0]).toMatchObject({ kind: "check", page: 1 });
     expect(byField("acro_4").map((s) => s.whenValue)).toEqual(["single", "married"]);
