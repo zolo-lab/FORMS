@@ -7,7 +7,7 @@ import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackagesForWizard } from "@/server/packages-store";
-import { appUrl, createRequest, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
+import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
 export interface ShareLink {
   stepId: string;
@@ -112,4 +112,35 @@ export async function finalizeRequestAction(requestId: string): Promise<{ ok: bo
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "היצירה נכשלה" };
   }
+}
+
+type ActionResult = { ok: boolean; message: string };
+
+async function run(requestId: string, ok: string, fn: () => Promise<unknown>): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath(`/admin/requests/${requestId}`);
+    revalidatePath("/admin/requests");
+    return { ok: true, message: ok };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "הפעולה נכשלה" };
+  }
+}
+
+export async function cancelRequestAction(requestId: string, reason: string): Promise<ActionResult> {
+  if (!reason.trim()) return { ok: false, message: "נדרשת סיבה" };
+  return run(requestId, "הבקשה בוטלה", () => cancelRequest(requestId, reason.trim()));
+}
+
+export async function extendExpiryAction(requestId: string, days: number): Promise<ActionResult> {
+  return run(requestId, `התוקף הוארך ב-${days} ימים`, () => extendExpiry(requestId, days));
+}
+
+export async function changeAssigneeAction(requestId: string, stepId: string, assignee: { name?: string; email?: string; phone?: string }): Promise<ActionResult> {
+  const email = assignee.email?.trim() || undefined;
+  const phone = assignee.phone?.trim() || undefined;
+  if (email && !EMAIL.test(email)) return { ok: false, message: "כתובת מייל לא תקינה" };
+  if (phone && !normalizeIsraeliPhone(phone)) return { ok: false, message: "מספר טלפון לא תקין" };
+  if (!assignee.name?.trim() && !email && !phone) return { ok: false, message: "נדרש שם, מייל או טלפון" };
+  return run(requestId, "הנמען הוחלף. צרו קישור חדש לשיתוף.", () => changeAssignee(stepId, { name: assignee.name?.trim() || undefined, email, phone }));
 }

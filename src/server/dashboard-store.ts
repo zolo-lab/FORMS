@@ -136,3 +136,27 @@ export async function requestKpis(orgId?: string, now = new Date()): Promise<Kpi
 export async function listPackages() {
   return db.select({ id: packageTemplates.id, name: packageTemplates.name }).from(packageTemplates).orderBy(asc(packageTemplates.name));
 }
+
+/** Label → text of every answer collected so far, across the request's (pinned) documents. */
+export async function requestAnswerItems(requestId: string): Promise<{ label: string; text: string }[]> {
+  const { collectedAnswers } = await import("./requests-store");
+  const { summaryItems } = await import("@/lib/pdf/summary");
+  const answers = await collectedAnswers(requestId);
+  const docs = await db
+    .select({ definition: schema.formTemplateVersions.definition })
+    .from(schema.packageDocuments)
+    .innerJoin(schema.formTemplateVersions, eq(schema.packageDocuments.templateVersionId, schema.formTemplateVersions.id))
+    .where(eq(schema.packageDocuments.requestId, requestId))
+    .orderBy(asc(schema.packageDocuments.order));
+  const seen = new Set<string>();
+  const out: { label: string; text: string }[] = [];
+  for (const d of docs) {
+    for (const it of summaryItems(d.definition, answers)) {
+      const key = `${it.label}|${it.text}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+  }
+  return out;
+}

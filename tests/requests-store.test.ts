@@ -148,4 +148,41 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     expect(Buffer.from(file.bytes.slice(0, 5)).toString()).toBe("%PDF-");
     cleanup.push(() => db.delete(schema.storedFiles).where(eq(schema.storedFiles.id, doc.finalFileId!)));
   });
+
+  it("admin can extend the deadline, replace a recipient (old link dies) and cancel", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-admin-${Date.now()}`, workflow: { steps: [{ order: 1, role: "approver", action: "approve", assignee: { name: "ישן", email: "old@example.test" } }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד" }, expiresInDays: 5 });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    let r = (await store.getRequest(id))!;
+    const before = r.request.expiresAt!;
+
+    const next = await store.extendExpiry(id, 10);
+    expect(next.getTime() - before.getTime()).toBe(10 * 86_400_000);
+    await expect(store.extendExpiry(id, 0)).rejects.toThrow();
+
+    const step = r.steps[0]!;
+    const tokensBefore = await db.select().from(schema.stepTokens).where(eq(schema.stepTokens.stepId, step.id));
+    expect(tokensBefore[0]!.expiresAt!.getTime()).toBe(next.getTime());
+    await store.changeAssignee(step.id, { name: "חדש", email: "new@example.test" });
+    r = (await store.getRequest(id))!;
+    expect(r.steps[0]!.assigneeName).toBe("חדש");
+    const tokensAfter = await db.select().from(schema.stepTokens).where(eq(schema.stepTokens.stepId, step.id));
+    expect(tokensAfter.every((t) => t.revokedAt !== null)).toBe(true);
+    expect(r.events.map((e) => e.type)).toEqual(expect.arrayContaining(["request_extended", "step_assignee_changed"]));
+
+    await store.cancelRequest(id, "בוטל בבדיקה");
+    r = (await store.getRequest(id))!;
+    expect(r.request.status).toBe("cancelled");
+    await expect(store.changeAssignee(step.id, { name: "x" })).rejects.toThrow();
+  });
 });

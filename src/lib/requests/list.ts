@@ -97,6 +97,8 @@ export function eventLabel(type: string, payload: Record<string, unknown> = {}):
     case "step_delegated": return "השלב הועבר לאדם אחר";
     case "step_skipped": return `שלב דולג${r ? ` · ${r}` : ""}`;
     case "step_expired": return "תוקף שלב פג";
+    case "request_extended": return "תוקף הבקשה הוארך";
+    case "step_assignee_changed": return `הוחלף נמען${r ? ` · ${r}` : ""}`;
     case "otp_sent": return "נשלח קוד אימות";
     case "otp_verified": return "קוד האימות אומת";
     default: return type;
