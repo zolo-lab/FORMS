@@ -67,6 +67,13 @@ describe("validateAnswers", () => {
     expect(r.errors.declare).toBe("יש לאשר כדי להמשיך");
   });
 
+  it("rejects signatures that are not a reasonably sized PNG data URL", () => {
+    for (const image of ["x", "javascript:alert(1)", "data:text/html;base64,PGI+", "data:image/png;base64,", `data:image/png;base64,${"A".repeat(700_001)}`]) {
+      const r = validateAnswers(sampleForm, { ...validAnswers, sig: { image } }, { today });
+      expect(r.errors.sig, image.slice(0, 30)).toBe("נדרשת חתימה");
+    }
+  });
+
   it("validates Israeli ID and phone", () => {
     const r = validateAnswers(sampleForm, { ...validAnswers, idNumber: "123456789", mobile: "123" }, { today });
     expect(r.errors.idNumber).toBe("מספר תעודת זהות לא תקין");

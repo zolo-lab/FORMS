@@ -164,3 +164,30 @@ export async function bulkCancelAction(formData: FormData) {
   revalidatePath("/admin/requests");
   redirect(`/admin/requests?cancelled=${cancelled}&skipped=${skipped}`);
 }
+
+/** A request saved as draft: send it now. */
+export async function sendDraftAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/admin/requests");
+  try {
+    await sendRequest(id);
+  } catch {
+    redirect(`/admin/requests/${id}?error=send`);
+  }
+  revalidatePath(`/admin/requests/${id}`);
+  revalidatePath("/admin/requests");
+  redirect(`/admin/requests/${id}`);
+}
+
+/** Discard a draft that was never sent. */
+export async function discardDraftAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/admin/requests");
+  try {
+    await cancelRequest(id, "טיוטה נמחקה");
+  } catch {
+    redirect(`/admin/requests/${id}?error=discard`);
+  }
+  revalidatePath("/admin/requests");
+  redirect("/admin/requests");
+}
