@@ -7,7 +7,9 @@ import { PAGE_SIZE, filtersToQuery, parseFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
+import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
+import { bulkCancelAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,9 @@ function Kpi({ label, value, hint, href }: { label: string; value: string | numb
 }
 
 export default async function RequestsPage({ searchParams }: { searchParams: SP }) {
-  const filters = parseFilters(await searchParams);
+  const sp = await searchParams;
+  const filters = parseFilters(sp);
+  const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
   const [orgs, packages, kpis, result] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters)]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
@@ -144,13 +148,29 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         </div>
       </form>
 
+      {cancelled !== null && Number.isFinite(cancelled) && <p role="status" className="rounded-md bg-muted p-3 text-sm">בוטלו {cancelled} בקשות.</p>}
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {result.total} בקשות
       </p>
+      <form id="bulk" method="get" action="/api/admin/requests/export" className="space-y-3">
+        {[...new URLSearchParams(filtersToQuery(filters, { page: 1 })).entries()].map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 text-sm" role="toolbar" aria-label="פעולות על בקשות">
+          <span className="text-muted-foreground">סמנו שורות, או השאירו ריק לכל התוצאות ({result.total}):</span>
+          <Button type="submit" name="format" value="csv" variant="outline" size="sm">ייצוא CSV</Button>
+          <Button type="submit" name="format" value="xlsx" variant="outline" size="sm">ייצוא Excel</Button>
+          <Button type="submit" name="format" value="zip" variant="outline" size="sm">PDF חתומים (ZIP)</Button>
+          <span className="ms-auto flex items-center gap-2">
+            <Input name="reason" placeholder="סיבת ביטול" className="h-8 w-40" aria-label="סיבת ביטול" />
+            <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
+          </span>
+        </div>
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
+              <th className="w-8 px-3 py-2"><SelectAll formId="bulk" /></th>
               {["עובד", "ארגון", "ערכה", "סטטוס", "ממתין ל", "ימים בשלב", "התקדמות", "נוצרה", "יעד"].map((h) => (
                 <th key={h} className="px-3 py-2 text-start font-medium">
                   {h}
@@ -161,7 +181,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <tbody className="divide-y">
             {result.rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                <td colSpan={10} className="p-6 text-center text-muted-foreground">
                   {hasFilters ? "לא נמצאו בקשות לפי הסינון." : "עדיין אין בקשות."}
                 </td>
               </tr>
@@ -170,6 +190,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
               const [label, tone] = REQUEST_STATUS_LABEL[r.status];
               return (
                 <tr key={r.id}>
+                  <td className="px-3 py-2"><input type="checkbox" name="id" value={r.id} aria-label={`בחירת ${r.subjectName}`} className="size-4 accent-primary" /></td>
                   <td className="px-3 py-2">
                     <Link href={`/admin/requests/${r.id}`} className="font-medium hover:underline">
                       {r.subjectName}
@@ -191,6 +212,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           </tbody>
         </table>
       </Card>
+      </form>
 
       {result.pageCount > 1 && (
         <nav className="flex items-center justify-center gap-3 text-sm" aria-label="עימוד">
