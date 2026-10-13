@@ -25,6 +25,7 @@ import {
   type EngineStep,
 } from "@/lib/workflow/engine";
 import { renderDefault } from "@/lib/notifications/templates";
+import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import type { StepRole } from "@/lib/workflow/types";
 
 const { requests, signingSteps, stepTokens, submissions, events, notifications, packageTemplates, packageTemplateItems, packageDocuments, formTemplates, formTemplateVersions, organizations } = schema;
@@ -203,7 +204,8 @@ async function persist(
     await db.insert(stepTokens).values({ stepId: id, tokenHash: hash, expiresAt: req.expiresAt });
     tokensToLink.push({ stepId: id, token });
     const to = s.assigneeEmail;
-    if (to) {
+    const smsTo = !to && s.assigneePhone ? normalizeIsraeliPhone(s.assigneePhone) : null;
+    if (to || smsTo) {
       const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
       const msg = inviteMessage({
         name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
@@ -215,10 +217,11 @@ async function persist(
         organizationId: req.organizationId,
         requestId,
         stepId: id,
-        channel: "email",
-        to,
+        // Email when we have one; otherwise an SMS to the phone number.
+        channel: to ? "email" : "sms",
+        to: (to ?? smsTo)!,
         templateKey: "step_invite",
-        subject: msg.subject,
+        subject: to ? msg.subject : null,
         body: msg.body,
       });
     }
