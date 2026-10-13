@@ -67,7 +67,7 @@
 ### שלב 2 – בונה טפסים + מציג טפסים + מיקום שדות על PDF · ~2–3 שבועות
 
 **2.0 תשתית**
-1. להחיל את מיגרציית שלב 1 על Neon `dev` (HANDOFF §3).
+1. מיגרציית שלב 1 כבר הוחלה על Neon `dev`. כל מיגרציה חדשה – לפי HANDOFF §3.
 2. התחברות זמנית: `/login` עם `ADMIN_PASSWORD`, cookie חתום (HMAC עם `SESSION_SECRET`, בלי ספריות), `middleware.ts` שחוסם את `/admin/**`. בדיקות יחידה לחתימה/אימות cookie.
 3. רכיבי UI בסיסיים (מועתקים מ-shadcn, מותאמים RTL): Button, Input, Textarea, Label, Select, Checkbox, RadioGroup, Switch, Dialog, Sheet, Tabs, Card, Badge, Tooltip, DropdownMenu, Toast.
 

@@ -9,6 +9,7 @@ _Last updated: 2026-10-13 (end of phase 1, by Claude Opus)._
 | Code | GitHub `zolo0548152101-afk/FORMS` (public), branch `main` |
 | Hosting | Vercel team `team_31mPt8JZMiCp6NV6462Jix5Y`, project `gybs-forms` (`prj_B2JeTYwLWRYxu6DyhqwdOMvwb0JS`), Git-linked: every push deploys (previews are behind Vercel SSO) |
 | Database | Neon project `gybs-forms` (`damp-wildflower-79510538`, eu-central-1, PG 17, db `forms`). Branches: `main` (`br-muddy-frost-b9l3kp1r`) = production, `dev` (`br-wild-violet-b9p5v309`) = preview/dev |
+| Vercel settings | install: `pnpm install --no-frozen-lockfile`; env `ENABLE_EXPERIMENTAL_COREPACK=1` (pnpm 10 from `packageManager`); Node 22; branch `ci-previews` is skipped via ignored-build-step. Build logs: Vercel MCP `list_deployment_events` |
 | Env vars | Vercel: `DATABASE_URL` (production → Neon main, preview+development → Neon dev). Nothing in GitHub secrets |
 | Plan | `docs/build-plan.md` (also in the claude.ai project as `claude/תוכנית-בנייה.md`) |
 | Legacy system map | claude.ai project doc `claude/מיפוי-מערכת-קליטה-קיימת.md` |
@@ -43,7 +44,7 @@ The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubuserco
   2. Apply to **dev** with `run_sql_transaction` (project `damp-wildflower-79510538`, branch `br-wild-violet-b9p5v309`, database `forms`). Statements are separated by `--> statement-breakpoint`.
   3. Record it: `create table if not exists schema_migrations (name text primary key, applied_at timestamptz default now()); insert into schema_migrations(name) values ('NNNN_name');`
   4. **Production (`br-muddy-frost-b9l3kp1r`) only after the user explicitly approves**, same steps.
-- Phase 1 schema (organizations, users, pdf_files, form_templates, form_template_versions) is generated but **not yet applied** anywhere.
+- Migration `0000_nifty_piledriver` (organizations, users, pdf_files, form_templates, form_template_versions) **is applied to dev** (recorded in `schema_migrations`). Not applied to production yet.
 
 ## 4. What exists (phase 1)
 
