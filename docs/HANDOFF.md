@@ -1,6 +1,6 @@
 # HANDOFF — state of the project and how to work in it
 
-_Last updated: 2026-10-13 (end of phase 1, by Claude Opus)._
+_Last updated: 2026-10-13 (end of phase 2, by Claude Sonnet)._
 
 ## 1. Where things are
 
@@ -56,6 +56,21 @@ The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubuserco
   - `conditions.ts`, `validate.ts` (Hebrew messages, role-scoped, drops hidden values), `format.ts` (display strings), `pdf-mapping.ts` (stamp boxes on uploaded PDFs, `stampPdf()`).
 - Tests: `tests/*.test.ts` (bidi cases, Israeli validators, form engine, PDF stamping). All green.
 
-## 5. Next step
+## 5. Phase 2 (done, merged)
 
-Phase 2 in `docs/build-plan.md`: form builder + renderer + PDF field placement.
+- **Login (temporary):** `/login` → HMAC cookie (`src/lib/auth/session.ts`), guard in `src/proxy.ts` (Next 16 name for middleware) for `/admin`, `/preview`, `/api/admin`. Vercel env `ADMIN_PASSWORD` + `SESSION_SECRET` set for production+preview (user will change the password).
+- **UI kit:** `src/components/ui/*` — hand-written, no Radix (native `<dialog>`, `<select>`, checkbox/radio). No new UI deps.
+- **Renderer:** `src/components/forms/FormRenderer.tsx` + `fields/*` (all 29 types, wizard, conditions, role read-only, repeating table as cards, signature_pad dialog, file upload via `onUpload` prop). Pure helpers in `src/lib/forms/wizard.ts`. Static banks list in `lookups.ts` (phase 3 replaces with tables).
+- **Builder:** `/admin/forms` (list/create/duplicate/archive/import) and `/admin/forms/[id]` (`src/components/builder/*`: palette, canvas with drag & drop, field settings, visual condition editor, live preview, JSON import/export, undo/redo, autosave, publish). Pure operations in `src/lib/forms/builder.ts`; condition UI model in `condition-ui.ts`. Persistence: `src/server/forms-store.ts` (published versions immutable; editing creates version N+1 as draft).
+- **PDF:** upload route `/api/admin/pdf` (≤4MB, sha256 dedupe), file serving `/api/admin/files/[id]`, placement UI `src/components/pdf/*` with `pdfjs-dist`, items logic `src/lib/forms/pdf-items.ts`, coordinates `src/lib/pdf/coords.ts`, server preview `/api/admin/pdf-preview` (stampPdf with sample answers).
+- **File storage:** interim `stored_files` table (base64) behind `src/server/storage.ts`. Vercel Blob store `gybs-forms-files` (`store_nIynlk5Qa0UuVZNQ`) exists but is **not connected** to the project (no token). To switch: connect it in Vercel → Storage, `pnpm add @vercel/blob` is already in package.json (2.8.1), reimplement `putFile/getFile`.
+- **Tests:** vitest (session, wizard, builder, condition-ui, coords, pdf-items + phase 1). Playwright e2e in `tests/e2e` (mobile fill of sample form; PDF placement demo at `/preview/pdf-placement`). CI job `e2e` builds the app with test-only env.
+- **CI tips:** lint findings are printed as annotations by `scripts/eslint-annotations.mjs`. `gh pr create` and merging need REST (`gh api repos/$R/pulls ...`); GraphQL is blocked.
+- **Migrations:** `0000` and `0001` applied to Neon **dev** only. **Production has no tables yet** — needs the user's approval, then apply 0000 and 0001 in order and record in `schema_migrations`.
+
+### Not verified end-to-end yet (needs a DB-backed run)
+Save draft / publish / version 2 / PDF upload / PDF preview were written and typechecked but not exercised against a real database (CI has no DB secret). First thing to do after the user approves: open the Vercel preview of a branch (uses Neon dev), create a form, publish, edit, upload a real PDF.
+
+## 6. Next step
+
+Phase 3 in `docs/build-plan.md` (core data + dashboard). Before it: a DB-backed smoke test of phase 2 (above), and the user's visual check of the builder on a real device.
