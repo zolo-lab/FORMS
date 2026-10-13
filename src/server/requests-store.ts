@@ -5,7 +5,7 @@
  * on send the requester step(s) complete immediately with them.
  */
 import { kickDelivery } from "./notifications";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
@@ -302,6 +302,14 @@ export async function getRequest(requestId: string) {
   return { request, steps, documents: documents.map((d) => ({ ...d, title: titles.get(d.id) ?? "מסמך" })), events: evs };
 }
 
+/** Another action on the same step got there first. */
+export class StepConflictError extends Error {
+  constructor() {
+    super("step was already handled");
+    this.name = "StepConflictError";
+  }
+}
+
 export type StepAction =
   | { type: "open" }
   | { type: "submit"; answers: Answers }
@@ -324,13 +332,6 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
       if (!row.firstViewedAt) patch[stepId] = { firstViewedAt: new Date() };
       break;
     case "submit": {
-      await db
-        .insert(submissions)
-        .values({ requestId: row.requestId, stepId, status: "submitted", answers: action.answers, submittedAt: new Date() })
-        .onConflictDoUpdate({
-          target: submissions.stepId,
-          set: { status: "submitted", answers: action.answers, submittedAt: new Date(), savedAt: new Date() },
-        });
       answers = { ...answers, ...action.answers };
       result = completeStep(steps, stepId, answers);
       break;
@@ -349,6 +350,22 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
   if (action.type === "delegate") {
     const fresh = result.steps.find((s) => s.delegatedFromStepId === stepId)!;
     result = { ...result, events: [...result.events, { type: "step_activated", stepId: fresh.id, payload: { order: fresh.order, role: fresh.role } }] };
+  }
+  // Compare-and-set the acting step's status: of two concurrent actions on the same step only one wins,
+  // so a double click or a second tab can't activate the next step twice or overwrite the first answers.
+  const target = result.steps.find((s) => s.id === stepId)?.status;
+  if (target && target !== row.status) {
+    const won = await db.update(signingSteps).set({ status: target }).where(and(eq(signingSteps.id, stepId), eq(signingSteps.status, row.status))).returning({ id: signingSteps.id });
+    if (won.length === 0) throw new StepConflictError();
+  }
+  if (action.type === "submit") {
+    await db
+      .insert(submissions)
+      .values({ requestId: row.requestId, stepId, status: "submitted", answers: action.answers, submittedAt: new Date() })
+      .onConflictDoUpdate({
+        target: submissions.stepId,
+        set: { status: "submitted", answers: action.answers, submittedAt: new Date(), savedAt: new Date() },
+      });
   }
   const out = await persist(row.requestId, before, result, actor, patch);
   if (out.status === "completed") {

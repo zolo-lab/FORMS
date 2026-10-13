@@ -8,10 +8,34 @@ type StampLike = { part?: string; whenValue?: string; [k: string]: unknown };
 
 const NUMERIC = new Set(["number", "currency", "percent"]);
 
-/** Stamps that can be edited in place: top-level fields (no table cells) of this role's form. */
+/**
+ * Stamps that get an input on the page: top-level fields (no table cells) of this role's form.
+ * `comb` (one box per character) and `initials` (the signer types the full name, the PDF shows initials)
+ * are typed like text. date_signed / image / stamp_image have nothing to fill in.
+ */
+export const EDITABLE_KINDS: ReadonlySet<PdfStamp["kind"]> = new Set(["text", "comb", "initials", "check", "signature"]);
+
 export function simpleStamps(mapping: PdfMapping, def: FormDefinition): PdfStamp[] {
   const ids = new Set(allFields(def).map((f) => f.id));
-  return mapping.stamps.filter((s) => (s.kind === "text" || s.kind === "check" || s.kind === "signature") && ids.has(s.fieldId));
+  return mapping.stamps.filter((s) => EDITABLE_KINDS.has(s.kind) && ids.has(s.fieldId));
+}
+
+/** HTML input attributes that match the field type, so phones show a number pad and dates a picker. */
+export function inputAttrs(field: FormField): { type: string; inputMode?: "numeric" | "decimal" | "tel" | "email"; dir?: "ltr" } {
+  switch (field.type) {
+    case "date": return { type: "date", dir: "ltr" };
+    case "time": return { type: "time", dir: "ltr" };
+    case "id_number": return { type: "text", inputMode: "numeric", dir: "ltr" };
+    case "phone": return { type: "tel", inputMode: "tel", dir: "ltr" };
+    case "email": return { type: "email", inputMode: "email", dir: "ltr" };
+    case "number": case "currency": case "percent": return { type: "text", inputMode: "decimal", dir: "ltr" };
+    default: return { type: "text" };
+  }
+}
+
+/** Fields the signer can't type into: computed by a formula or read-only. */
+export function isComputedOrLocked(field: FormField): boolean {
+  return !!field.formula || !!field.readOnly;
 }
 
 export function readText(_field: FormField, value: unknown, stamp: StampLike): string {
@@ -54,6 +78,6 @@ export function writeCheck(field: FormField, current: unknown, stamp: StampLike,
 export function coversAll(mapping: PdfMapping, def: FormDefinition): boolean {
   const placed = new Set(simpleStamps(mapping, def).map((s) => s.fieldId));
   return allFields(def)
-    .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden")
+    .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden" && !isComputedOrLocked(f))
     .every((f) => placed.has(f.id));
 }

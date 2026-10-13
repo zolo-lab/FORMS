@@ -211,4 +211,34 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     expect(after.request.completedAt?.getTime()).toBe(done.request.completedAt?.getTime());
     expect(after.events.length).toBe(done.events.length);
   });
+
+  it("two concurrent submits of the same step: one wins, the next step is activated once", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({
+        name: `test-race-${Date.now()}`,
+        workflow: { steps: [{ order: 1, role: "employee", action: "fill" }, { order: 2, role: "payroll", action: "approve", assignee: { name: "שכר", email: "p@example.test" } }] },
+      })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: "e@example.test" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const step = (await store.getRequest(id))!.steps.find((s) => s.role === "employee")!;
+    const results = await Promise.allSettled([
+      store.applyStepAction(step.id, { type: "submit", answers: { a: 1 } }),
+      store.applyStepAction(step.id, { type: "submit", answers: { a: 2 } }),
+      store.applyStepAction(step.id, { type: "submit", answers: { a: 3 } }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected").every((r) => (r as PromiseRejectedResult).reason instanceof store.StepConflictError)).toBe(true);
+    const full = (await store.getRequest(id))!;
+    expect(full.events.filter((e) => e.type === "step_activated")).toHaveLength(2); // employee (on send) + payroll
+    const invites = await db.select().from(schema.notifications).where(eq(schema.notifications.requestId, id));
+    expect(invites.filter((n) => n.templateKey === "step_invite" && n.to === "p@example.test")).toHaveLength(1);
+  });
 });
