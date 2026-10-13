@@ -6,6 +6,7 @@
  */
 import { afterResponse } from "./after";
 import { kickDelivery } from "./notifications";
+import { nearestDue } from "@/lib/requests/list";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
@@ -155,6 +156,13 @@ async function persist(
   if (!req) throw new Error("request not found");
   const known = new Map(before.map((r) => [r.id, r]));
   const now = new Date();
+  const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  /** When a step that just became active is due, from the route's `dueHours`. */
+  const dueFor = (s: { order: number; role: string }): Date | null => {
+    const h = pkg?.workflow.steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours;
+    return h ? new Date(now.getTime() + h * 3_600_000) : null;
+  };
+  const dueByStep = new Map<string, Date | null>();
   const writes: Promise<unknown>[] = [];
 
   const activatedIds = new Set(result.events.filter((e) => e.type === "step_activated").map((e) => e.stepId!));
@@ -163,6 +171,7 @@ async function persist(
   for (const s of result.steps) {
     const prev = known.get(s.id);
     const patch = stepPatch[s.id] ?? {};
+    if (activatedIds.has(s.id)) dueByStep.set(s.id, dueFor(s));
     const common = {
       status: s.status,
       assigneeName: s.assigneeName ?? null,
@@ -171,7 +180,7 @@ async function persist(
       declineReason: s.declineReason ?? null,
       returnReason: s.returnReason ?? null,
       returnedToStepId: s.returnedToStepId ?? null,
-      ...(activatedIds.has(s.id) ? { activatedAt: now } : {}),
+      ...(activatedIds.has(s.id) ? { activatedAt: now, dueAt: dueByStep.get(s.id) ?? null } : {}),
       ...(s.status === "completed" && prev?.status !== "completed" ? { completedAt: now } : {}),
       ...patch,
     };
@@ -256,6 +265,7 @@ async function persist(
     .set({
       status,
       currentOrder: currentOrder(result.steps),
+      dueAt: nearestDue(result.steps.filter((s) => s.status === "active" || s.status === "in_progress").map((s) => (dueByStep.has(s.id) ? (dueByStep.get(s.id) ?? null) : (known.get(s.id)?.dueAt ?? null)))),
       ...(status === "completed" ? { completedAt: now } : {}),
       ...(status === "cancelled" ? { cancelledAt: now } : {}),
     })
