@@ -26,6 +26,10 @@ export const DEFAULT_SIZE: Record<PdfStamp["kind"], { width: number; height: num
   check: { width: 12, height: 12 },
   signature: { width: 120, height: 40 },
   image: { width: 80, height: 40 },
+  comb: { width: 180, height: 20 },
+  date_signed: { width: 90, height: 16 },
+  initials: { width: 50, height: 18 },
+  stamp_image: { width: 90, height: 90 },
 };
 
 const UNSUPPORTED = new Set(["radio_grid", "checkbox_grid", "file_upload", "hidden"]);

@@ -22,6 +22,8 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
   const steps = await db.select().from(signingSteps).where(eq(signingSteps.requestId, requestId)).orderBy(asc(signingSteps.order), asc(signingSteps.createdAt));
   const docs = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId)).orderBy(asc(packageDocuments.order));
   const answers = await collectedAnswers(requestId);
+  const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
+  const signedAt = times.length ? new Date(Math.max(...times)) : new Date();
 
   let generated = 0;
   let skipped = 0;
@@ -39,7 +41,7 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     const [pdf] = version.pdfFileId ? await db.select().from(pdfFiles).where(eq(pdfFiles.id, version.pdfFileId)) : [];
     const stored = pdf && version.pdfMapping ? await getFile(pdf.blobUrl.split("/").pop()!) : null;
     if (stored && version.pdfMapping) {
-      base = await stampPdf(stored.bytes, version.pdfMapping, version.definition, answers);
+      base = await stampPdf(stored.bytes, version.pdfMapping, version.definition, answers, { signedAt });
     } else {
       base = await (await summaryPdf(title, summaryItems(version.definition, answers))).save();
     }

@@ -6,9 +6,11 @@
  */
 import fs from "node:fs/promises";
 import { PDFDocument, rgb } from "pdf-lib";
+import { pdfMappingSchema, stampPdf } from "../src/lib/forms/pdf-mapping";
 import { appendCertificate } from "../src/lib/pdf/certificate";
 import { drawHebrew, embedHebrewFont } from "../src/lib/pdf/hebrew";
 import { HEBREW_CASES } from "../tests/hebrew-cases";
+import { sampleForm, validAnswers } from "../tests/fixtures/sample-form";
 
 async function main() {
   const doc = await PDFDocument.create();
@@ -59,6 +61,33 @@ async function main() {
   });
   await fs.writeFile("artifacts/certificate-sample.pdf", await cert.save());
   console.log("wrote artifacts/certificate-sample.pdf");
+
+  // Stamp kinds on a blank 2-page template, rendered to PNG by CI for review.
+  const tpl = await PDFDocument.create();
+  tpl.addPage([595, 842]);
+  tpl.addPage([595, 842]);
+  const mapping = pdfMappingSchema.parse({
+    schemaVersion: 1,
+    pages: [{ width: 595, height: 842 }, { width: 595, height: 842 }],
+    stamps: [
+      { id: "id", fieldId: "idNumber", kind: "comb", page: 0, x: 300, y: 760, width: 225, height: 22, comb: { cells: 9 } },
+      { id: "nm", fieldId: "firstName", kind: "text", page: 0, x: 300, y: 720, width: 225, height: 22, bold: true, color: "#1a3c8c" },
+      { id: "cb", fieldId: "firstName", kind: "comb", page: 0, x: 300, y: 680, width: 225, height: 22, comb: { cells: 9 } },
+      { id: "dt", fieldId: "firstName", kind: "date_signed", page: 0, x: 60, y: 720, width: 100, height: 22 },
+      { id: "in", fieldId: "firstName", kind: "initials", page: 0, repeatOnPages: [1], x: 500, y: 30, width: 60, height: 22, valign: "bottom" },
+    ],
+  });
+  for (const st of mapping.stamps) {
+    if (st.kind === "comb") {
+      for (let i = 0; i < (st.comb?.cells ?? 0); i++) {
+        const w = st.width / (st.comb?.cells ?? 1);
+        tpl.getPage(0).drawRectangle({ x: st.x + i * w, y: st.y, width: w, height: st.height, borderWidth: 0.5, borderColor: rgb(0.5, 0.5, 0.5) });
+      }
+    }
+  }
+  const stamped = await stampPdf(await tpl.save(), mapping, sampleForm, validAnswers, { signedAt: new Date("2026-10-13T09:00:00Z") });
+  await fs.writeFile("artifacts/stamps-sample.pdf", stamped);
+  console.log("wrote artifacts/stamps-sample.pdf");
 }
 
 main().catch((e) => {

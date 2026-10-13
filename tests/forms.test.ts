@@ -151,4 +151,28 @@ describe("PDF stamping", () => {
     expect(out.byteLength).toBeGreaterThan(templateBytes.byteLength);
     expect((await PDFDocument.load(out)).getPageCount()).toBe(1);
   });
+
+  it("stamps comb, date, initials and repeats across pages", async () => {
+    const tpl = await PDFDocument.create();
+    for (let i = 0; i < 3; i++) tpl.addPage([595, 842]);
+    const templateBytes = await tpl.save();
+    const mapping = pdfMappingSchema.parse({
+      schemaVersion: 1,
+      pages: [0, 1, 2].map(() => ({ width: 595, height: 842 })),
+      stamps: [
+        { id: "c1", fieldId: "firstName", kind: "comb", page: 0, x: 300, y: 780, width: 180, height: 18, comb: { cells: 9 } },
+        { id: "d1", fieldId: "firstName", kind: "date_signed", page: 0, x: 50, y: 50, width: 90, height: 16, dateFormat: "dd.mm.yyyy", bold: true, color: "#1a3c8c" },
+        { id: "i1", fieldId: "firstName", kind: "initials", page: 0, repeatOnPages: [1, 2], x: 500, y: 20, width: 40, height: 16, valign: "bottom" },
+      ],
+    });
+    const plain = await stampPdf(templateBytes, { ...mapping, stamps: [] }, sampleForm, validAnswers);
+    const out = await stampPdf(templateBytes, mapping, sampleForm, validAnswers, { signedAt: new Date("2026-10-13T10:00:00Z") });
+    expect(out.byteLength).toBeGreaterThan(plain.byteLength);
+    expect((await PDFDocument.load(out)).getPageCount()).toBe(3);
+  });
+
+  it("rejects an invalid stamp colour", () => {
+    const bad = { schemaVersion: 1, pages: [{ width: 1, height: 1 }], stamps: [{ id: "x", fieldId: "a", kind: "text", page: 0, x: 0, y: 0, width: 1, height: 1, color: "red" }] };
+    expect(pdfMappingSchema.safeParse(bad).success).toBe(false);
+  });
 });
