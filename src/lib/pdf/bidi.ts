@@ -64,11 +64,13 @@ export function toVisual(text: string, dir: BaseDirection = "auto"): string {
   const levels = bidi.getEmbeddingLevels(text, base);
   // UTF-16 code units: bidi-js indices are code-unit based.
   const chars = text.split("");
-  // Mirror first (indices refer to original positions).
-  const mirrored = bidi.getMirroredCharactersMap(text, levels);
-  mirrored.forEach((replacement, index) => {
-    chars[index] = replacement;
-  });
+  // Mirror brackets on RTL (odd) levels first — indices refer to original positions.
+  for (let i = 0; i < chars.length; i++) {
+    if ((levels.levels[i] ?? 0) & 1) {
+      const m = bidi.getMirroredCharacter(chars[i]!);
+      if (m) chars[i] = m;
+    }
+  }
   const flips = bidi.getReorderSegments(text, levels);
   for (const [start, end] of flips) {
     const slice = chars.slice(start, end + 1).reverse();

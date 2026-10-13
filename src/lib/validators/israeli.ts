@@ -1,9 +1,9 @@
 /** Israeli-specific validators (pure functions, unit-tested). */
 
-/** Israeli ID (ת"ז) check digit (Luhn variant). Accepts up to 9 digits; pads with leading zeros. */
+/** Israeli ID (ת"ז) check digit (Luhn variant). Accepts 1–9 digits; pads with leading zeros. */
 export function isValidIsraeliId(raw: string): boolean {
   const id = raw.trim();
-  if (!/^\d{5,9}$/.test(id)) return false;
+  if (!/^\d{1,9}$/.test(id)) return false;
   const padded = id.padStart(9, "0");
   if (padded === "000000000") return false;
   let sum = 0;

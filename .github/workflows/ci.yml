@@ -23,7 +23,7 @@ jobs:
         if: always()
         run: |
           pnpm pdf:sample
-          sudo apt-get install -y -qq poppler-utils >/dev/null
+          sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq poppler-utils >/dev/null
           pdftoppm -png -r 110 artifacts/hebrew-sample.pdf artifacts/hebrew-sample
       - uses: actions/upload-artifact@v4
         if: always()
@@ -31,3 +31,31 @@ jobs:
           name: hebrew-sample
           path: artifacts/
           if-no-files-found: ignore
+  # Publishes rendered PDF previews to the `ci-previews` branch so they can be
+  # reviewed from environments that cannot download Actions artifacts.
+  previews:
+    needs: check
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i -g pnpm@10
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm pdf:sample
+      - run: sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq poppler-utils >/dev/null
+      - run: pdftoppm -png -r 110 artifacts/hebrew-sample.pdf artifacts/hebrew-sample
+      - name: Push previews branch
+        run: |
+          mkdir /tmp/previews && cp artifacts/* /tmp/previews/
+          cd /tmp/previews
+          git init -q -b ci-previews
+          git config user.name "ci-previews"
+          git config user.email "ci-previews@users.noreply.github.com"
+          echo "Generated from ${GITHUB_SHA}" > README.md
+          git add -A && git commit -qm "previews for ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-previews
