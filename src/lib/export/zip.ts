@@ -96,3 +96,56 @@ export function zipList(zip: Uint8Array): { name: string; size: number; crc: num
   }
   return out;
 }
+
+/**
+ * Streaming variant of `zipStore`: entries are produced one at a time, so only one file is in memory at once.
+ * Output is byte-compatible with `zipStore` (stored, UTF-8 names).
+ */
+export async function* zipStream(entries: AsyncIterable<ZipEntry> | Iterable<ZipEntry>): AsyncGenerator<Uint8Array> {
+  const enc = new TextEncoder();
+  const central: Uint8Array[] = [];
+  let offset = 0;
+  let count = 0;
+  for await (const e of entries) {
+    const name = enc.encode(e.name);
+    const { time, date } = dosTime(e.date ?? new Date());
+    const crc = crc32(e.data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(10, time, true);
+    local.setUint16(12, date, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, e.data.length, true);
+    local.setUint32(22, e.data.length, true);
+    local.setUint16(26, name.length, true);
+    yield new Uint8Array(local.buffer);
+    yield name;
+    yield e.data;
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(8, 0x0800, true);
+    cd.setUint16(12, time, true);
+    cd.setUint16(14, date, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, e.data.length, true);
+    cd.setUint32(24, e.data.length, true);
+    cd.setUint16(28, name.length, true);
+    cd.setUint32(42, offset, true);
+    central.push(new Uint8Array(cd.buffer), name);
+    offset += 30 + name.length + e.data.length;
+    count++;
+  }
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  for (const c of central) yield c;
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, count, true);
+  end.setUint16(10, count, true);
+  end.setUint32(12, cdSize, true);
+  end.setUint32(16, offset, true);
+  yield new Uint8Array(end.buffer);
+}

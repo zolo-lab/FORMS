@@ -29,12 +29,17 @@ const SKIP = new Set(["signature", "repeating_table", "heading", "info_text", "i
 
 export function buildExportTable(requests: ExportRequest[]): string[][] {
   const columns: string[] = [];
+  /** Header text per column: the explicit export key when defined, else the Hebrew label. */
+  const titles = new Map<string, string>();
   for (const r of requests) {
     for (const def of r.definitions) {
       for (const f of allFields(def)) {
         if (SKIP.has(f.type)) continue;
         const key = columnOf(f);
-        if (!columns.includes(key)) columns.push(key);
+        if (!columns.includes(key)) {
+          columns.push(key);
+          titles.set(key, f.exportKey?.trim() || f.label || key);
+        }
       }
     }
   }
@@ -60,5 +65,5 @@ export function buildExportTable(requests: ExportRequest[]): string[][] {
       ...columns.map((c) => byKey.get(c) ?? ""),
     ];
   });
-  return [[...FIXED_HEADERS, ...columns], ...rows];
+  return [[...FIXED_HEADERS, ...columns.map((c) => titles.get(c) ?? c)], ...rows];
 }
