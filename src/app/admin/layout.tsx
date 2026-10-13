@@ -13,6 +13,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/inbox" className="hover:text-foreground">ממתינים</Link>
           <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>
           <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
+          <Link href="/admin/settings/api-keys" className="hover:text-foreground">API</Link>
         </nav>
         {authDisabled() ? (
           <span className="ms-auto rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
