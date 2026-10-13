@@ -73,4 +73,4 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 
 ## 6. Next step
 
-Phase 3 in `docs/build-plan.md` (core data + dashboard). Before it: the user's visual check of the builder on a real device and a first real PDF placement.
+**Phases 2.4–2.6 in `docs/spec-two-tools.md`** (PDF designer as a standalone tool with comb/date-signed/initials stamps, pdfOnly fields, AcroForm import; builder additions: formulas, skip-to-page, masks, grid). Then phase 3 in `docs/build-plan.md` (core data + dashboard). Before it: the user's visual check of the builder on a real device and a first real PDF placement.
