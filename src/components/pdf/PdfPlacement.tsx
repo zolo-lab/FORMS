@@ -122,13 +122,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     <div className="grid gap-4 lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
       <aside className="space-y-3 lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
-        <p className="text-xs text-muted-foreground">לחצו על "מיקום" או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
+        <p className="text-xs text-muted-foreground">לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
         {tables.map((t) => {
           const current = rowsFor(t);
           const max = Number(t.settings?.maxRows ?? 20);
           return (
             <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-              <span>שורות ב"{t.label}"</span>
+              <span>שורות ב&quot;{t.label}&quot;</span>
               <span className="flex items-center gap-1">
                 <Button variant="outline" size="sm" aria-label="פחות שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.max(1, current - 1) }))}><Minus className="size-3" /></Button>
                 <span className="w-5 text-center">{current}</span>

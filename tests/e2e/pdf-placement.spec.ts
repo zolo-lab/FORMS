@@ -13,7 +13,7 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
 
   // Click-to-place puts a stamp in the middle of the page (A4: 595.28 x 841.89 pt).
   await page.getByRole("button", { name: "מיקום שם פרטי טקסט" }).click();
-  let stamps = await mapping();
+  const stamps = await mapping();
   expect(stamps).toHaveLength(1);
   expect(stamps[0]!.fieldId).toBe("firstName");
   expect(stamps[0]!.x).toBeCloseTo((595.28 - 120) / 2, 0);
