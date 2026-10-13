@@ -101,3 +101,15 @@ export async function linksFor(requestId: string, known?: { stepId: string; toke
 export async function refreshLinksAction(requestId: string): Promise<ShareLink[]> {
   return linksFor(requestId);
 }
+
+/** Generates (or re-generates when missing) the final PDFs of a completed request. */
+export async function finalizeRequestAction(requestId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { finalizeRequest } = await import("@/server/finalize");
+    const r = await finalizeRequest(requestId);
+    revalidatePath(`/admin/requests/${requestId}`);
+    return { ok: true, message: r.generated ? `נוצרו ${r.generated} קבצים` : "כל הקבצים כבר קיימים" };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "היצירה נכשלה" };
+  }
+}

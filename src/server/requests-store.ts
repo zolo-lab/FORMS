@@ -290,7 +290,14 @@ export async function getRequest(requestId: string) {
     db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId)).orderBy(asc(packageDocuments.order)),
     db.select().from(events).where(eq(events.requestId, requestId)).orderBy(asc(events.createdAt)),
   ]);
-  return { request, steps, documents, events: evs };
+  // Titles for display: document → pinned version → template.
+  const titles = new Map<string, string>();
+  for (const d of documents) {
+    const [v] = await db.select().from(formTemplateVersions).where(eq(formTemplateVersions.id, d.templateVersionId));
+    const [t] = v ? await db.select().from(formTemplates).where(eq(formTemplates.id, v.templateId)) : [];
+    titles.set(d.id, t?.title ?? v?.definition.title ?? "מסמך");
+  }
+  return { request, steps, documents: documents.map((d) => ({ ...d, title: titles.get(d.id) ?? "מסמך" })), events: evs };
 }
 
 export type StepAction =
@@ -341,7 +348,17 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     const fresh = result.steps.find((s) => s.delegatedFromStepId === stepId)!;
     result = { ...result, events: [...result.events, { type: "step_activated", stepId: fresh.id, payload: { order: fresh.order, role: fresh.role } }] };
   }
-  return persist(row.requestId, before, result, actor, patch);
+  const out = await persist(row.requestId, before, result, actor, patch);
+  if (out.status === "completed") {
+    // Final PDFs are generated lazily too (admin page), so a failure here must not break the signer's submit.
+    try {
+      const { finalizeRequest } = await import("./finalize");
+      await finalizeRequest(row.requestId);
+    } catch (e) {
+      console.error("[finalize] failed", row.requestId, e);
+    }
+  }
+  return out;
 }
 
 export async function cancelRequest(requestId: string, reason: string, actor: { type: "user" | "api"; id?: string } = { type: "user" }) {

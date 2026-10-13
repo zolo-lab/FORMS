@@ -6,6 +6,7 @@
  */
 import fs from "node:fs/promises";
 import { PDFDocument, rgb } from "pdf-lib";
+import { appendCertificate } from "../src/lib/pdf/certificate";
 import { drawHebrew, embedHebrewFont } from "../src/lib/pdf/hebrew";
 import { HEBREW_CASES } from "../tests/hebrew-cases";
 
@@ -40,6 +41,24 @@ async function main() {
   await fs.mkdir("artifacts", { recursive: true });
   await fs.writeFile("artifacts/hebrew-sample.pdf", await doc.save());
   console.log("wrote artifacts/hebrew-sample.pdf");
+
+  // Reference page, rendered to PNG by CI for review.
+  const cert = await PDFDocument.create();
+  await appendCertificate(cert, {
+    requestId: "5b1c7d52-0d4e-4a52-9a43-3f6b9d6a7c11",
+    organization: "שיבת ציון",
+    subject: "דנה כהן-לוי",
+    documentTitle: "טופס 101 – כרטיס עובד",
+    documentSha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    generatedAt: new Date("2026-10-13T12:00:00Z"),
+    steps: [
+      { role: "employee", name: "דנה כהן-לוי", status: "completed", completedAt: new Date("2026-10-13T09:30:00Z"), ip: "203.0.113.5" },
+      { role: "approver", name: "יוסי מנהל", status: "completed", completedAt: new Date("2026-10-13T10:15:00Z"), ip: "198.51.100.7" },
+      { role: "payroll", name: "חשבות שכר", status: "completed", completedAt: new Date("2026-10-13T11:00:00Z"), ip: null },
+    ],
+  });
+  await fs.writeFile("artifacts/certificate-sample.pdf", await cert.save());
+  console.log("wrote artifacts/certificate-sample.pdf");
 }
 
 main().catch((e) => {

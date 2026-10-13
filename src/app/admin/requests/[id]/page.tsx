@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { Badge, Card } from "@/components/ui/card";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/workflow/labels";
@@ -12,7 +13,7 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const data = /^[0-9a-f-]{36}$/i.test(id) ? await getRequest(id) : null;
   if (!data) notFound();
-  const { request, steps, events } = data;
+  const { request, steps, events, documents } = data;
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
   const open = steps.some((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
@@ -42,6 +43,31 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
           ))}
         </Card>
       </section>
+
+      {request.status === "completed" && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">מסמכים חתומים</h2>
+          <Card className="divide-y">
+            {documents.length === 0 && <p className="p-4 text-sm text-muted-foreground">אין מסמכים בבקשה.</p>}
+            {documents.map((d) => (
+              <div key={d.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                <span className="font-medium">{d.title}</span>
+                {d.finalFileId ? (
+                  <>
+                    <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/documents/${d.id}`} target="_blank" rel="noopener noreferrer">
+                      פתיחת ה-PDF
+                    </a>
+                    <span className="ms-auto text-xs text-muted-foreground" dir="ltr" title="SHA-256">{d.finalSha256?.slice(0, 16)}…</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">עדיין לא נוצר</span>
+                )}
+              </div>
+            ))}
+          </Card>
+          {documents.some((d) => !d.finalFileId) && <FinalizeButton requestId={request.id} />}
+        </section>
+      )}
 
       {open && (
         <section className="space-y-2">
