@@ -29,7 +29,8 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
   await page.getByRole("button", { name: "שליחה" }).click();
 
   const done = page.getByTestId("request-done");
-  await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible();
+  // Sending creates tokens, outbox rows and events one by one on a remote DB: allow it time.
+  await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
   const link = done.getByLabel(/קישור ל/).first();
   await expect(link).toHaveValue(/\/s\/[A-Za-z0-9_-]{43}$/);
   await expect(done.getByRole("link", { name: "שתף בוואטסאפ" }).first()).toHaveAttribute("href", /^https:\/\/wa\.me\/972501234567\?text=/);

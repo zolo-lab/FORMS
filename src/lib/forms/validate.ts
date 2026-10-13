@@ -29,6 +29,10 @@ export interface ValidateOptions {
   today?: string;
 }
 
+/** A signature is a PNG data URL of reasonable size; anything else is rejected before it is stored. */
+const SIGNATURE_IMAGE = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/;
+const SIGNATURE_MAX_CHARS = 700_000;
+
 const MSG = {
   required: "שדה חובה",
   number: "יש להזין מספר",
@@ -173,7 +177,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       return value === true ? null : MSG.consent;
     case "signature": {
       const s = value as { image?: string } | null;
-      return s && typeof s.image === "string" && s.image.length > 0 ? null : MSG.signature;
+      return s && typeof s.image === "string" && SIGNATURE_IMAGE.test(s.image) && s.image.length <= SIGNATURE_MAX_CHARS ? null : MSG.signature;
     }
     case "file_upload": {
       if (!Array.isArray(value)) return MSG.required;

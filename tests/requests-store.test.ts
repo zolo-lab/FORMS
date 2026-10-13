@@ -241,4 +241,43 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     const invites = await db.select().from(schema.notifications).where(eq(schema.notifications.requestId, id));
     expect(invites.filter((n) => n.templateKey === "step_invite" && n.to === "p@example.test")).toHaveLength(1);
   });
+
+  it("a draft that was never sent can be cancelled", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-draftcancel-${Date.now()}`, workflow: { steps: [{ order: 1, role: "employee", action: "fill" }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.cancelRequest(id, "טיוטה נמחקה");
+    const r = (await store.getRequest(id))!;
+    expect(r.request.status).toBe("cancelled");
+    expect(r.request.cancelledAt).toBeTruthy();
+    expect(r.events.map((e) => e.type)).toContain("request_cancelled");
+  });
+
+  it("collectedAnswers ignores drafts except the owner's own", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-draft-${Date.now()}`, workflow: { steps: [{ order: 1, role: "requester", action: "fill" }, { order: 2, role: "employee", action: "fill_and_sign" }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: "e@example.test" }, requesterAnswers: { salary: 9000 } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const step = (await store.getRequest(id))!.steps.find((s) => s.role === "employee")!;
+    await db.insert(schema.submissions).values({ requestId: id, stepId: step.id, status: "draft", answers: { salary: 1, note: "טיוטה" } });
+    expect(await store.collectedAnswers(id)).toEqual(expect.objectContaining({ salary: 9000 }));
+    expect((await store.collectedAnswers(id)).note).toBeUndefined();
+    expect(await store.collectedAnswers(id, { draftStepId: step.id })).toEqual(expect.objectContaining({ salary: 1, note: "טיוטה" }));
+  });
 });
