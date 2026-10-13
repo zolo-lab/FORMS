@@ -1,18 +1,19 @@
 import { fieldStyleClass } from "@/lib/forms/field-style";
 import type { FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
+import { Markdown } from "../Markdown";
 
-export function LayoutBlock({ field }: { field: FormField }) {
+export function LayoutBlock({ field, pipe = (t) => t }: { field: FormField; pipe?: (text: string) => string }) {
   switch (field.type) {
     case "heading":
       return (
         <div className="pt-2">
-          <h3 className={cn("text-lg font-semibold", fieldStyleClass(field.style))}>{field.label}</h3>
-          {field.description && <p className="text-sm text-muted-foreground">{field.description}</p>}
+          <h3 className={cn("text-lg font-semibold", fieldStyleClass(field.style))}>{pipe(field.label)}</h3>
+          {field.description && <p className="text-sm text-muted-foreground">{pipe(field.description)}</p>}
         </div>
       );
     case "info_text":
-      return <p className={cn("whitespace-pre-line rounded-md bg-muted p-3 text-sm", fieldStyleClass(field.style))}>{field.label}</p>;
+      return <Markdown text={pipe(field.label)} className={cn("rounded-md bg-muted p-3 text-sm", fieldStyleClass(field.style))} />;
     case "image": {
       const src = String(field.settings?.src ?? "");
       // eslint-disable-next-line @next/next/no-img-element -- arbitrary admin-provided URL

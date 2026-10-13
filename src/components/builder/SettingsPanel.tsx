@@ -116,7 +116,12 @@ export function FieldSettings({
 
       <Row label={field.type === "info_text" ? "הטקסט" : "תווית"}>
         {field.type === "info_text" ? (
-          <Textarea rows={4} value={field.label} onChange={(e) => onPatch({ label: e.target.value })} />
+          <>
+            <Textarea rows={5} value={field.label} onChange={(e) => onPatch({ label: e.target.value })} />
+            <p className="mt-1 text-xs text-muted-foreground" dir="rtl">
+              עיצוב: <code dir="ltr">**מודגש**</code> · <code dir="ltr">*נטוי*</code> · <code dir="ltr">[טקסט](https://…)</code> · שורות שמתחילות ב-<code dir="ltr">- </code> הן רשימה. תשובה קודמת: <code dir="ltr">{"{{fieldId}}"}</code>
+            </p>
+          </>
         ) : (
           <Input value={field.label} onChange={(e) => onPatch({ label: e.target.value })} />
         )}
