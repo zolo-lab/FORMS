@@ -15,7 +15,7 @@ test("a malformed signing link is rejected the same way", async ({ page }) => {
 test.describe("with a real request", () => {
   test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
-  test("the employee link opens without logging in and names the employee", async ({ page, browser }) => {
+  test("the employee link opens without logging in and names the employee", async ({ page, browser, baseURL }) => {
     await login(page, "/admin/requests/new");
     await page.getByLabel("ערכת מסמכים").selectOption({ label: "קליטת עובד רגיל" });
     await page.getByRole("button", { name: "הבא" }).click();
@@ -31,8 +31,9 @@ test.describe("with a real request", () => {
     await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
     const url = await done.getByLabel(/קישור ל/).first().inputValue();
 
-    // A fresh browser context: no admin cookie, exactly what the employee has.
-    const ctx = await browser.newContext({ baseURL: new URL(url).origin });
+    // A fresh browser context: no admin cookie, exactly what the employee has. The link may carry the
+    // production origin, so only its path is used against the server under test.
+    const ctx = await browser.newContext({ baseURL: baseURL! });
     const guest = await ctx.newPage();
     await guest.goto(new URL(url).pathname);
     await guest.locator("h1, p").first().waitFor({ timeout: 20_000 });
