@@ -49,9 +49,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">בקשות</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <nav aria-label="תצוגה" className="flex overflow-hidden rounded-md border text-sm">
             <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`px-3 py-1.5 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
             <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`px-3 py-1.5 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
