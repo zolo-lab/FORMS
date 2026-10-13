@@ -35,7 +35,7 @@ export function ConditionEditor({
 
   return (
     <div className="space-y-2">
-      {set.rules.length === 0 && <p className="text-sm text-muted-foreground">ללא תנאי: {lead.includes("הצג") ? "מוצג תמיד" : "לא חובה"}.</p>}
+      {set.rules.length === 0 && <p className="text-sm text-muted-foreground">ללא תנאי: {lead.includes("הצג") ? "מוצג תמיד" : lead.includes("נעל") ? "השדה פתוח לעריכה" : "לא חובה"}.</p>}
       {set.rules.map((r, i) => {
         const target = byId.get(r.field);
         return (

@@ -260,3 +260,33 @@ describe("numeric answers are stored as numbers", () => {
     expect(res.cleaned).toEqual({ n: 21, c: 1250, t: "007" });
   });
 });
+
+describe("renaming a field id updates every reference", () => {
+  it("updates formulas, piping, disabledIf and page jumps; publish checks catch dangling refs", async () => {
+    const { renameFieldId, publishIssues } = await import("@/lib/forms/builder");
+    const def = parseFormDefinition({
+      schemaVersion: 1,
+      title: "t",
+      pages: [
+        { id: "p1", title: "עמוד", fields: [
+          { id: "price", type: "number", label: "מחיר" },
+          { id: "double", type: "number", label: "כפול", formula: "{price} * 2" },
+          { id: "hello", type: "info_text", label: "מחיר: {{price}}", disabledIf: { field: "price", op: "eq", value: 1 } },
+        ], nextPage: [{ if: { field: "price", op: "gt", value: 5 }, goTo: "p2" }] },
+        { id: "p2", title: "שני", fields: [{ id: "x", type: "short_text", label: "x" }] },
+      ],
+    }).data!;
+    const { def: out, error } = renameFieldId(def, "price", "amount");
+    expect(error).toBeUndefined();
+    const f = out.pages[0]!.fields;
+    expect(f[1]!.formula).toBe("{amount} * 2");
+    expect(f[2]!.label).toBe("מחיר: {{amount}}");
+    expect(f[2]!.disabledIf).toEqual({ field: "amount", op: "eq", value: 1 });
+    expect(out.pages[0]!.nextPage![0]!.if).toEqual({ field: "amount", op: "gt", value: 5 });
+    expect(publishIssues(out)).toEqual([]);
+
+    const broken = structuredClone(out);
+    broken.pages[0]!.fields[1]!.formula = "{gone} * 2";
+    expect(publishIssues(broken).some((i) => i.message.includes("gone"))).toBe(true);
+  });
+});
