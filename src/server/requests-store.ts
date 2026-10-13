@@ -400,20 +400,3 @@ export async function issueLink(stepId: string): Promise<{ url: string } | null>
   await db.insert(stepTokens).values({ stepId, tokenHash: hash, expiresAt: req.expiresAt });
   return { url: `${appUrl()}/s/${token}` };
 }
-
-export async function listRequests(limit = 50) {
-  return db
-    .select({
-      id: requests.id,
-      subjectName: requests.subjectName,
-      status: requests.status,
-      createdAt: requests.createdAt,
-      organizationName: organizations.name,
-      packageName: packageTemplates.name,
-    })
-    .from(requests)
-    .innerJoin(organizations, eq(requests.organizationId, organizations.id))
-    .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
-    .orderBy(desc(requests.createdAt))
-    .limit(limit);
-}
