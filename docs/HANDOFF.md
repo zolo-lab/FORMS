@@ -1,6 +1,6 @@
 # HANDOFF — state of the project and how to work in it
 
-_Last updated: 2026-10-13 (end of phase 3, by Claude Sonnet)._
+_Last updated: 2026-10-13 (end of phase 4, by Claude Sonnet)._
 
 ## 1. Where things are
 
@@ -82,6 +82,21 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 - **Orgs/branding:** `/admin/settings/organizations` (name, color, logo ≤1MB, sender, reminder policy), `OrgTheme` in `src/components/branding.tsx`, public logo `/api/org-logo/[slug]`, `/preview/sample?org=<slug>`.
 - **Not verified:** `tests/requests-store.test.ts` needs `DATABASE_URL` (dev) as a GitHub secret; without it, it skips in CI. Not run yet. The orgs page and branding were not seen in a browser (production lacks the migration; previews are behind Vercel SSO).
 
-## 7. Next step
+## 7. Phase 4 (done, merged) — signing screen `/s/[token]`
 
-**Phase 4 in `docs/build-plan-v3.md`** (signing screen `/s/[token]`). Before it (optional): add the `DATABASE_URL` (dev) GitHub secret so the DB test runs; decide whether ארצנו needs its own organization row.
+- **Page + API** (public, not behind the admin proxy): `src/app/s/[token]/*`, `src/app/api/s/[token]/{draft,submit,action,otp/send,otp/verify,pdf/[fileId]}`. Service: `src/server/signing.ts` (`loadByToken`, `saveDraft`, `submit`, `sendOtp`, `verifyOtp`, `performAction`, `getPdfForToken`). Pure helpers: `src/lib/workflow/signing.ts` (`tokenState`, `shouldLogSave`), `src/lib/forms/role-view.ts`, `src/lib/auth/otp.ts`, `src/lib/pdf/on-document.ts`, `src/lib/pdf/typed-signature.ts`.
+- The signer sees only fields of their role as a form; other roles' answers appear in a read-only "פרטים שמולאו" card. Answers outside the signer's fields are ignored server-side.
+- Autosave (1.5 s debounce, `step_saved` event at most every 5 min), submit validates with `validateAnswers(role)` → 422 `{errors}`; signature PNGs are stored as files + `signatures` rows (`drawn`/`typed`).
+- Typed signature / initials: canvas PNG with Gveret Levin (OFL, `src/app/fonts`).
+- OTP (per step `otpRequired`): code mailed through the outbox, hash only, 10 min, 5 attempts, 60 s resend cooldown, httpOnly cookie per step (HMAC with `SESSION_SECRET`). Enforced on draft/submit/action.
+- Approver actions: decline (reason), return to an earlier completed step (reason), delegate (new person/new link).
+- On-document mode (`src/components/pdf/OnDocumentFill.tsx`): offered only for a single-PDF package where **every** answerable field of the role has a simple stamp (no table cells); desktop default, toggle on mobile; "נותרו N" counter + "הבא".
+- Completion card: thank-you text (`settings.thankYou` string), who the request waits for, "completed" notice.
+- **Verified on the dev DB** (preview deployment + test rows, since deleted): the page renders the role view, the summary card, org branding and moves the step `active → in_progress` with a `step_opened` event.
+- **Not verified:** submit/draft/OTP/actions end to end (no Playwright run against a DB: CI has no `DATABASE_URL`), on-document mode in a browser, the typed-signature PNG in a browser, the full chain "request → employee (mobile) → approver (desktop) → payroll → completed".
+- **Deviations from the plan:** invalid/expired links render a Hebrew page with HTTP 200 (API returns 410); the PDF copy download on the completion page waits for the final PDF (phase 5); the `thankYou` rules/redirect object arrives with phase 8.
+- **Secrets:** Claude could not create the GitHub Actions secret `DATABASE_URL` (blocked by the auto-mode classifier). Until Israel adds it (dev branch connection string), `tests/requests-store.test.ts` skips in CI.
+
+## 8. Next step
+
+**Phase 5 in `docs/build-plan-v3.md`** (request wizard, notifications via Resend/SMS, final PDF + certificate, Priority export). Needs from Israel: SMS provider choice (before 5.3), Priority export sample (5.6), Vercel Blob connection (before phase 5 PDFs).
