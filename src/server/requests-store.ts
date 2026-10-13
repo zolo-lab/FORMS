@@ -4,6 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
+import { afterResponse } from "./after";
 import { kickDelivery } from "./notifications";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -383,6 +384,18 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     } catch (e) {
       console.error("[finalize] failed", row.requestId, e);
     }
+  }
+  // Webhooks go out after the final PDFs exist (request.completed links to them) and after the response.
+  const exposed = result.events.filter((e) => e.type === "request_completed" || e.type === "step_completed" || e.type === "request_declined");
+  if (exposed.length) {
+    await afterResponse(async () => {
+      try {
+        const { emitWebhooks } = await import("./webhooks");
+        await emitWebhooks(row.requestId, exposed);
+      } catch (e) {
+        console.error("[webhooks] failed", row.requestId, e);
+      }
+    });
   }
   return out;
 }
