@@ -139,3 +139,10 @@ export function boardColumns<T extends BoardRow>(rows: T[]): BoardColumn<T>[] {
   if (stopped.length) cols.push({ key: "stopped", title: "נעצרו", rows: stopped });
   return cols;
 }
+
+/** The earliest of the open steps' due dates (null when none has one). */
+export function nearestDue(dates: (Date | null)[]): Date | null {
+  const set = dates.filter((d): d is Date => !!d);
+  return set.length ? new Date(Math.min(...set.map((d) => d.getTime()))) : null;
+}
+

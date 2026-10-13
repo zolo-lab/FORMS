@@ -241,4 +241,30 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     const invites = await db.select().from(schema.notifications).where(eq(schema.notifications.requestId, id));
     expect(invites.filter((n) => n.templateKey === "step_invite" && n.to === "p@example.test")).toHaveLength(1);
   });
+
+  it("dueHours sets the step and request due date, and a past due date makes the request overdue", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const dash = await import("@/server/dashboard-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-due-${Date.now()}`, workflow: { steps: [{ order: 1, role: "employee", action: "fill", dueHours: 24 }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: "e@example.test" }, expiresInDays: 30 });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const r = (await store.getRequest(id))!;
+    const diffH = (r.request.dueAt!.getTime() - Date.now()) / 3_600_000;
+    expect(diffH).toBeGreaterThan(23.9);
+    expect(diffH).toBeLessThan(24.1);
+    expect(r.steps[0]!.dueAt?.getTime()).toBe(r.request.dueAt!.getTime());
+
+    expect((await dash.queryRequests({ overdue: true, page: 1, pkg: pkg!.id }, new Date(), 50)).rows.some((x) => x.id === id)).toBe(false);
+    const later = new Date(Date.now() + 25 * 3_600_000);
+    const hit = (await dash.queryRequests({ overdue: true, page: 1, pkg: pkg!.id }, later, 50)).rows.find((x) => x.id === id);
+    expect(hit?.overdue).toBe(true);
+  });
 });

@@ -9,6 +9,11 @@ const IN_PROGRESS = ["in_progress", "returned"] as const;
 const OPEN_STEP = ["active", "in_progress"] as const;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
+/** Overdue: the open step's due date passed (set from the route's `dueHours`) or the request's own deadline did. */
+export function overdueCondition(now: Date): SQL {
+  return and(inArray(requests.status, [...IN_PROGRESS]), or(lt(requests.dueAt, now), lt(requests.expiresAt, now)))!;
+}
+
 export function conditions(f: RequestFilters, now: Date): SQL[] {
   const c: SQL[] = [];
   if (f.org) c.push(eq(requests.organizationId, f.org));
@@ -17,7 +22,7 @@ export function conditions(f: RequestFilters, now: Date): SQL[] {
   // Dates are Israel calendar days.
   if (f.from) c.push(sql`${requests.createdAt} >= (${f.from}::date)::timestamp AT TIME ZONE 'Asia/Jerusalem'`);
   if (f.to) c.push(sql`${requests.createdAt} < ((${f.to}::date + 1)::timestamp AT TIME ZONE 'Asia/Jerusalem')`);
-  if (f.overdue) c.push(and(inArray(requests.status, [...IN_PROGRESS]), lt(requests.expiresAt, now))!);
+  if (f.overdue) c.push(overdueCondition(now));
   if (f.role) {
     c.push(
       exists(
@@ -41,6 +46,7 @@ export interface RequestRow {
   status: (typeof requests.$inferSelect)["status"];
   createdAt: Date;
   expiresAt: Date | null;
+  dueAt: Date | null;
   organizationName: string;
   packageName: string;
   waitingFor: { role: string; name: string }[];
@@ -61,6 +67,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       status: requests.status,
       createdAt: requests.createdAt,
       expiresAt: requests.expiresAt,
+      dueAt: requests.dueAt,
       organizationName: organizations.name,
       packageName: packageTemplates.name,
     })
@@ -90,7 +97,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       waitingFor: open.map((s) => ({ role: s.role, name: s.assigneeName ?? "" })),
       daysInStep: since ? daysSince(since, now) : null,
       progress: progress(mine),
-      overdue: (IN_PROGRESS as readonly string[]).includes(r.status) && !!r.expiresAt && r.expiresAt < now,
+      overdue: (IN_PROGRESS as readonly string[]).includes(r.status) && ((!!r.dueAt && r.dueAt < now) || (!!r.expiresAt && r.expiresAt < now)),
     };
   });
   return { rows, total: n, pageCount };
@@ -109,7 +116,7 @@ export async function requestKpis(orgId?: string, now = new Date()): Promise<Kpi
   const since = new Date(now.getTime() - 30 * 86_400_000);
   const [[active], [overdue], waiting, completed] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, inArray(requests.status, [...IN_PROGRESS]))),
-    db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, inArray(requests.status, [...IN_PROGRESS]), lt(requests.expiresAt, now))),
+    db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, overdueCondition(now))),
     db
       .select({ role: signingSteps.role, count: sql<number>`count(*)::int` })
       .from(signingSteps)
