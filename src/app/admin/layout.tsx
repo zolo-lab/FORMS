@@ -7,8 +7,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-dvh">
       <header className="flex items-center gap-4 border-b bg-card px-4 py-2">
-        <Link href="/admin/forms" className="font-bold">טפסים וחתימות</Link>
-        <nav className="flex gap-3 text-sm text-muted-foreground">
+        <Link href="/admin/forms" className="shrink-0 font-bold">טפסים וחתימות</Link>
+        <nav className="flex min-w-0 gap-3 overflow-x-auto whitespace-nowrap text-sm text-muted-foreground">
           <Link href="/admin/requests" className="hover:text-foreground">בקשות</Link>
           <Link href="/admin/inbox" className="hover:text-foreground">ממתינים</Link>
           <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>
@@ -16,9 +16,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
         </nav>
         {authDisabled() ? (
-          <span className="ms-auto rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
+          <span className="ms-auto shrink-0 rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
         ) : (
-          <form action={logout} className="ms-auto">
+          <form action={logout} className="ms-auto shrink-0">
             <Button variant="ghost" size="sm" type="submit">יציאה</Button>
           </form>
         )}
