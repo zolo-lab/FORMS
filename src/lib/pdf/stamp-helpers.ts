@@ -1,6 +1,6 @@
 /** Pure helpers for stamping answers onto a PDF (no pdf-lib dependency, easy to unit test). */
 import { rgb, type RGB } from "pdf-lib";
-import { resolveDirection } from "./bidi";
+import { hasHebrew } from "./bidi";
 
 export const DATE_FORMATS = ["dd/mm/yyyy", "dd.mm.yyyy", "yyyy-mm-dd"] as const;
 export type StampDateFormat = (typeof DATE_FORMATS)[number];
@@ -35,14 +35,14 @@ export interface CombCell {
 
 /**
  * Split a value into boxes, one character per box.
- * Direction follows the text: RTL text starts in the rightmost box, LTR (digits, Latin) in the leftmost.
+ * Hebrew text starts in the rightmost box; digits and Latin start in the leftmost (IDs read left to right).
  * Surplus characters are dropped; unused boxes stay empty.
  */
 export function combCells(text: string, totalWidth: number, cells?: number): CombCell[] {
   const chars = Array.from(text.replace(/\s+/g, ""));
   const count = Math.max(1, cells ?? chars.length);
   const cellWidth = totalWidth / count;
-  const rtl = resolveDirection(text) === "rtl";
+  const rtl = hasHebrew(text);
   return chars.slice(0, count).map((char, i) => ({
     char,
     x: (rtl ? count - 1 - i : i) * cellWidth,
