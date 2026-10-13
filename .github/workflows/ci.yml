@@ -45,6 +45,8 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
   # reviewed from environments that cannot download Actions artifacts.
   previews:
