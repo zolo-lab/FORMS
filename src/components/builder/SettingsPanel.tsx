@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { newField, parseOptionsText } from "@/lib/forms/builder";
 import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
+import { cn } from "@/lib/utils";
 import { ConditionEditor } from "./ConditionEditor";
 
 const ROLE_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
@@ -55,6 +57,35 @@ function ListTextarea({ items, onChange, rows = 5 }: { items: FieldOption[]; onC
       onChange={(e) => { setText(e.target.value); onChange(parseOptionsText(e.target.value, items)); }}
       placeholder={"שורה לכל פריט.\nאפשר להדביק רשימה."}
     />
+  );
+}
+
+/** Size / color / alignment / bold / highlight for one field, with a live sample line. */
+function StyleControls({ style, sample, onChange }: { style: FieldStyle | undefined; sample: string; onChange: (s: FieldStyle | undefined) => void }) {
+  const cur = style ?? {};
+  const set = (patch: Partial<FieldStyle>) => onChange(cleanStyle({ ...cur, ...patch }));
+  return (
+    <div className="space-y-3">
+      <p className={cn("rounded-md border border-dashed p-2 text-sm font-medium", fieldStyleClass(style))} aria-label="דוגמה לעיצוב">{sample}</p>
+      <div className="grid grid-cols-1 gap-2">
+        {FIELD_STYLE_OPTIONS.map((g) => (
+          <Row key={g.key} label={g.label}>
+            <Select aria-label={g.label} value={(cur[g.key as keyof FieldStyle] as string | undefined) ?? g.options[g.key === "size" ? 1 : 0].value} onChange={(e) => set({ [g.key]: e.target.value } as Partial<FieldStyle>)}>
+              {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+          </Row>
+        ))}
+      </div>
+      <label className="flex items-center gap-3 text-sm">
+        <Switch checked={!!cur.bold} onCheckedChange={(c) => set({ bold: c })} label="בולד" />
+        בולד
+      </label>
+      <label className="flex items-center gap-3 text-sm">
+        <Switch checked={!!cur.highlight} onCheckedChange={(c) => set({ highlight: c })} label="הדגשת רקע" />
+        הדגשת רקע
+      </label>
+      {style && <Button variant="ghost" size="sm" onClick={() => onChange(undefined)}>איפוס עיצוב</Button>}
+    </div>
   );
 }
 
@@ -107,6 +138,16 @@ export function FieldSettings({
             לקריאה בלבד (מולא מראש)
           </label>
         </>
+      )}
+
+      {field.type !== "divider" && field.type !== "image" && field.type !== "hidden" && (
+        <Section title="עיצוב">
+          <StyleControls
+            style={field.style}
+            sample={field.label || "תווית לדוגמה"}
+            onChange={(style) => onPatch({ style })}
+          />
+        </Section>
       )}
 
       {meta.hasOptions && (

@@ -10,6 +10,7 @@
  * Never break backwards compatibility of this schema without a migration:
  * signed submissions reference the exact version they were filled against.
  */
+import { fieldStyleSchema, type FieldStyle } from "./field-style";
 import { z } from "zod";
 import { FIELD_TYPES, type FieldType } from "./field-types";
 
@@ -105,6 +106,8 @@ export interface FormField {
   exportKey?: string;
   /** Layout width hint on desktop. */
   width?: "full" | "half" | "third";
+  /** Look of the label / text block (size, weight, color, alignment, highlight). */
+  style?: FieldStyle;
 }
 
 export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
@@ -129,6 +132,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     fields: z.array(fieldSchema).optional(),
     exportKey: z.string().optional(),
     width: z.enum(["full", "half", "third"]).optional(),
+    style: fieldStyleSchema.optional(),
   }),
 );
 

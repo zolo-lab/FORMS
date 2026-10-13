@@ -1,16 +1,18 @@
+import { fieldStyleClass } from "@/lib/forms/field-style";
 import type { FormField } from "@/lib/forms/schema";
+import { cn } from "@/lib/utils";
 
 export function LayoutBlock({ field }: { field: FormField }) {
   switch (field.type) {
     case "heading":
       return (
         <div className="pt-2">
-          <h3 className="text-lg font-semibold">{field.label}</h3>
+          <h3 className={cn("text-lg font-semibold", fieldStyleClass(field.style))}>{field.label}</h3>
           {field.description && <p className="text-sm text-muted-foreground">{field.description}</p>}
         </div>
       );
     case "info_text":
-      return <p className="whitespace-pre-line rounded-md bg-muted p-3 text-sm">{field.label}</p>;
+      return <p className={cn("whitespace-pre-line rounded-md bg-muted p-3 text-sm", fieldStyleClass(field.style))}>{field.label}</p>;
     case "image": {
       const src = String(field.settings?.src ?? "");
       // eslint-disable-next-line @next/next/no-img-element -- arbitrary admin-provided URL
