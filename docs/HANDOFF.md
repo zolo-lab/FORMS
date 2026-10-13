@@ -134,6 +134,17 @@ A hands-on run on production plus a code review produced `docs/fix-plan-audit-20
 
 Open items from the plan are listed in the audit document (P1-2 what the signer may see, P1-7 streaming ZIP, P1-9/10/15 formulas, jumps and piping across roles, P1-11 return-to-requester, P0-1 Google login, P2 list). Production still has QA test data (form "בדיקה QA – טופס קליטה", request 41306ebf-c7a2-4032-b9ef-571902b0ddbf) and runs with `AUTH_DISABLED=1`.
 
-## 11. Next step
+## 11. Added after the audit (2026-10-14 night)
 
-Continue the audit document top-down. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms, Google OAuth credentials (6.10) or a decision on the password, removing `AUTH_DISABLED`.
+- Reminders (6.6): `src/lib/workflow/reminders.ts` (Israel clock, Shabbat Fri 15:00 - Sat 21:00 and quiet hours are skipped) and `src/server/reminders.ts`. Cron `/api/cron/deliver` (every 5 min, `vercel.json`) runs expireOverdue, runReminders, deliverQueued. Needs `CRON_SECRET`.
+- Mail only goes out from production (or `ALLOW_REAL_EMAIL=1`); needs `RESEND_API_KEY` and a verified sender / `MAIL_FROM`.
+- Packages UI (#51): `/admin/packages`, workflow validation in `src/lib/workflow/validate-workflow.ts`.
+- Webhooks (#59): `/admin/settings/webhooks`, events `request.completed`, `step.completed`, `request.declined`, HMAC `x-forms-*` headers, 3 attempts.
+- REST API v1 (#60): `/api/v1/*` with `fk_` bearer keys (`/admin/settings/api-keys`), documented in `docs/api.md`.
+- Bulk send (6.9): `src/lib/import/*` (XLSX/CSV parsing without dependencies, column mapping, validation) and `/admin/requests/bulk` (chunks of 10, progress, error CSV, `bulk_jobs` row).
+- Production still holds QA test data (form "בדיקה QA – טופס קליטה", request 41306ebf-c7a2-4032-b9ef-571902b0ddbf). Production migrations are not auto-applied (P1-16).
+- e2e on CI occasionally times out on DB-heavy pages (editor, dashboard) when several branches run against the one dev DB; rerun failed jobs before assuming a regression.
+
+## 12. Next step
+
+Remaining audit items: P1-2 (what the signer's page may see; 410 for invalid links), P1-7, P1-9/10/15, P1-11, P1-14, P1-16, the P2 list. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms, Google OAuth credentials (6.10) or a decision on the password, removing `AUTH_DISABLED`.
