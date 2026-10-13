@@ -11,7 +11,7 @@ import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields, type FillerRole, type FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { shouldLogSave, tokenState, type TokenState } from "@/lib/workflow/signing";
-import { applyStepAction, collectedAnswers } from "./requests-store";
+import { applyStepAction, collectedAnswers, StepConflictError } from "./requests-store";
 import { getFile, putFile } from "./storage";
 import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -72,7 +72,12 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
 export async function markOpened(ctx: SigningContext, meta: { ip?: string; userAgent?: string }) {
-  if (ctx.step.status === "active") await applyStepAction(ctx.step.id, { type: "open" });
+  if (ctx.step.status === "active") {
+    // Two tabs opening the link at once: the loser just carries on.
+    await applyStepAction(ctx.step.id, { type: "open" }).catch((e) => {
+      if (!(e instanceof StepConflictError)) throw e;
+    });
+  }
   if (!ctx.step.signerIp && (meta.ip || meta.userAgent)) {
     await db.update(signingSteps).set({ signerIp: meta.ip, signerUserAgent: meta.userAgent }).where(eq(signingSteps.id, ctx.step.id));
   }
@@ -140,8 +145,13 @@ export async function submit(token: string, input: Answers, cookieHeader: string
     const file = await putFile({ name: `signature-${ctx.step.id}-${f.id}.png`, mime: "image/png", bytes: new Uint8Array(Buffer.from(m[1]!, "base64")) });
     await db.insert(signatures).values({ stepId: ctx.step.id, fieldId: f.id, kind: sig?.kind === "typed" ? "typed" : "drawn", fileId: file.id, typedText: sig?.kind === "typed" ? (sig.text ?? null) : null });
   }
-  const out = await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
-  return { ok: true, ...(await doneInfo(ctx, out.status)) };
+  try {
+    const out = await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
+    return { ok: true, ...(await doneInfo(ctx, out.status)) };
+  } catch (e) {
+    if (e instanceof StepConflictError) return { ok: false, state: "closed" };
+    throw e;
+  }
 }
 
 // ───────────────────────── OTP ─────────────────────────
@@ -235,6 +245,7 @@ export async function performAction(token: string, cookieHeader: string | null, 
     await applyStepAction(ctx.step.id, action, { type: "signer" });
     return { ok: true };
   } catch (e) {
+    if (e instanceof StepConflictError) return { ok: false, reason: "closed" };
     return { ok: false, reason: e instanceof Error ? e.message : "failed" };
   }
 }
