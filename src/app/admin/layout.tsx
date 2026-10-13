@@ -9,6 +9,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Link href="/admin/forms" className="font-bold">טפסים וחתימות</Link>
         <nav className="flex gap-3 text-sm text-muted-foreground">
           <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>
+          <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
         </nav>
         <form action={logout} className="ms-auto">
           <Button variant="ghost" size="sm" type="submit">יציאה</Button>
