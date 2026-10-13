@@ -41,11 +41,15 @@ export interface DrawHebrewOptions {
 const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
 
 export async function loadFontBytes(weight: "regular" | "bold" = "regular"): Promise<Uint8Array> {
-  const file = weight === "bold" ? "Alef-Bold.ttf" : "Alef-Regular.ttf";
+  const file = weight === "bold" ? "Heebo-Bold.ttf" : "Heebo-Regular.ttf";
   return new Uint8Array(await fs.readFile(path.join(FONT_DIR, file)));
 }
 
-/** Embed the Hebrew-capable font (Alef, OFL) into a document. */
+/**
+ * Embed the Hebrew-capable font into a document. Heebo (OFL), static instances
+ * generated from the variable font (wght 400/700) — same family as the web UI,
+ * lining numerals (Alef was rejected: old-style digits make 0 look like o).
+ */
 export async function embedHebrewFont(
   doc: PDFDocument,
   weight: "regular" | "bold" = "regular",

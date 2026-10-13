@@ -1,0 +1,30 @@
+# Generates SQL migrations from src/db/schema.ts (offline — no database access)
+# and commits them to drizzle/. Applying them to Neon is done separately
+# (see docs/HANDOFF.md → Database).
+name: db-generate
+on:
+  push:
+    branches: [main]
+    paths: ["src/db/schema.ts", "drizzle.config.ts"]
+concurrency: db-generate
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i -g pnpm@10
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec drizzle-kit generate
+      - name: Commit generated migration
+        run: |
+          git config user.name "db-bot"
+          git config user.email "db-bot@users.noreply.github.com"
+          git add drizzle
+          if git diff --cached --quiet; then echo "no schema changes"; exit 0; fi
+          git commit -m "chore(db): generate migration"
+          git push
