@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { db, schema } from "@/db";
+import { importAcroForm } from "@/lib/pdf/acroform";
 import { putFile, sha256Hex } from "@/server/storage";
 
 const MAX_BYTES = 4 * 1024 * 1024; // Vercel function request bodies are limited to ~4.5MB
@@ -22,14 +23,18 @@ export async function POST(req: Request) {
     return Response.json({ error: "לא ניתן לקרוא את ה-PDF (ייתכן שהוא מוגן בסיסמה)" }, { status: 400 });
   }
 
+  // Interactive fields found in the PDF (offered to the admin as "import fields"); scanned PDFs have none.
+  const imported = await importAcroForm(bytes).catch(() => null);
+  const acro = imported?.acroImported ? imported : null;
+
   const sha = sha256Hex(bytes);
   const [existing] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.sha256, sha));
-  if (existing) return Response.json({ id: existing.id, name: existing.name, url: existing.blobUrl, pages: existing.pages, pageCount: existing.pageCount });
+  if (existing) return Response.json({ id: existing.id, name: existing.name, url: existing.blobUrl, pages: existing.pages, pageCount: existing.pageCount, acro });
 
   const stored = await putFile({ name: file.name, mime: "application/pdf", bytes });
   const [row] = await db
     .insert(schema.pdfFiles)
     .values({ name: file.name, blobUrl: stored.url, sha256: sha, pageCount: pages.length, pages })
     .returning();
-  return Response.json({ id: row!.id, name: row!.name, url: row!.blobUrl, pages, pageCount: pages.length });
+  return Response.json({ id: row!.id, name: row!.name, url: row!.blobUrl, pages, pageCount: pages.length, acro });
 }

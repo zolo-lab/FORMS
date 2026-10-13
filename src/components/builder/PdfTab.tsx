@@ -5,6 +5,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
+import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { addPdfOnlyElement, dropPdfOnlyField } from "@/lib/forms/pdf-only";
 import type { FormDefinition } from "@/lib/forms/schema";
 
@@ -29,6 +30,7 @@ export function PdfTab({
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [acro, setAcro] = useState<AcroImport | null>(null);
 
   async function upload(file: File | undefined) {
     if (!file) return;
@@ -40,6 +42,7 @@ export function PdfTab({
       const res = await fetch("/api/admin/pdf", { method: "POST", body });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "ההעלאה נכשלה"); return; }
+      setAcro(json.acro ?? null);
       const same = pdf && pdf.file.pages.length === json.pages.length;
       onChange({
         file: { id: json.id, name: json.name, url: json.url, pages: json.pages },
@@ -82,6 +85,23 @@ export function PdfTab({
         {pdf && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>הסרת ה-PDF מהטופס</Button>}
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {pdf && acro && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border bg-card p-3 text-sm">
+          <span>נמצאו {acro.fields.length} שדות אינטראקטיביים בתוך ה-PDF.</span>
+          <Button
+            size="sm"
+            onClick={() => {
+              const merged = mergeAcroImport(definition, acro);
+              onDefinitionChange(merged.definition);
+              onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...merged.stamps], acroImported: true } });
+              setAcro(null);
+            }}
+          >
+            ייבוא השדות לטופס
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setAcro(null)}>התעלמות</Button>
+        </div>
+      )}
       {!pdf && <p className="text-sm text-muted-foreground">העלו PDF של הטופס (עד 4MB), ואז הצמידו אליו את שדות הטופס. כך נוצר PDF ממולא וחתום.</p>}
       {pdf && (
         <PdfPlacement
