@@ -1,0 +1,193 @@
+/**
+ * Form definition schema — the single source of truth for every form in the
+ * system (Form 101, employment request, contract acknowledgement, bank details…).
+ *
+ * A form definition is pure JSON, stored versioned in the DB
+ * (form_template_versions.definition). The builder UI edits it, the renderer
+ * displays it, validate.ts checks answers against it, and PDF templates map
+ * its fields onto uploaded PDF pages (see pdf-mapping.ts).
+ *
+ * Never break backwards compatibility of this schema without a migration:
+ * signed submissions reference the exact version they were filled against.
+ */
+import { z } from "zod";
+import { FIELD_TYPES, type FieldType } from "./field-types";
+
+// ---------- Conditions (show/hide, required-if) ----------
+
+export const comparisonOps = [
+  "eq", "neq", "in", "notIn", "gt", "gte", "lt", "lte",
+  "empty", "notEmpty", "contains", "notContains",
+] as const;
+export type ComparisonOp = (typeof comparisonOps)[number];
+
+export type Condition =
+  | { all: Condition[] }
+  | { any: Condition[] }
+  | { not: Condition }
+  | { field: string; op: ComparisonOp; value?: unknown };
+
+export const conditionSchema: z.ZodType<Condition> = z.lazy(() =>
+  z.union([
+    z.object({ all: z.array(conditionSchema) }),
+    z.object({ any: z.array(conditionSchema) }),
+    z.object({ not: conditionSchema }),
+    z.object({ field: z.string().min(1), op: z.enum(comparisonOps), value: z.unknown().optional() }),
+  ]),
+);
+
+// ---------- Field ----------
+
+/** Who fills a field in the signing chain. */
+export const fillerRoles = ["requester", "employee", "approver", "payroll", "hr"] as const;
+export type FillerRole = (typeof fillerRoles)[number];
+
+export const optionSchema = z.object({
+  value: z.string().min(1),
+  label: z.string().min(1),
+  /** Payroll/Priority export code, if different from value. */
+  code: z.string().optional(),
+});
+export type FieldOption = z.infer<typeof optionSchema>;
+
+export const validationSchema = z
+  .object({
+    min: z.number().optional(),
+    max: z.number().optional(),
+    minLength: z.number().int().nonnegative().optional(),
+    maxLength: z.number().int().positive().optional(),
+    pattern: z.string().optional(),
+    patternMessage: z.string().optional(),
+    /** For checkbox/multi-select: min/max selected items. */
+    minSelected: z.number().int().nonnegative().optional(),
+    maxSelected: z.number().int().positive().optional(),
+    /** For file upload. */
+    maxFiles: z.number().int().positive().optional(),
+    maxSizeMb: z.number().positive().optional(),
+    accept: z.array(z.string()).optional(),
+    /** For dates: ISO yyyy-mm-dd, or "today". */
+    minDate: z.string().optional(),
+    maxDate: z.string().optional(),
+  })
+  .partial();
+export type FieldValidation = z.infer<typeof validationSchema>;
+
+const fieldIdSchema = z
+  .string()
+  .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "מזהה שדה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות");
+
+export interface FormField {
+  id: string;
+  type: FieldType;
+  label: string;
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  requiredIf?: Condition;
+  visibleIf?: Condition;
+  readOnly?: boolean;
+  defaultValue?: unknown;
+  /** Pre-fill from request/employee data, e.g. "employee.firstName". */
+  prefill?: string;
+  /** Which role in the signing chain fills this field. Default: employee. */
+  filledBy?: FillerRole;
+  options?: FieldOption[];
+  /** Option source instead of static options: "banks", "branches", "cities", "streets", "costCenters:1|2|3", "organizations". */
+  optionsSource?: string;
+  /** Allow free-text "other" option (choice fields). */
+  allowOther?: boolean;
+  validation?: FieldValidation;
+  /** Type-specific settings (scale range, grid rows/columns, currency, etc.). */
+  settings?: Record<string, unknown>;
+  /** For repeating_table / group: nested fields. */
+  fields?: FormField[];
+  /** Export key for Priority/CSV. Defaults to id. */
+  exportKey?: string;
+  /** Layout width hint on desktop. */
+  width?: "full" | "half" | "third";
+}
+
+export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
+  z.object({
+    id: fieldIdSchema,
+    type: z.enum(FIELD_TYPES),
+    label: z.string(),
+    description: z.string().optional(),
+    placeholder: z.string().optional(),
+    required: z.boolean().optional(),
+    requiredIf: conditionSchema.optional(),
+    visibleIf: conditionSchema.optional(),
+    readOnly: z.boolean().optional(),
+    defaultValue: z.unknown().optional(),
+    prefill: z.string().optional(),
+    filledBy: z.enum(fillerRoles).optional(),
+    options: z.array(optionSchema).optional(),
+    optionsSource: z.string().optional(),
+    allowOther: z.boolean().optional(),
+    validation: validationSchema.optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+    fields: z.array(fieldSchema).optional(),
+    exportKey: z.string().optional(),
+    width: z.enum(["full", "half", "third"]).optional(),
+  }),
+);
+
+// ---------- Page / Form ----------
+
+export const pageSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  description: z.string().optional(),
+  visibleIf: conditionSchema.optional(),
+  fields: z.array(fieldSchema),
+});
+export type FormPage = z.infer<typeof pageSchema>;
+
+export const formDefinitionSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    title: z.string().min(1),
+    description: z.string().optional(),
+    pages: z.array(pageSchema).min(1),
+    settings: z
+      .object({
+        /** Show one page at a time (wizard) or everything on one page. */
+        layout: z.enum(["wizard", "single"]).default("wizard"),
+        submitLabel: z.string().optional(),
+        /** Text shown after submit. */
+        thankYou: z.string().optional(),
+      })
+      .partial()
+      .optional(),
+  })
+  .superRefine((form, ctx) => {
+    // Field ids must be unique across the whole form (nested table columns are scoped to their table).
+    const seen = new Set<string>();
+    form.pages.forEach((page, p) =>
+      page.fields.forEach((field, f) => {
+        if (seen.has(field.id)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `מזהה שדה כפול: ${field.id}`,
+            path: ["pages", p, "fields", f, "id"],
+          });
+        }
+        seen.add(field.id);
+      }),
+    );
+  });
+export type FormDefinition = z.infer<typeof formDefinitionSchema>;
+
+/** All top-level fields of a form, in order. */
+export function allFields(form: FormDefinition): FormField[] {
+  return form.pages.flatMap((p) => p.fields);
+}
+
+export function findField(form: FormDefinition, id: string): FormField | undefined {
+  return allFields(form).find((f) => f.id === id);
+}
+
+/** Parse + validate an unknown JSON blob as a form definition. */
+export function parseFormDefinition(input: unknown) {
+  return formDefinitionSchema.safeParse(input);
+}
