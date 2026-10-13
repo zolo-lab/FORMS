@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { OnDocumentFill, type OnDocPdf } from "@/components/pdf/OnDocumentFill";
+import { coversAll } from "@/lib/pdf/on-document";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import type { FilledItem } from "@/lib/forms/role-view";
@@ -19,6 +21,14 @@ interface Props {
   subjectName: string;
   action: string;
   returnTargets?: { id: string; label: string }[];
+  pdfDocs?: OnDocPdf[];
+}
+
+const DESKTOP_QUERY = "(min-width: 1024px)";
+function subscribeDesktop(cb: () => void) {
+  const mq = window.matchMedia(DESKTOP_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
 }
 
 type Panel = null | "decline" | "return" | "delegate";
@@ -76,9 +86,16 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
   );
 }
 
-export function SigningClient({ token, definition, initialAnswers, filled, role, subjectName, action, returnTargets = [] }: Props) {
+export function SigningClient({ token, definition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [] }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const hasForm = definition.pages.length > 0;
+  // On-document mode only when every field of this role is placed on a PDF.
+  const onDocPdfs = pdfDocs.filter((d) => coversAll(d.mapping, definition));
+  const canOnDoc = hasForm && pdfDocs.length > 0 && onDocPdfs.length === pdfDocs.length && pdfDocs.length === 1;
+  const isDesktop = useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches, () => false);
+  const [chosen, setChosen] = useState<"form" | "document" | null>(null);
+  const mode = chosen ?? (isDesktop && canOnDoc ? "document" : "form");
+  const setMode = setChosen;
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -134,7 +151,15 @@ export function SigningClient({ token, definition, initialAnswers, filled, role,
           </dl>
         </Card>
       )}
-      {hasForm ? (
+      {canOnDoc && (
+        <div className="flex gap-2" role="group" aria-label="אופן המילוי">
+          <Button size="sm" variant={mode === "document" ? "default" : "outline"} onClick={() => setMode("document")}>על גבי המסמך</Button>
+          <Button size="sm" variant={mode === "form" ? "default" : "outline"} onClick={() => setMode("form")}>טופס</Button>
+        </div>
+      )}
+      {hasForm && canOnDoc && mode === "document" ? (
+        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} />
+      ) : hasForm ? (
         <FormRenderer definition={definition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>

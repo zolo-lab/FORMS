@@ -52,6 +52,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           subjectName={ctx.request.subjectName}
           action={ctx.step.action}
           returnTargets={ctx.returnTargets}
+          pdfDocs={ctx.pdfDocs.map((d) => ({ title: d.title, url: `/api/s/${token}/pdf/${d.fileId}`, mapping: d.mapping }))}
         />
       </OrgTheme>
     </main>
