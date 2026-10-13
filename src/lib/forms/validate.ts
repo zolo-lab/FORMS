@@ -9,6 +9,7 @@
  */
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
+import { reachedPageIndexes } from "./paths";
 import { FIELD_TYPE_META } from "./field-types";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import {
@@ -217,6 +218,8 @@ function validateFieldList(
     if (!evaluateCondition(field.visibleIf, scopeAnswers)) continue;
     const value = answers[field.id];
     const key = prefix + field.id;
+    // Locked fields: not validated and their value is dropped.
+    if (field.disabledIf && evaluateCondition(field.disabledIf, scopeAnswers)) continue;
     // Computed fields: the server-side value wins, nothing to validate.
     if (field.formula) {
       if (value !== undefined) cleaned[field.id] = value;
@@ -267,9 +270,13 @@ export function validateAnswers(form: FormDefinition, rawAnswers: Answers, optio
   const answers = computeFormulas(form, rawAnswers, today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
-  for (const page of form.pages) {
-    if (!evaluateCondition(page.visibleIf, answers)) continue;
+  // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.
+  const wizard = (form.settings?.layout ?? "wizard") === "wizard";
+  const reached = wizard ? new Set(reachedPageIndexes(form, answers)) : null;
+  form.pages.forEach((page, i) => {
+    if (!evaluateCondition(page.visibleIf, answers)) return;
+    if (reached && !reached.has(i)) return;
     validateFieldList(page.fields, answers, errors, cleaned, { ...options, today }, "", answers);
-  }
+  });
   return { ok: Object.keys(errors).length === 0, errors, cleaned };
 }

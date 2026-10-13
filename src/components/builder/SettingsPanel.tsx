@@ -247,6 +247,7 @@ export function FieldSettings({
 
       <Section title="תנאים">
         <ConditionEditor def={def} selfId={field.id} value={field.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג שדה זה אם" />
+        <ConditionEditor def={def} selfId={field.id} value={field.disabledIf} onChange={(c) => onPatch({ disabledIf: c })} lead="נעל שדה אם" />
         {meta.hasAnswer && !field.required && (
           <ConditionEditor def={def} selfId={field.id} value={field.requiredIf} onChange={(c) => onPatch({ requiredIf: c })} lead="שדה חובה אם" />
         )}
@@ -366,6 +367,41 @@ export function PageSettings({
       <Row label="הסבר (אופציונלי)"><Textarea rows={2} value={page.description ?? ""} onChange={(e) => onPatch({ description: e.target.value || undefined })} /></Row>
       <Section title="תנאי הצגת העמוד">
         <ConditionEditor def={def} value={page.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג עמוד זה אם" />
+      </Section>
+      <Section title="דילוג בטופס">
+        <p className="text-xs text-muted-foreground">אחרי העמוד הזה עוברים לעמוד הבא, אלא אם אחד התנאים כאן מתקיים (הראשון שמתקיים קובע).</p>
+        {(page.nextPage ?? []).map((rule, i) => (
+          <div key={i} className="space-y-2 rounded-md border p-2">
+            <ConditionEditor
+              def={def}
+              value={rule.if}
+              onChange={(c) => onPatch({ nextPage: (page.nextPage ?? []).map((r, j) => (j === i ? { ...r, if: c ?? r.if } : r)) })}
+              lead="אם"
+            />
+            <div className="flex items-center gap-2">
+              <Select
+                aria-label="לדלג אל"
+                value={rule.goTo}
+                onChange={(e) => onPatch({ nextPage: (page.nextPage ?? []).map((r, j) => (j === i ? { ...r, goTo: e.target.value } : r)) })}
+              >
+                {def.pages.slice(index + 1).map((p) => <option key={p.id} value={p.id}>{p.title || p.id}</option>)}
+                <option value="end">סיום (שליחה)</option>
+              </Select>
+              <Button variant="ghost" size="sm" aria-label="הסרת כלל" onClick={() => onPatch({ nextPage: (page.nextPage ?? []).filter((_, j) => j !== i).length ? (page.nextPage ?? []).filter((_, j) => j !== i) : undefined })}><Trash2 className="size-4" /></Button>
+            </div>
+          </div>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const firstField = def.pages.flatMap((p) => p.fields).find((f) => FIELD_TYPE_META[f.type].hasAnswer);
+            const target = def.pages[index + 1]?.id ?? "end";
+            onPatch({ nextPage: [...(page.nextPage ?? []), { if: firstField ? { field: firstField.id, op: "eq" as const, value: "" } : { all: [] }, goTo: target }] });
+          }}
+        >
+          <Plus className="size-4" />כלל דילוג
+        </Button>
       </Section>
     </div>
   );

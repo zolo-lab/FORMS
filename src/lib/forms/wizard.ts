@@ -3,17 +3,7 @@ import { evaluateCondition, type Answers } from "./conditions";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import { validateAnswers, type FieldErrors } from "./validate";
 
-export function visiblePageIndexes(form: FormDefinition, answers: Answers): number[] {
-  return form.pages.flatMap((p, i) => (evaluateCondition(p.visibleIf, answers) ? [i] : []));
-}
-
-export function nextPageIndex(form: FormDefinition, answers: Answers, current: number): number | null {
-  return visiblePageIndexes(form, answers).find((i) => i > current) ?? null;
-}
-
-export function prevPageIndex(form: FormDefinition, answers: Answers, current: number): number | null {
-  return visiblePageIndexes(form, answers).filter((i) => i < current).at(-1) ?? null;
-}
+export { nextPageIndex, prevPageIndex, reachedPageIndexes, visiblePageIndexes } from "./paths";
 
 /** Errors of the whole form, restricted to fields that live on the given page. */
 export function validatePage(
