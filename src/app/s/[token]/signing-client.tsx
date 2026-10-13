@@ -99,7 +99,7 @@ export function SigningClient({ token, definition, initialAnswers, filled, role,
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<{ message?: string; waitingFor: string[]; completed: boolean } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const first = useRef(true);
 
@@ -121,7 +121,7 @@ export function SigningClient({ token, definition, initialAnswers, filled, role,
   async function onSubmit(cleaned: Answers) {
     setProblem(null);
     const res = await fetch(`/api/s/${token}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned }) });
-    if (res.ok) { setDone(true); return; }
+    if (res.ok) { setDone((await res.json()) as { message?: string; waitingFor: string[]; completed: boolean }); return; }
     if (res.status === 422) { setErrors(((await res.json()) as { errors: FieldErrors }).errors); return; }
     setProblem("לא ניתן היה לשלוח. ייתכן שהקישור כבר אינו פעיל – רעננו את הדף.");
   }
@@ -130,6 +130,11 @@ export function SigningClient({ token, definition, initialAnswers, filled, role,
     return (
       <Card className="space-y-2 p-6 text-center" role="status">
         <h1 className="text-xl font-bold">{doneMsg ?? "תודה, הפרטים נשלחו"}</h1>
+        {done?.message && <p>{done.message}</p>}
+        {done?.completed && <p className="text-muted-foreground">התהליך כולו הושלם.</p>}
+        {done && !done.completed && done.waitingFor.length > 0 && (
+          <p className="text-muted-foreground">השלב הבא: ממתין ל-{done.waitingFor.join(", ")}</p>
+        )}
         <p className="text-muted-foreground">אפשר לסגור את הדף.</p>
       </Card>
     );
