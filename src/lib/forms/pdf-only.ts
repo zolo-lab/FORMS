@@ -27,7 +27,7 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "date", label: "תאריך", fieldType: "date", fieldLabel: "תאריך", stamp: { kind: "text", align: "center" }, size: { width: 80, height: 16 } },
   { id: "check", label: "תיבת סימון", fieldType: "consent", fieldLabel: "אישור", stamp: { kind: "check" } },
   { id: "signature", label: "חתימה", fieldType: "signature", fieldLabel: "חתימה", stamp: { kind: "signature" } },
-  { id: "initials", label: "ראשי תיבות", fieldType: "short_text", fieldLabel: "שם מלא (ראשי תיבות)", stamp: { kind: "initials" } },
+  { id: "initials", label: "ראשי תיבות", fieldType: "short_text", fieldLabel: "ראשי תיבות", stamp: { kind: "initials" } },
   { id: "date_signed", label: "תאריך חתימה", fieldType: null, stamp: { kind: "date_signed", align: "center" } },
 ];
 
