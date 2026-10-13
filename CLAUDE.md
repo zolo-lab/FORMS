@@ -3,7 +3,7 @@
 Internal HR system for 5 Israeli nonprofits: dynamic forms (builder), PDF stamping,
 sequential e-signature chains, dashboard, Priority payroll export. Replaces iForms + Google Sheets.
 
-**Read before any work:** `docs/build-plan.md` (phases, decisions, acceptance criteria) and
+**Read before any work:** `docs/build-plan-v3.md` (active plan: tasks, acceptance criteria; `build-plan.md` §1 holds the base decisions) and
 `docs/HANDOFF.md` (environment quirks, dev loop, current state). Do the next unfinished phase only.
 
 ## Hard rules
