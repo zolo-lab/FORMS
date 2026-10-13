@@ -86,6 +86,8 @@ export interface FormField {
   required?: boolean;
   requiredIf?: Condition;
   visibleIf?: Condition;
+  /** Locked (read-only, not validated, value dropped) while this condition holds. */
+  disabledIf?: Condition;
   readOnly?: boolean;
   defaultValue?: unknown;
   /** Pre-fill from request/employee data, e.g. "employee.firstName". */
@@ -122,6 +124,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     required: z.boolean().optional(),
     requiredIf: conditionSchema.optional(),
     visibleIf: conditionSchema.optional(),
+    disabledIf: conditionSchema.optional(),
     readOnly: z.boolean().optional(),
     defaultValue: z.unknown().optional(),
     prefill: z.string().optional(),
@@ -141,11 +144,16 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
 
 // ---------- Page / Form ----------
 
+/** Wizard jump: when `if` holds, the page after this one is `goTo` (a page id, or "end" to finish). First match wins. */
+export const pageJumpSchema = z.object({ if: conditionSchema, goTo: z.string().min(1) });
+export type PageJump = z.infer<typeof pageJumpSchema>;
+
 export const pageSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   description: z.string().optional(),
   visibleIf: conditionSchema.optional(),
+  nextPage: z.array(pageJumpSchema).optional(),
   fields: z.array(fieldSchema),
 });
 export type FormPage = z.infer<typeof pageSchema>;

@@ -6,7 +6,8 @@ import { computeFormulas } from "@/lib/forms/compute";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
-import { nextPageIndex, prevPageIndex, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
+import { nextPageIndex, prevPageIndex, reachedPageIndexes, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
+import { evaluateCondition } from "@/lib/forms/conditions";
 import { FieldRow } from "./fields/registry";
 import type { RenderCtx, UploadFn } from "./fields/types";
 
@@ -41,7 +42,8 @@ export function FormRenderer({
   const topRef = useRef<HTMLDivElement>(null);
 
   const errors = { ...serverErrors, ...localErrors };
-  const visible = useMemo(() => visiblePageIndexes(definition, answers), [definition, answers]);
+  // In wizard layout the progress bar follows the path the filler takes (jump rules skip pages).
+  const visible = useMemo(() => (wizard ? reachedPageIndexes(definition, answers) : visiblePageIndexes(definition, answers)), [definition, answers, wizard]);
   const current = visible.includes(pageIndex) ? pageIndex : (visible[0] ?? 0);
   const step = Math.max(visible.indexOf(current), 0);
   const next = nextPageIndex(definition, answers, current);
@@ -52,7 +54,7 @@ export function FormRenderer({
     onUpload,
     errors,
     readonlyAll: readonly,
-    roleReadOnly: (f) => !!f.formula || (!!role && (f.filledBy ?? "employee") !== role),
+    roleReadOnly: (f) => !!f.formula || (!!f.disabledIf && evaluateCondition(f.disabledIf, answers)) || (!!role && (f.filledBy ?? "employee") !== role),
   };
 
   const setField = (id: string, v: unknown) => {
