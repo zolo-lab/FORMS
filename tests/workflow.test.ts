@@ -109,7 +109,7 @@ describe("skipIf", () => {
     ],
   };
   it("skips a step whose condition holds and moves on", () => {
-    let { steps } = started(w);
+    const { steps } = started(w);
     const r = completeStep(steps, "s1", { salary: 8000 });
     expect(byOrder(r.steps)).toBe("1:completed 2:skipped 3:active");
     expect(r.events.map((e) => e.type)).toContain("step_skipped");
@@ -173,7 +173,7 @@ describe("delegate", () => {
 
 describe("decline / expire / cancel", () => {
   it("decline needs a reason and ends the request", () => {
-    let { steps } = started(serial);
+    const { steps } = started(serial);
     expect(() => declineStep(steps, "s1", " ")).toThrow();
     const r = declineStep(steps, "s1", "לא מסכים");
     expect(r.steps[0]!.declineReason).toBe("לא מסכים");
@@ -181,7 +181,7 @@ describe("decline / expire / cancel", () => {
     expect(r.steps.filter((s) => s.status === "cancelled")).toHaveLength(2);
   });
   it("expire marks open steps expired", () => {
-    let { steps } = started(serial);
+    const { steps } = started(serial);
     const r = expire(steps);
     expect(byOrder(r.steps)).toBe("1:expired 2:pending 3:pending");
     expect(requestStatus(r.steps)).toBe("expired");
