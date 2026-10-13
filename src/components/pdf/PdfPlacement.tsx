@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair, Minus, Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
@@ -96,7 +96,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
   // During a drag the closure's `mapping` is stale, so always patch from the latest ref.
   const latest = useRef(mapping);
-  latest.current = mapping;
+  useEffect(() => { latest.current = mapping; });
   const patchStampLive = (id: string, patch: Partial<PdfStamp>) =>
     onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
 
