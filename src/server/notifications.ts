@@ -2,9 +2,10 @@
  * Outbox: rows in `notifications` are created by `enqueue` and sent by `deliverQueued` (Resend over plain fetch).
  * No real mail from non-production: without RESEND_API_KEY a queued row is only logged and stays queued.
  */
-import { and, asc, eq, lt, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, lte } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { MAX_ATTEMPTS, afterAttempt } from "@/lib/notifications/templates";
+import { getSmsProvider } from "@/server/sms/provider";
 
 const { notifications, organizations } = schema;
 
@@ -19,10 +20,10 @@ export interface EnqueueInput {
   scheduledAt?: Date;
 }
 
-export async function enqueue(input: EnqueueInput): Promise<string> {
+export async function enqueue(input: EnqueueInput & { channel?: "email" | "sms" }): Promise<string> {
   const [row] = await db
     .insert(notifications)
-    .values({ ...input, channel: "email" })
+    .values({ ...input, channel: input.channel ?? "email" })
     .returning({ id: notifications.id });
   return row!.id;
 }
@@ -55,22 +56,28 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
   const rows = await db
     .select()
     .from(notifications)
-    .where(and(eq(notifications.status, "queued"), eq(notifications.channel, "email"), lte(notifications.scheduledAt, now), lt(notifications.attempts, MAX_ATTEMPTS)))
+    .where(and(eq(notifications.status, "queued"), inArray(notifications.channel, ["email", "sms"]), lte(notifications.scheduledAt, now), lt(notifications.attempts, MAX_ATTEMPTS)))
     .orderBy(asc(notifications.scheduledAt))
     .limit(limit);
 
   const apiKey = process.env.RESEND_API_KEY;
   const out = { sent: 0, failed: 0, skipped: 0 };
   for (const n of rows) {
-    if (!apiKey) {
-      console.log(`[notifications] (no RESEND_API_KEY) would send "${n.subject ?? n.templateKey}" to ${n.to}`);
-      out.skipped++;
-      continue;
-    }
-    const from = await senderFor(n.organizationId);
     let result: { ok: boolean; id?: string; error?: string };
-    if (!from.email) result = { ok: false, error: "no sender email (set the organization sender or MAIL_FROM)" };
-    else result = await sendViaResend(apiKey, from, n.to, n.subject ?? "", n.body).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    if (n.channel === "sms") {
+      result = await getSmsProvider()
+        .send(n.to, n.body)
+        .catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    } else {
+      if (!apiKey) {
+        console.log(`[notifications] (no RESEND_API_KEY) would send "${n.subject ?? n.templateKey}" to ${n.to}`);
+        out.skipped++;
+        continue;
+      }
+      const from = await senderFor(n.organizationId);
+      if (!from.email) result = { ok: false, error: "no sender email (set the organization sender or MAIL_FROM)" };
+      else result = await sendViaResend(apiKey, from, n.to, n.subject ?? "", n.body).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    }
     const next = afterAttempt(n.attempts, result.ok);
     await db
       .update(notifications)
