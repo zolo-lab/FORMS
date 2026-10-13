@@ -9,7 +9,7 @@ const IN_PROGRESS = ["in_progress", "returned"] as const;
 const OPEN_STEP = ["active", "in_progress"] as const;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-function conditions(f: RequestFilters, now: Date): SQL[] {
+export function conditions(f: RequestFilters, now: Date): SQL[] {
   const c: SQL[] = [];
   if (f.org) c.push(eq(requests.organizationId, f.org));
   if (f.pkg) c.push(eq(requests.packageTemplateId, f.pkg));

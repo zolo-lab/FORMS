@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { Answers } from "@/lib/forms/conditions";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { renderDefault } from "@/lib/notifications/templates";
@@ -143,4 +144,21 @@ export async function changeAssigneeAction(requestId: string, stepId: string, as
   if (phone && !normalizeIsraeliPhone(phone)) return { ok: false, message: "מספר טלפון לא תקין" };
   if (!assignee.name?.trim() && !email && !phone) return { ok: false, message: "נדרש שם, מייל או טלפון" };
   return run(requestId, "הנמען הוחלף. צרו קישור חדש לשיתוף.", () => changeAssignee(stepId, { name: assignee.name?.trim() || undefined, email, phone }));
+}
+
+/** Cancel several requests at once from the dashboard. Requests that are already finished are skipped. */
+export async function bulkCancelAction(formData: FormData) {
+  const reason = String(formData.get("reason") ?? "").trim() || "בוטל בפעולה מרוכזת";
+  const ids = formData.getAll("id").map(String).filter((i) => /^[0-9a-f-]{36}$/i.test(i));
+  let cancelled = 0;
+  for (const id of ids) {
+    try {
+      await cancelRequest(id, reason);
+      cancelled++;
+    } catch {
+      // Already completed/cancelled: skip.
+    }
+  }
+  revalidatePath("/admin/requests");
+  redirect(`/admin/requests?cancelled=${cancelled}`);
 }
