@@ -13,7 +13,7 @@ const def = {
       fields: [
         { id: "mine", type: "short_text", label: "m" },
         { id: "shown", type: "short_text", label: "s", visibleIf: { field: "gate", op: "eq", value: "x" } },
-        { id: "total", type: "number", label: "t", formula: "a + b" },
+        { id: "total", type: "number", label: "t", formula: "{a} + {b}" },
       ],
     },
   ],
