@@ -15,7 +15,7 @@ export function sha256Hex(bytes: Uint8Array): string {
 export const blobPathname = (id: string) => `files/${id}`;
 
 /** Blob is used whenever its token is configured; otherwise files live in the DB row (dev / fallback). */
-const useBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+const blobEnabled = () => !!process.env.BLOB_READ_WRITE_TOKEN;
 
 /**
  * Metadata always lives in `stored_files`. With Blob enabled `dataBase64` is left empty and the bytes
@@ -23,7 +23,7 @@ const useBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
  */
 export async function putFile(input: { name: string; mime: string; bytes: Uint8Array }): Promise<{ id: string; url: string; sha256: string }> {
   const sha256 = sha256Hex(input.bytes);
-  const inBlob = useBlob();
+  const inBlob = blobEnabled();
   const [row] = await db
     .insert(storedFiles)
     .values({
