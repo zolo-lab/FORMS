@@ -19,6 +19,9 @@ jobs:
       - run: pnpm typecheck
       - run: node scripts/eslint-annotations.mjs
       - run: pnpm test
+        env:
+          # Dev-branch DB; enables tests/requests-store.test.ts (skipped when unset).
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Hebrew PDF sample
         if: always()
         run: |
