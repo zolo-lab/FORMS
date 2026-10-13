@@ -4,7 +4,9 @@ import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FieldType } from "@/lib/forms/field-types";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
-import type { FormDefinition } from "@/lib/forms/schema";
+import { fieldStyleClass } from "@/lib/forms/field-style";
+import type { FormDefinition, FormField } from "@/lib/forms/schema";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { FieldIcon } from "./field-icon";
 import { DRAG_FIELD, DRAG_TYPE } from "./Palette";
@@ -15,6 +17,8 @@ export interface CanvasProps {
   def: FormDefinition;
   selection: Selection | null;
   onSelect: (s: Selection) => void;
+  /** Inline edits made directly on the selected field. */
+  onPatchField: (id: string, patch: Partial<FormField>) => void;
   onDropAt: (page: number, index: number, data: { type?: FieldType; fieldId?: string }) => void;
   onMoveField: (id: string, dir: -1 | 1) => void;
   onDuplicate: (id: string) => void;
@@ -71,14 +75,14 @@ export function Canvas(p: CanvasProps) {
                   <div key={f.id}>
                     {zone(pi, fi, `before-${f.id}`, <div className="h-2" />)}
                     <div
-                      draggable
+                      draggable={!selected}
                       onDragStart={(e) => { e.dataTransfer.setData(DRAG_FIELD, f.id); e.dataTransfer.effectAllowed = "move"; }}
                       className={cn("flex items-center gap-2 rounded-md border bg-background p-2", selected && "border-primary ring-2 ring-primary/40")}
                     >
                       <button type="button" onClick={() => p.onSelect({ kind: "field", id: f.id })} className="flex min-w-0 flex-1 items-center gap-2 text-start" aria-pressed={selected}>
                         <FieldIcon type={f.type} className="size-4 shrink-0 text-muted-foreground" />
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
+                          <span className={cn("block truncate text-sm font-medium", fieldStyleClass(f.style))}>
                             {f.label || "(ללא תווית)"}
                             {f.required && <span className="ms-1 text-destructive">*</span>}
                           </span>
@@ -94,6 +98,24 @@ export function Canvas(p: CanvasProps) {
                       <Button variant="ghost" size="sm" aria-label="שכפול שדה" onClick={() => p.onDuplicate(f.id)}><Copy className="size-4" /></Button>
                       <Button variant="ghost" size="sm" aria-label="מחיקת שדה" onClick={() => p.onRemove(f.id)}><Trash2 className="size-4" /></Button>
                     </div>
+                    {selected && (
+                      <div className="mt-1 grid gap-2 rounded-md border border-primary/40 bg-primary/5 p-2 sm:grid-cols-2" aria-label="עריכה מהירה">
+                        <Input
+                          aria-label="תווית השדה"
+                          value={f.label}
+                          placeholder={f.type === "info_text" ? "הטקסט שיוצג" : "תווית"}
+                          onChange={(e) => p.onPatchField(f.id, { label: e.target.value })}
+                        />
+                        {f.type !== "divider" && f.type !== "info_text" && f.type !== "image" && (
+                          <Input
+                            aria-label="הסבר לשדה"
+                            value={f.description ?? ""}
+                            placeholder="הסבר קצר מתחת לתווית (לא חובה)"
+                            onChange={(e) => p.onPatchField(f.id, { description: e.target.value || undefined })}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

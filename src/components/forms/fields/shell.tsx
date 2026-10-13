@@ -1,3 +1,4 @@
+import { fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
 
 export function FieldShell({
@@ -7,6 +8,7 @@ export function FieldShell({
   required,
   error,
   hideLabel,
+  style,
   children,
 }: {
   domId: string;
@@ -15,12 +17,13 @@ export function FieldShell({
   required: boolean;
   error?: string;
   hideLabel?: boolean;
+  style?: FieldStyle;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5" data-field={domId}>
       {!hideLabel && (
-        <label htmlFor={domId} className="block text-sm font-medium">
+        <label htmlFor={domId} className={cn("block text-sm font-medium", fieldStyleClass(style))}>
           {label}
           {required && <span className="ms-1 text-destructive" aria-hidden="true">*</span>}
         </label>

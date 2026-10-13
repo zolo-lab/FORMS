@@ -137,6 +137,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         />
         <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
+        <a
+          href={`/preview/form/${templateId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-primary hover:underline"
+        >
+          צפייה בטופס (בחלון חדש)
+        </a>
         <div className="ms-auto flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="ביטול" disabled={!past.length} onClick={undo}><Undo2 className="size-4" /></Button>
           <Button variant="ghost" size="icon" aria-label="שחזור" disabled={!future.length} onClick={redo}><Redo2 className="size-4" /></Button>
@@ -171,6 +179,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 def={def}
                 selection={selection}
                 onSelect={setSelection}
+                onPatchField={(id, patch) => commit(updateField(def, id, patch))}
                 onDropAt={(page, index, data) => {
                   if (data.type) addAt(data.type, page, index);
                   else if (data.fieldId) commit(moveField(def, data.fieldId, { page, index }));

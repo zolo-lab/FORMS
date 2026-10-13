@@ -84,6 +84,7 @@ export function FieldRow({ field, scope, rootAnswers, onField, prefix, parentDis
         required={fieldIsRequired(field, condScope)}
         error={error}
         hideLabel={field.type === "consent"}
+        style={field.style}
       >
         <Control
           field={field}
