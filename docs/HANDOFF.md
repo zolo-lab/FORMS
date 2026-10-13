@@ -73,7 +73,7 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 
 ## 6. Phase 3 (done, merged) — packages, requests, workflow engine
 
-- **Schema** (`src/db/schema.ts`, migration `0002_sloppy_madame_web`): package_templates/items, requests, package_documents, signing_steps, step_tokens, submissions, signatures, events, notifications (outbox), reminder_schedules, message_templates, webhooks, api_keys, bulk_jobs; org branding columns; `form_templates.kind/archived_at`. **Applied to dev only. NOT applied to production** — production DB must get `0002` (HANDOFF §3 steps) or `/admin/forms` breaks, because queries select the new `form_templates` columns.
+- **Schema** (`src/db/schema.ts`, migration `0002_sloppy_madame_web`): package_templates/items, requests, package_documents, signing_steps, step_tokens, submissions, signatures, events, notifications (outbox), reminder_schedules, message_templates, webhooks, api_keys, bulk_jobs; org branding columns; `form_templates.kind/archived_at`. **Applied to dev and production** (production on 2026-10-13, pasted by Israel in the Neon console because the auto-mode classifier blocks production DB changes from Claude; verified afterwards: 15 new tables, new columns, recorded in `schema_migrations`). Production has no seed data yet (organizations, package).
 - **Seed:** `pnpm seed` (`scripts/seed.ts`, idempotent): 4 organizations + package "קליטת עובד רגיל" (requester → employee → payroll). Applied to dev by equivalent SQL. Note: ארצנו shares שיבת ציון's registration number, so it is not a separate organization row (the plan says 4; CLAUDE.md says 5 nonprofits — decide if ארצנו needs its own row, which requires dropping the unique constraint on `registration_number`).
 - **Engine:** `src/lib/workflow/engine.ts` (pure; `tests/workflow.test.ts`). `types.ts` holds statuses/roles/ReminderPolicy.
 - **Tokens:** `src/lib/auth/tokens.ts` (43-char base64url, sha256 stored).
@@ -84,4 +84,4 @@ Create form → autosave → publish v1 → edit creates draft v2 while v1 stays
 
 ## 7. Next step
 
-**Phase 4 in `docs/build-plan-v3.md`** (signing screen `/s/[token]`). Before it: apply `0002` to production (with Israel's approval) and add the `DATABASE_URL` (dev) GitHub secret so the DB test runs.
+**Phase 4 in `docs/build-plan-v3.md`** (signing screen `/s/[token]`). Before it (optional): add the `DATABASE_URL` (dev) GitHub secret so the DB test runs; decide whether ארצנו needs its own organization row.
