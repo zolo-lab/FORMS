@@ -1,6 +1,6 @@
 # HANDOFF — state of the project and how to work in it
 
-_Last updated: 2026-10-13 (end of phase 2, by Claude Sonnet)._
+_Last updated: 2026-10-13 (end of phase 3, by Claude Sonnet)._
 
 ## 1. Where things are
 
@@ -71,6 +71,17 @@ The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubuserco
 ### Smoke test on production (2026-10-13) — passed
 Create form → autosave → publish v1 → edit creates draft v2 while v1 stays unchanged (checked in the DB) → PDF upload (`/api/admin/pdf`) → server preview with Hebrew font (`/api/admin/pdf-preview`) all worked on `gybs-forms.vercel.app`. Not yet exercised by a human: drag-and-drop placement on a real government PDF (e2e covers it on a generated PDF) and the file_upload field with a real backend (no filler page exists yet; arrives with phase 4/5).
 
-## 6. Next step
+## 6. Phase 3 (done, merged) — packages, requests, workflow engine
 
-**Phase 3 in `docs/build-plan-v3.md`** (data model, organizations, workflow engine). Phases 3–9 there supersede the older phase lists in `build-plan.md` and `spec-two-tools.md`.
+- **Schema** (`src/db/schema.ts`, migration `0002_sloppy_madame_web`): package_templates/items, requests, package_documents, signing_steps, step_tokens, submissions, signatures, events, notifications (outbox), reminder_schedules, message_templates, webhooks, api_keys, bulk_jobs; org branding columns; `form_templates.kind/archived_at`. **Applied to dev only. NOT applied to production** — production DB must get `0002` (HANDOFF §3 steps) or `/admin/forms` breaks, because queries select the new `form_templates` columns.
+- **Seed:** `pnpm seed` (`scripts/seed.ts`, idempotent): 4 organizations + package "קליטת עובד רגיל" (requester → employee → payroll). Applied to dev by equivalent SQL. Note: ארצנו shares שיבת ציון's registration number, so it is not a separate organization row (the plan says 4; CLAUDE.md says 5 nonprofits — decide if ארצנו needs its own row, which requires dropping the unique constraint on `registration_number`).
+- **Engine:** `src/lib/workflow/engine.ts` (pure; `tests/workflow.test.ts`). `types.ts` holds statuses/roles/ReminderPolicy.
+- **Tokens:** `src/lib/auth/tokens.ts` (43-char base64url, sha256 stored).
+- **Service:** `src/server/requests-store.ts` — `createRequest`, `sendRequest` (requester steps complete immediately with `apiParams.requesterAnswers`), `getRequest`, `applyStepAction` (open/submit/decline/return/delegate), `cancelRequest`, `expireOverdue`. Tokens + outbox rows are created when a step is activated; links are `${APP_URL ?? https://gybs-forms.vercel.app}/s/<token>`; old links are revoked when the step closes. Writes are sequential (neon-http has no transactions) — a crash mid-operation can leave a half-written state; revisit with `db.batch` if it matters.
+- **Merge:** `src/lib/forms/merge.ts` (`mergedDefinitionForStep`, `splitAnswers`).
+- **Orgs/branding:** `/admin/settings/organizations` (name, color, logo ≤1MB, sender, reminder policy), `OrgTheme` in `src/components/branding.tsx`, public logo `/api/org-logo/[slug]`, `/preview/sample?org=<slug>`.
+- **Not verified:** `tests/requests-store.test.ts` needs `DATABASE_URL` (dev) as a GitHub secret; without it, it skips in CI. Not run yet. The orgs page and branding were not seen in a browser (production lacks the migration; previews are behind Vercel SSO).
+
+## 7. Next step
+
+**Phase 4 in `docs/build-plan-v3.md`** (signing screen `/s/[token]`). Before it: apply `0002` to production (with Israel's approval) and add the `DATABASE_URL` (dev) GitHub secret so the DB test runs.
