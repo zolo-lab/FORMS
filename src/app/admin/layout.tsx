@@ -14,6 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>
           <Link href="/admin/packages" className="hover:text-foreground">ערכות</Link>
           <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
+          <Link href="/admin/settings/webhooks" className="hover:text-foreground">Webhooks</Link>
         </nav>
         {authDisabled() ? (
           <span className="ms-auto shrink-0 rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
