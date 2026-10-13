@@ -15,6 +15,7 @@ import type { FieldErrors } from "@/lib/forms/validate";
 interface Props {
   token: string;
   definition: FormDefinition;
+  pipeDefinition?: FormDefinition;
   initialAnswers: Answers;
   filled: FilledItem[];
   role: FillerRole;
@@ -96,7 +97,7 @@ const ACTION_ERRORS: Record<string, string> = {
   closed: "הפעולה כבר בוצעה. רעננו את הדף.",
 };
 
-export function SigningClient({ token, definition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [] }: Props) {
+export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [] }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const hasForm = definition.pages.length > 0;
   // On-document mode only when every field of this role is placed on a PDF.
@@ -175,7 +176,7 @@ export function SigningClient({ token, definition, initialAnswers, filled, role,
       {hasForm && canOnDoc && mode === "document" ? (
         <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} />
       ) : hasForm ? (
-        <FormRenderer definition={definition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} />
+        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
       )}
