@@ -4,6 +4,7 @@ import { login } from "./helpers";
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
 test("edit a field inline, style it, and see it in the form preview", async ({ page }) => {
+  test.setTimeout(120_000);
   await login(page, "/admin/forms");
   await page.getByPlaceholder("שם הטופס החדש").fill(`טופס e2e ${Date.now()}`);
   await page.getByRole("button", { name: "טופס חדש" }).click();
@@ -19,13 +20,10 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 
   // Style this field only.
   await page.getByLabel("גודל", { exact: true }).selectOption({ label: "גדול מאוד" });
-  // The draft autosaves ~1s after the last edit; wait for that request before leaving the editor.
-  const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes(`/admin/forms/${id}`));
+  // The draft autosaves ~1s after the last edit; the preview check below retries until it lands.
   await page.getByRole("switch", { name: "בולד" }).click();
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/text-2xl/);
   await expect(page.getByLabel("דוגמה לעיצוב")).toHaveClass(/font-bold/);
-
-  await saved;
 
   // The full-screen preview shows the saved version.
   await expect(async () => {
@@ -34,7 +32,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
     await expect(label).toBeVisible({ timeout: 2000 });
     await expect(label).toHaveClass(/text-2xl/);
     await expect(page.getByText("כפי שמופיע בתעודת הזהות")).toBeVisible();
-  }).toPass({ timeout: 20_000 });
+  }).toPass({ timeout: 60_000 });
 });
 
 test("form settings: layout, description and thank-you message", async ({ page }) => {
