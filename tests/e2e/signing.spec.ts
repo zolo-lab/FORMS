@@ -35,7 +35,9 @@ test.describe("with a real request", () => {
     const ctx = await browser.newContext({ baseURL: new URL(url).origin });
     const guest = await ctx.newPage();
     await guest.goto(new URL(url).pathname);
-    await expect(guest.getByText(`עבור: ${name}`).or(guest.getByRole("heading", { name: "אימות זהות" }))).toBeVisible({ timeout: 20_000 });
+    await guest.locator("h1, p").first().waitFor({ timeout: 20_000 });
+    const seen = (await guest.locator("main").innerText()).slice(0, 300);
+    expect(seen, `page text: ${seen}`).toMatch(new RegExp(`עבור: ${name}|אימות זהות`));
     await ctx.close();
   });
 });
