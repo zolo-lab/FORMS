@@ -4,6 +4,7 @@
  */
 import { conditionFieldRefs } from "./conditions";
 import { FIELD_TYPE_META, type FieldType } from "./field-types";
+import { formulaRefs, parseFormula } from "./formula";
 import { parseFormDefinition, type Condition, type FieldOption, type FormDefinition, type FormField, type FormPage } from "./schema";
 
 export type Location = { page: number; index: number };
@@ -110,6 +111,23 @@ function renameInCondition(c: Condition | undefined, from: string, to: string): 
   return c.field === from ? { ...c, field: to } : c;
 }
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Rename `{from}` / `{from.col}` in formulas and `{{from}}` in texts. */
+function renameInText(text: string, from: string, to: string): string {
+  const f = escapeRe(from);
+  return text.replace(new RegExp(`\\{\\{\\s*${f}\\s*\\}\\}`, "g"), `{{${to}}}`).replace(new RegExp(`\\{${f}(?=[}.])`, "g"), `{${to}`);
+}
+
+function mapStrings<T>(v: T, fn: (s: string) => string, skipKeys: Set<string>): T {
+  if (typeof v === "string") return fn(v) as T;
+  if (Array.isArray(v)) return v.map((x) => mapStrings(x, fn, skipKeys)) as T;
+  if (v && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, skipKeys.has(k) ? x : mapStrings(x, fn, skipKeys)])) as T;
+  }
+  return v;
+}
+
 export function renameFieldId(def: FormDefinition, from: string, to: string): { def: FormDefinition; error?: string } {
   if (from === to) return { def };
   if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(to)) return { def, error: "מזהה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות" };
@@ -117,12 +135,19 @@ export function renameFieldId(def: FormDefinition, from: string, to: string): { 
   const next = structuredClone(def);
   for (const page of next.pages) {
     page.visibleIf = renameInCondition(page.visibleIf, from, to);
-    for (const f of page.fields) {
+    if (page.nextPage) page.nextPage = page.nextPage.map((r) => ({ ...r, if: renameInCondition(r.if, from, to)! }));
+    page.title = renameInText(page.title, from, to);
+    for (let i = 0; i < page.fields.length; i++) {
+      // Texts (labels, help, formulas) are rewritten; ids and condition trees are handled structurally.
+      const f = mapStrings(page.fields[i]!, (t) => renameInText(t, from, to), new Set(["id", "visibleIf", "requiredIf", "disabledIf", "type"]));
+      page.fields[i] = f;
       if (f.id === from) f.id = to;
       f.visibleIf = renameInCondition(f.visibleIf, from, to);
       f.requiredIf = renameInCondition(f.requiredIf, from, to);
+      f.disabledIf = renameInCondition(f.disabledIf, from, to);
       if (!f.visibleIf) delete f.visibleIf;
       if (!f.requiredIf) delete f.requiredIf;
+      if (!f.disabledIf) delete f.disabledIf;
     }
     if (!page.visibleIf) delete page.visibleIf;
   }
@@ -204,9 +229,25 @@ export function publishIssues(def: FormDefinition): PublishIssue[] {
     for (const ref of conditionFieldRefs(page.visibleIf)) {
       if (!ids.has(ref)) issues.push({ message: `תנאי בעמוד "${page.title}" מפנה לשדה שלא קיים: ${ref}`, page: p });
     }
+    for (const rule of page.nextPage ?? []) {
+      for (const ref of conditionFieldRefs(rule.if)) {
+        if (!ids.has(ref)) issues.push({ message: `כלל דילוג בעמוד "${page.title}" מפנה לשדה שלא קיים: ${ref}`, page: p });
+      }
+      if (rule.goTo !== "end" && !def.pages.some((x) => x.id === rule.goTo)) {
+        issues.push({ message: `כלל דילוג בעמוד "${page.title}" מפנה לעמוד שלא קיים`, page: p });
+      }
+    }
     for (const f of page.fields) {
       if (FIELD_TYPE_META[f.type].hasAnswer && !f.label.trim()) issues.push({ message: "שדה ללא תווית", fieldId: f.id, page: p });
-      for (const cond of [f.visibleIf, f.requiredIf]) {
+      if (f.formula) {
+        const parsed = parseFormula(f.formula);
+        if (!parsed.ok) issues.push({ message: `הנוסחה בשדה "${f.label}" אינה תקינה`, fieldId: f.id, page: p });
+        else for (const ref of formulaRefs(parsed.ast)) if (!ids.has(ref)) issues.push({ message: `הנוסחה בשדה "${f.label}" מפנה לשדה שלא קיים: ${ref}`, fieldId: f.id, page: p });
+      }
+      for (const m of f.label.matchAll(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g)) {
+        if (!ids.has(m[1]!)) issues.push({ message: `התווית של "${f.label}" מפנה לשדה שלא קיים: ${m[1]}`, fieldId: f.id, page: p });
+      }
+      for (const cond of [f.visibleIf, f.requiredIf, f.disabledIf]) {
         for (const ref of conditionFieldRefs(cond)) {
           if (!ids.has(ref)) issues.push({ message: `תנאי בשדה "${f.label}" מפנה לשדה שלא קיים: ${ref}`, fieldId: f.id, page: p });
           if (ref === f.id) issues.push({ message: `שדה "${f.label}" תלוי בעצמו`, fieldId: f.id, page: p });
