@@ -66,6 +66,8 @@ export const pdfMappingSchema = z.object({
   /** Page sizes as found when the PDF was uploaded (for builder scaling + sanity checks). */
   pages: z.array(z.object({ width: z.number(), height: z.number() })),
   stamps: z.array(stampSchema),
+  /** The template has interactive AcroForm fields that were imported as stamps; they are flattened when stamping. */
+  acroImported: z.boolean().optional(),
 });
 export type PdfMapping = z.infer<typeof pdfMappingSchema>;
 
@@ -120,6 +122,15 @@ export async function stampPdf(
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(templateBytes);
   const font = await embedHebrewFont(doc);
+  if (mapping.acroImported) {
+    // The imported fields are re-drawn as stamps, so the interactive widgets must not stay on top.
+    const form = doc.getForm();
+    try {
+      form.flatten();
+    } catch {
+      for (const f of form.getFields()) form.removeField(f);
+    }
+  }
   const pages = doc.getPages();
 
   for (const stamp of mapping.stamps) {
