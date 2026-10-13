@@ -147,7 +147,11 @@ Open items from the plan are listed in the audit document (P1-2 what the signer 
 
 ## 12. Next step
 
-Remaining audit items: P1-2 (what the signer's page may see; 410 for invalid links), P1-7, P1-9/10/15, P1-11, P1-14, P1-16, the P2 list. Waiting on Israel: SMS provider, Priority export sample (5.6), `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms, Google OAuth credentials (6.10) or a decision on the password, removing `AUTH_DISABLED`.
+Done since the audit: P1-2 (answers sent to the signer are filtered; HTTP 410 for dead links is NOT done, a page cannot set it), P1-7 (streamed ZIP, label headers), P1-11, P1-16 (opt-in), P1-14 only the initials label (hiding PDF-only fields from the normal form is still open), 8.8 (package "סיום העסקה" is seeded without forms).
+
+Still open: P1-9/10/15 (formulas, jumps and piping across roles / merged docs), the rest of P1-14, the P2 list, 8.4 `section`/typed `grid` (needs a decision on how a collapsible section groups following fields), 8.7 i18n, 5.6 Priority export (needs a sample), 6.10.
+
+Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms (attach forms to "סיום העסקה"), Google OAuth credentials or a decision on the password, `AUTO_MIGRATE=1` if he wants deploy-time migrations, removing `AUTH_DISABLED`.
 
 ## 13. Auto-migrations (P1-16)
 
