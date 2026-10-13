@@ -1,5 +1,6 @@
 /** Server side of the public signing page /s/[token]: resolve the link, autosave, submit. */
 import { duplicateErrors } from "./unique";
+import { kickDelivery } from "./notifications";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashToken } from "@/lib/auth/tokens";
@@ -190,6 +191,7 @@ export async function sendOtp(token: string, now = new Date()): Promise<OtpSendR
     subject: "קוד אימות",
     body: `קוד האימות שלך: ${otp.code}\nהקוד תקף ל-10 דקות.`,
   });
+  await kickDelivery();
   await db.insert(events).values({ requestId: ctx.request.id, stepId: ctx.step.id, actorType: "signer", type: "otp_sent", payload: {} });
   return { ok: true, sentTo: email.replace(/^(.).*(@.*)$/, "$1***$2") };
 }
