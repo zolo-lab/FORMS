@@ -41,3 +41,17 @@ export function computeFormulas(form: FormDefinition, answers: Answers, today: s
   }
   return out;
 }
+
+/**
+ * Formula values of the FULL (merged) form that differ from what is stored, e.g. a formula owned by another
+ * role whose inputs were just filled by this signer. Top-level fields only (table rows belong to their owner's step).
+ */
+export function staleFormulaValues(full: FormDefinition, known: Answers, today: string): Answers {
+  const computed = computeFormulas(full, known, today);
+  const out: Answers = {};
+  for (const f of allFields(full)) {
+    if (!f.formula) continue;
+    if (JSON.stringify(computed[f.id]) !== JSON.stringify(known[f.id]) && computed[f.id] !== undefined) out[f.id] = computed[f.id];
+  }
+  return out;
+}
