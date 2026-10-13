@@ -12,21 +12,22 @@ export function usePdfDocument(source: PdfSource | null) {
   useEffect(() => {
     if (!source) return;
     let cancelled = false;
-    let loaded: PDFDocumentProxy | null = null;
+    let task: { destroy: () => Promise<void> } | null = null;
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        const task = pdfjs.getDocument("url" in source ? { url: source.url } : { data: source.data.slice() });
-        loaded = await task.promise;
-        if (cancelled) { loaded.destroy(); return; }
+        const loading = pdfjs.getDocument("url" in source ? { url: source.url } : { data: source.data.slice() });
+        task = loading;
+        const loaded = await loading.promise;
+        if (cancelled) { void loading.destroy(); return; }
         setDoc(loaded);
         setError(null);
       } catch {
         if (!cancelled) setError("לא ניתן להציג את ה-PDF");
       }
     })();
-    return () => { cancelled = true; loaded?.destroy(); };
+    return () => { cancelled = true; void task?.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` identifies the source
   }, [key]);
   return { doc, error };

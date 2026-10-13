@@ -116,22 +116,27 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
 
   const tables = allFields(definition).filter((f) => f.type === "repeating_table");
+  const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
       <aside className="space-y-3 lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
         <p className="text-xs text-muted-foreground">לחצו על "מיקום" או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
-        {tables.map((t) => (
-          <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-            <span>שורות ב"{t.label}"</span>
-            <span className="flex items-center gap-1">
-              <Button variant="outline" size="sm" aria-label="פחות שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.max(1, (r[t.id] ?? Number(t.settings?.minRows ?? 1) || 1) - 1) }))}><Minus className="size-3" /></Button>
-              <span className="w-5 text-center">{tableRows[t.id] ?? (Number(t.settings?.minRows ?? 1) || 1)}</span>
-              <Button variant="outline" size="sm" aria-label="עוד שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.min(Number(t.settings?.maxRows ?? 20), (r[t.id] ?? (Number(t.settings?.minRows ?? 1) || 1)) + 1) }))}><Plus className="size-3" /></Button>
-            </span>
-          </div>
-        ))}
+        {tables.map((t) => {
+          const current = rowsFor(t);
+          const max = Number(t.settings?.maxRows ?? 20);
+          return (
+            <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+              <span>שורות ב"{t.label}"</span>
+              <span className="flex items-center gap-1">
+                <Button variant="outline" size="sm" aria-label="פחות שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.max(1, current - 1) }))}><Minus className="size-3" /></Button>
+                <span className="w-5 text-center">{current}</span>
+                <Button variant="outline" size="sm" aria-label="עוד שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.min(max, current + 1) }))}><Plus className="size-3" /></Button>
+              </span>
+            </div>
+          );
+        })}
         {groups.map(([group, list]) => (
           <section key={group}>
             <h4 className="mb-1 text-xs font-semibold text-muted-foreground">{group}</h4>
@@ -190,7 +195,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                   if (!item) return;
                   const rect = pageRefs.current[pi]!.getBoundingClientRect();
                   const dims = item.multiline ? { width: 200, height: 50 } : DEFAULT_SIZE[item.kind];
-                  const box = screenBoxToPdf({ x: e.clientX - rect.left, y: e.clientY - rect.top, ...pdfBoxToScreen({ x: 0, y: 0, ...dims }, 0, scale) }, pg.height, scale);
+                  const box = screenBoxToPdf({ x: e.clientX - rect.left, y: e.clientY - rect.top, width: dims.width * scale, height: dims.height * scale }, pg.height, scale);
                   place(item, pi, { x: round1(box.x), y: round1(box.y) });
                 }}
               >
