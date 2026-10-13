@@ -48,7 +48,7 @@ describe("progress / daysSince / median", () => {
 
 describe("eventLabel", () => {
   it("has Hebrew text for every event type the engine writes", () => {
-    const types = ["request_created", "request_sent", "request_completed", "request_declined", "request_cancelled", "request_expired", "step_activated", "step_opened", "step_saved", "step_completed", "step_declined", "step_returned", "step_delegated", "step_skipped", "step_expired", "otp_sent", "otp_verified"];
+    const types = ["request_created", "request_sent", "request_completed", "request_declined", "request_cancelled", "request_expired", "step_activated", "step_opened", "step_saved", "step_completed", "step_declined", "step_returned", "step_delegated", "step_skipped", "step_expired", "otp_sent", "otp_verified", "request_extended", "step_assignee_changed"];
     for (const t of types) expect(eventLabel(t, {}), t).toMatch(/[א-ת]/);
   });
   it("includes the reason or role when the payload has one", () => {

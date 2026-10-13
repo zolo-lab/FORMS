@@ -4,7 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
@@ -399,4 +399,31 @@ export async function issueLink(stepId: string): Promise<{ url: string } | null>
   const { token, hash } = createToken();
   await db.insert(stepTokens).values({ stepId, tokenHash: hash, expiresAt: req.expiresAt });
   return { url: `${appUrl()}/s/${token}` };
+}
+
+/** Pushes the deadline of an open request out by `days`; open one-time links get the new deadline too. */
+export async function extendExpiry(requestId: string, days: number, actor: { type: "user" | "api"; id?: string } = { type: "user" }): Promise<Date> {
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("days must be 1-365");
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) throw new Error("request not found");
+  if (req.status !== "in_progress" && req.status !== "returned" && req.status !== "expired") throw new Error(`request is ${req.status}`);
+  const base = req.expiresAt && req.expiresAt > new Date() ? req.expiresAt : new Date();
+  const next = new Date(base.getTime() + days * 86_400_000);
+  await db.update(requests).set({ expiresAt: next }).where(eq(requests.id, requestId));
+  const open = (await loadSteps(requestId)).filter((s) => s.status === "active" || s.status === "in_progress").map((s) => s.id);
+  if (open.length) await db.update(stepTokens).set({ expiresAt: next }).where(inArray(stepTokens.stepId, open));
+  await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_extended", payload: { days, expiresAt: next.toISOString() } });
+  return next;
+}
+
+/** Admin replaces who an open step goes to. The old link stops working; get a new one with `issueLink`. */
+export async function changeAssignee(stepId: string, assignee: { name?: string; email?: string; phone?: string }, actor: { type: "user" | "api"; id?: string } = { type: "user" }) {
+  const [step] = await db.select().from(signingSteps).where(eq(signingSteps.id, stepId));
+  if (!step || (step.status !== "active" && step.status !== "in_progress")) throw new Error("step is not open");
+  await db
+    .update(signingSteps)
+    .set({ assigneeName: assignee.name ?? null, assigneeEmail: assignee.email ?? null, assigneePhone: assignee.phone ?? null })
+    .where(eq(signingSteps.id, stepId));
+  await db.update(stepTokens).set({ revokedAt: new Date() }).where(eq(stepTokens.stepId, stepId));
+  await db.insert(events).values({ requestId: step.requestId, stepId, actorType: actor.type, actorId: actor.id, type: "step_assignee_changed", payload: { role: step.role } });
 }
