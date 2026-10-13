@@ -89,7 +89,8 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
   const xs = (await mapping()).map((s) => s.x);
   expect(new Set(xs.map((x) => Math.round(x))).size).toBeGreaterThan(1);
 
-  // Shift-click all three, then align right: every right edge becomes equal.
+  // Clear the selection (the last dragged stamp is still selected), then Shift-click all three and align right: every right edge becomes equal.
+  await page.getByTestId("pdf-page-0").click({ position: { x: 5, y: 5 } });
   await boxes.nth(0).click({ modifiers: ["Shift"] });
   await boxes.nth(1).click({ modifiers: ["Shift"] });
   await boxes.nth(2).click({ modifiers: ["Shift"] });
