@@ -11,6 +11,9 @@ import { DEFAULT_SIZE, orphanStamps, placeableItems, stampKey, type PlaceableIte
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
+import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
+import { ROLE_LABELS } from "@/lib/workflow/labels";
+import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
 import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-only";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
@@ -42,10 +45,12 @@ export interface PdfPlacementProps {
    * Draw-on-PDF mode: dropping a palette element creates a form field and a stamp.
    * Returns the new stamp id so it can be selected.
    */
+  /** Change a field of the form from the stamp panel (e.g. who fills it). */
+  onFieldPatch?: (fieldId: string, patch: { filledBy?: FillerRole }) => void;
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -73,6 +78,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     history.current.past = [...history.current.past.slice(-49), latest.current];
     history.current.future = [];
   };
+  const roleOf = (s: PdfStamp): FillerRole | "none" => allFields(definition).find((f) => f.id === baseFieldId(s.fieldId))?.filledBy ?? "none";
+  const rolesUsed = [...new Set(mapping.stamps.map(roleOf))].filter((r): r is FillerRole => r !== "none");
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
 
   const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
@@ -328,6 +335,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           )}
           {onPreview && <Button className="ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
+        {rolesUsed.length > 0 && (
+          <ul aria-label="מקרא תפקידים" className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            {rolesUsed.map((r) => (
+              <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{ROLE_LABELS[r]}</li>
+            ))}
+          </ul>
+        )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
         <div className="space-y-4 overflow-auto rounded-lg bg-muted p-3 lg:max-h-[75vh]">
           {/* PDF space is physical (origin bottom-left, x to the right), so this subtree is LTR. */}
@@ -374,7 +388,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       onPointerDown={(e) => startDrag(e, s, "move")}
                       className={cn(
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
-                        inGroup ? "border-primary bg-primary/25" : "border-primary/60 bg-primary/10",
+                        inGroup ? ROLE_OVERLAY[roleOf(s)].boxActive : ROLE_OVERLAY[roleOf(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
@@ -422,6 +436,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 </div>
               ))}
             </div>
+            {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">מי ממלא</Label>
+                <Select className="h-9" aria-label="מי ממלא" value={roleOf(selectedStamp) === "none" ? "" : roleOf(selectedStamp)} onChange={(e) => onFieldPatch(baseFieldId(selectedStamp.fieldId), { filledBy: (e.target.value || undefined) as FillerRole | undefined })}>
+                  <option value="">ללא תפקיד מוגדר</option>
+                  {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </Select>
+              </div>
+            )}
             <StampStyleControls stamp={selectedStamp} pageCount={pages.length} onPatch={(patch) => patchStamp(selectedStamp.id, patch)} />
             <div className="space-y-1">
               <Label className="text-muted-foreground">עמוד</Label>

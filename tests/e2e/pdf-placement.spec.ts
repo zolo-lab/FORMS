@@ -109,3 +109,12 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
   await page.keyboard.press("Control+v");
   expect(await mapping()).toHaveLength(4);
 });
+
+test("colours stamps by role and shows a legend", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
+  await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
+  await page.getByLabel("מי ממלא").selectOption("approver");
+  await expect(page.getByLabel("מקרא תפקידים")).toContainText("מאשר");
+});

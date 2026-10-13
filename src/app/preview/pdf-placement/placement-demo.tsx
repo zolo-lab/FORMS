@@ -28,6 +28,9 @@ export function PlacementDemo() {
         pages={mapping.pages}
         mapping={mapping}
         onMappingChange={setMapping}
+        onFieldPatch={(fieldId, patch) =>
+          setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
+        }
         onDrawElement={(entry, page, at) => {
           const r = addPdfOnlyElement(definition, entry, page, at, () => nanoid(8));
           setDefinition(r.definition);
