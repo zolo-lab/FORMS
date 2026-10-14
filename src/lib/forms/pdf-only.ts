@@ -31,6 +31,10 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "date_signed", label: "תאריך חתימה", fieldType: null, stamp: { kind: "date_signed", align: "center" } },
 ];
 
+/** Fields drawn on the PDF live on their own page so they are not mixed with the regular questions. */
+export const PDF_FIELDS_PAGE_ID = "pdf_fields";
+export const PDF_FIELDS_PAGE_TITLE = "שדות במסמך";
+
 /** Smallest `<base>N` not used by any field in the form. */
 export function uniqueFieldId(def: FormDefinition, base: string): string {
   const used = new Set(allFields(def).map((f) => f.id));
@@ -44,7 +48,7 @@ export interface PdfOnlyResult {
   stamp: PdfStamp;
 }
 
-/** Add the field (if any) to the first form page and build the stamp at `box`. */
+/** Add the field (if any) to the dedicated PDF-fields page and build the stamp at `box`. */
 export function addPdfOnlyElement(
   def: FormDefinition,
   entry: PaletteEntry,
@@ -63,8 +67,13 @@ export function addPdfOnlyElement(
       label: entry.fieldLabel ?? entry.label,
       settings: { pdfOnly: true },
     };
-    const [first, ...rest] = def.pages;
-    definition = { ...def, pages: [{ ...first!, fields: [...first!.fields, field] }, ...rest] };
+    const has = def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID);
+    definition = {
+      ...def,
+      pages: has
+        ? def.pages.map((p) => (p.id === PDF_FIELDS_PAGE_ID ? { ...p, fields: [...p.fields, field] } : p))
+        : [...def.pages, { id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }],
+    };
   } else {
     // Stamp-only elements point at a fixed id that stampPdf never resolves.
     fieldId = `_${entry.id}`;
@@ -77,5 +86,7 @@ export function addPdfOnlyElement(
 export function dropPdfOnlyField(def: FormDefinition, fieldId: string): FormDefinition {
   const target = allFields(def).find((f) => f.id === fieldId);
   if (!target?.settings?.pdfOnly) return def;
-  return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.filter((f) => f.id !== fieldId) })) };
+  const pages = def.pages.map((p) => ({ ...p, fields: p.fields.filter((f) => f.id !== fieldId) }));
+  // The dedicated page goes away with its last field.
+  return { ...def, pages: pages.filter((p) => !(p.id === PDF_FIELDS_PAGE_ID && p.fields.length === 0)) };
 }
