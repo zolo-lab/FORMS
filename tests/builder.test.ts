@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addField, addPage, blankForm, duplicateField, findLocation, movePage, moveField, parseOptionsText,
-  publishIssues, removeField, removePage, renameFieldId, uniqueId, updateField,
+  pickerLabels, publishIssues, removeField, removePage, renameFieldId, uniqueId, updateField,
 } from "@/lib/forms/builder";
 import { FIELD_TYPES } from "@/lib/forms/field-types";
 import { parseFormDefinition } from "@/lib/forms/schema";
@@ -113,5 +113,15 @@ describe("builder: publish checks", () => {
   });
   it("reports schema errors", () => {
     expect(publishIssues({ ...blankForm(), pages: [] } as never).length).toBeGreaterThan(0);
+  });
+});
+
+describe("pickerLabels", () => {
+  it("adds the id only when labels collide", () => {
+    const m = pickerLabels([{ id: "a", label: "מספר" }, { id: "b", label: "מספר" }, { id: "c", label: "שם" }, { id: "d", label: " " }]);
+    expect(m.get("a")).toBe("מספר (a)");
+    expect(m.get("b")).toBe("מספר (b)");
+    expect(m.get("c")).toBe("שם");
+    expect(m.get("d")).toBe("d");
   });
 });

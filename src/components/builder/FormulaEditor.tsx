@@ -2,6 +2,7 @@
 import { Select, Textarea } from "@/components/ui/input";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { parseFormula, formulaRefs } from "@/lib/forms/formula";
+import { pickerLabels } from "@/lib/forms/builder";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 
 const FUNCTION_HELP = [
@@ -33,12 +34,13 @@ export function FormulaEditor({
 
   // Pickable references: every answer field except this one; table columns as {table.column}.
   const refs: { ref: string; label: string }[] = [];
+  const names = pickerLabels(allFields(def));
   for (const f of allFields(def)) {
     if (f.id === field.id || !FIELD_TYPE_META[f.type].hasAnswer) continue;
     if (f.type === "repeating_table") {
       for (const c of f.fields ?? []) refs.push({ ref: `${f.id}.${c.id}`, label: `${f.label || f.id} › ${c.label || c.id}` });
     } else {
-      refs.push({ ref: f.id, label: f.label || f.id });
+      refs.push({ ref: f.id, label: names.get(f.id) ?? f.label ?? f.id });
     }
   }
 

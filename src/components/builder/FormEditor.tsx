@@ -176,8 +176,15 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === "edit" && (
           <div className="grid h-full grid-cols-1 gap-4 p-4 lg:grid-cols-[14rem_1fr_20rem]">
-            <aside className="lg:overflow-auto"><Palette onAdd={addToEnd} /></aside>
-            <div className="lg:overflow-auto">
+            {/* On phones the canvas comes first and the palette folds into a drawer under it (builder-plan 2.2). */}
+            <aside className="order-2 lg:order-none lg:overflow-auto">
+              <details className="rounded-lg border bg-card p-3 lg:hidden">
+                <summary className="cursor-pointer text-sm font-medium">הוספת שדה</summary>
+                <div className="mt-3"><Palette onAdd={addToEnd} /></div>
+              </details>
+              <div className="hidden lg:block"><Palette onAdd={addToEnd} /></div>
+            </aside>
+            <div className="order-1 lg:order-none lg:overflow-auto">
               <Canvas
                 def={def}
                 selection={selection}
@@ -195,7 +202,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 onMovePage={(i, dir) => { commit(movePage(def, i, i + dir)); setSelection({ kind: "page", index: i + dir }); }}
               />
             </div>
-            <aside className="rounded-lg border bg-card p-3 lg:overflow-auto" aria-label="הגדרות">
+            <aside className="order-3 rounded-lg border bg-card p-3 lg:order-none lg:overflow-auto" aria-label="הגדרות">
               {selectedField ? (
                 <FieldSettings
                   key={selectedField.id}
