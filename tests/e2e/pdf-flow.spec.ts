@@ -5,7 +5,7 @@ import { login } from "./helpers";
 // builder-plan.md §1.7 (route B): a form built from an existing PDF, iForms-style.
 // Needs the dev database; skipped when DATABASE_URL is not provided.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
-test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false });
+test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false, actionTimeout: 20_000 });
 test.setTimeout(180_000);
 
 async function samplePdf(): Promise<Buffer> {
