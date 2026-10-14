@@ -3,7 +3,8 @@ import { Badge, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { listTemplates } from "@/server/forms-store";
-import { archiveFormAction, createFormAction, createPdfFormAction, duplicateFormAction, importFormAction } from "./actions";
+import { archiveFormAction, createFormAction, createFromTemplateAction, createPdfFormAction, duplicateFormAction, importFormAction } from "./actions";
+import { FORM_TEMPLATES } from "@/lib/forms/templates";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,23 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
           <Button type="submit" variant="outline" formAction={createPdfFormAction}>טופס מ-PDF</Button>
         </form>
       </div>
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">הייבוא נכשל: {error === "json" ? "הקובץ אינו JSON תקין" : "הגדרת הטופס אינה תקינה"}</p>}
+      <Card className="p-4">
+        <h2 className="mb-2 font-semibold">התחלה מתבנית</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {FORM_TEMPLATES.map((t) => (
+            <form key={t.id} action={createFromTemplateAction} className="flex flex-col gap-2 rounded-md border p-3">
+              <input type="hidden" name="template" value={t.id} />
+              <span className="font-medium">{t.name}</span>
+              <span className="text-sm text-muted-foreground">{t.description}</span>
+              <div className="mt-auto flex gap-2">
+                <Input name="title" placeholder={t.definition.title} aria-label={`שם הטופס מתבנית ${t.name}`} className="flex-1" />
+                <Button type="submit" variant="outline">יצירה מתבנית</Button>
+              </div>
+            </form>
+          ))}
+        </div>
+      </Card>
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">הייבוא נכשל: {error === "json" ? "הקובץ אינו JSON תקין" : error === "template" ? "התבנית לא נמצאה" : "הגדרת הטופס אינה תקינה"}</p>}
 
       <Card className="divide-y">
         {templates.length === 0 && <p className="p-6 text-center text-muted-foreground">עדיין אין טפסים. צרו את הראשון למעלה.</p>}

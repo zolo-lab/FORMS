@@ -58,7 +58,8 @@ export function ConditionEditor({
         );
       })}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => update([...set.rules, { field: "", op: "eq" }])}><Plus className="size-4" />הוספת תנאי</Button>
+        <Button variant="outline" size="sm" disabled={candidates.length === 0} onClick={() => update([...set.rules, { field: candidates[0]!.id, op: "eq" }])}><Plus className="size-4" />הוספת תנאי</Button>
+        {candidates.length === 0 && <p className="text-xs text-muted-foreground">אין עדיין שדה אחר שאפשר להתנות בו.</p>}
         {set.rules.length > 1 && (
           <Select aria-label="קשר בין התנאים" value={set.mode} onChange={(e) => update(set.rules, e.target.value as "all" | "any")} className="h-8 w-auto">
             <option value="all">כל התנאים (וגם)</option>

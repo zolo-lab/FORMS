@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "title": "טופס קליטת עובד",
+  "description": "המבקש ממלא את פרטי ההעסקה, העובד משלים פרטים אישיים וחותם.",
+  "settings": { "layout": "wizard", "submitLabel": "שליחה", "thankYou": "תודה, הטופס נשלח." },
+  "pages": [
+    {
+      "id": "p_employment",
+      "title": "פרטי ההעסקה (ממלא המבקש)",
+      "fields": [
+        { "id": "job_title", "type": "short_text", "label": "תפקיד", "required": true, "filledBy": "requester", "exportKey": "JobTitle" },
+        { "id": "start_date", "type": "date", "label": "תאריך תחילת עבודה", "required": true, "filledBy": "requester", "exportKey": "StartDate" },
+        { "id": "scope_pct", "type": "percent", "label": "היקף משרה", "required": true, "filledBy": "requester", "defaultValue": 100, "exportKey": "JobScope" },
+        { "id": "salary_type", "type": "radio", "label": "סוג שכר", "required": true, "filledBy": "requester",
+          "options": [ { "value": "monthly", "label": "חודשי" }, { "value": "hourly", "label": "שעתי" } ], "exportKey": "SalaryType" },
+        { "id": "salary_amount", "type": "currency", "label": "שכר (₪)", "required": true, "filledBy": "requester", "exportKey": "Salary" },
+        { "id": "manager_name", "type": "short_text", "label": "מנהל ישיר", "filledBy": "requester", "exportKey": "Manager" },
+        { "id": "requester_notes", "type": "long_text", "label": "הערות לחשבות שכר", "filledBy": "requester" }
+      ]
+    },
+    {
+      "id": "p_personal",
+      "title": "פרטים אישיים (ממלא העובד)",
+      "fields": [
+        { "id": "full_name", "type": "full_name", "label": "שם מלא", "required": true, "prefill": "employee.name" },
+        { "id": "id_number", "type": "id_number", "label": "מספר זהות", "required": true, "prefill": "employee.idNumber" },
+        { "id": "birth_date", "type": "date", "label": "תאריך לידה", "required": true },
+        { "id": "phone", "type": "phone", "label": "טלפון נייד", "required": true, "prefill": "employee.phone" },
+        { "id": "email", "type": "email", "label": "דוא\"ל", "required": true, "prefill": "employee.email" },
+        { "id": "address", "type": "address", "label": "כתובת מגורים", "required": true },
+        { "id": "bank", "type": "bank_account", "label": "חשבון בנק להפקדת שכר", "required": true }
+      ]
+    },
+    {
+      "id": "p_sign",
+      "title": "אישור וחתימה",
+      "fields": [
+        { "id": "declaration", "type": "consent", "label": "אני מאשר/ת שהפרטים שמסרתי נכונים ומלאים.", "required": true },
+        { "id": "signature", "type": "signature", "label": "חתימה", "required": true }
+      ]
+    }
+  ]
+}
