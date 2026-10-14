@@ -68,7 +68,16 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const [activePage, setActivePage] = useState(0);
   /** "צפה כ-": stamps of other roles are dimmed. */
   const [viewAs, setViewAs] = useState<FillerRole | "">("");
-  const [tableRows, setTableRows] = useState<Record<string, number>>({});
+  /** Rows offered per table in the list; at least as many as are already placed (so their names resolve). */
+  const [tableRowsSet, setTableRows] = useState<Record<string, number>>({});
+  const tableRows = useMemo(() => {
+    const out = { ...tableRowsSet };
+    for (const s of mapping.stamps) {
+      const c = tableCellOf(s.fieldId);
+      if (c) out[c.table] = Math.max(out[c.table] ?? 1, c.row + 1);
+    }
+    return out;
+  }, [tableRowsSet, mapping.stamps]);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const widest = Math.max(...pages.map((p) => p.width), 1);
