@@ -76,3 +76,31 @@ export function snapPosition(
 
   return { x: snapAxis("x"), y: snapAxis("y"), guides };
 }
+
+/**
+ * Where a new element from the palette lands (PDF coordinates, y grows upward).
+ * Below the most recently added box on the page (same start x); when that would leave the page, a staggered
+ * offset from the top-start corner. The first element on a page starts near the top-start corner.
+ */
+export function nextFreePosition(
+  dims: { width: number; height: number },
+  page: { width: number; height: number },
+  existing: Box[],
+  opts: { margin?: number; gap?: number } = {},
+): { x: number; y: number } {
+  const margin = opts.margin ?? 40;
+  const gap = opts.gap ?? 8;
+  const last = existing[existing.length - 1];
+  if (!last) return { x: margin, y: page.height - margin - dims.height };
+  const below = { x: last.x, y: last.y - gap - dims.height };
+  const free = (b: { x: number; y: number }) =>
+    b.y >= margin && !existing.some((o) => b.x < o.x + o.width && b.x + dims.width > o.x && b.y < o.y + o.height && b.y + dims.height > o.y);
+  if (free(below)) return below;
+  // Staggered: each try moves 12pt right and down from the top-start corner.
+  for (let i = 1; i < 40; i++) {
+    const p = { x: margin + i * 12, y: page.height - margin - dims.height - i * 12 };
+    if (p.x + dims.width > page.width - margin || p.y < margin) break;
+    if (free(p)) return p;
+  }
+  return { x: last.x + 12, y: Math.max(margin, last.y - 12) };
+}
