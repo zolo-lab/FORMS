@@ -393,7 +393,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
-                      <span className="pointer-events-none block truncate px-0.5 text-primary">{s.kind === "check" ? "X" : s.kind === "date_signed" ? "תאריך חתימה" : s.fieldId}</span>
+                      <span className="pointer-events-none block truncate px-0.5 text-primary">{s.kind === "check" ? "X" : s.kind === "date_signed" ? "תאריך חתימה" : labelOf(s)}</span>
                       {active && (
                         <span
                           aria-label="שינוי גודל"
