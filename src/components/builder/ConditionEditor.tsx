@@ -6,6 +6,7 @@ import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { OP_LABELS, coerceRuleValue, fromRuleSet, needsValue, toRuleSet, type Rule } from "@/lib/forms/condition-ui";
 import type { ComparisonOp, Condition, FormDefinition, FormField } from "@/lib/forms/schema";
 import { comparisonOps } from "@/lib/forms/schema";
+import { pickerLabels } from "@/lib/forms/builder";
 import { allFields } from "@/lib/forms/schema";
 import { resolveOptions } from "@/lib/forms/lookups";
 
@@ -30,6 +31,7 @@ export function ConditionEditor({
   }
   const candidates = allFields(def).filter((f) => f.id !== selfId && FIELD_TYPE_META[f.type].hasAnswer);
   const byId = new Map(candidates.map((f) => [f.id, f]));
+  const names = pickerLabels(candidates);
   const update = (rules: Rule[], mode = set.mode) => onChange(fromRuleSet({ mode, rules }));
   const patch = (i: number, r: Partial<Rule>) => update(set.rules.map((x, j) => (j === i ? { ...x, ...r } : x)));
 
@@ -44,7 +46,7 @@ export function ConditionEditor({
               <span className="shrink-0 text-muted-foreground">{i === 0 ? lead : set.mode === "all" ? "וגם" : "או"}</span>
               <Select aria-label="שדה" value={r.field} onChange={(e) => patch(i, { field: e.target.value, value: undefined })} className="h-9">
                 <option value="">בחר שדה…</option>
-                {candidates.map((f) => <option key={f.id} value={f.id}>{f.label || f.id}</option>)}
+                {candidates.map((f) => <option key={f.id} value={f.id}>{names.get(f.id)}</option>)}
               </Select>
               <Button variant="ghost" size="sm" aria-label="הסרת תנאי" onClick={() => update(set.rules.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
             </div>

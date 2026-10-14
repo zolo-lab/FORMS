@@ -263,3 +263,16 @@ export function publishIssues(def: FormDefinition): PublishIssue[] {
   });
   return issues;
 }
+
+/** Display names for a field picker: the label, plus "(id)" when another field in the list has the same label. */
+export function pickerLabels(fields: { id: string; label: string }[]): Map<string, string> {
+  const count = new Map<string, number>();
+  for (const f of fields) {
+    const l = f.label.trim() || f.id;
+    count.set(l, (count.get(l) ?? 0) + 1);
+  }
+  return new Map(fields.map((f) => {
+    const l = f.label.trim() || f.id;
+    return [f.id, (count.get(l) ?? 0) > 1 ? `${l} (${f.id})` : l];
+  }));
+}
