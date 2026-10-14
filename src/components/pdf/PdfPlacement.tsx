@@ -56,6 +56,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const [selected, setSelected] = useState<string | null>(null);
   /** Additional stamps selected with Shift/Ctrl-click (the primary one is `selected`). */
   const [extra, setExtra] = useState<string[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [guides, setGuides] = useState<{ page: number; axis: "x" | "y"; at: number }[]>([]);
   const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
@@ -443,6 +444,31 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                   <option value="">ללא תפקיד מוגדר</option>
                   {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </Select>
+              </div>
+            )}
+            {selectedStamp.kind === "stamp_image" && (
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">תמונת החותמת (PNG/JPG עד 300KB)</Label>
+                {selectedStamp.image && (
+                  // eslint-disable-next-line @next/next/no-img-element -- data URL chosen by the admin
+                  <img src={selectedStamp.image} alt="" className="max-h-20 rounded border bg-white p-1" />
+                )}
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  aria-label="תמונת החותמת"
+                  className="h-9"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 300 * 1024) { setImageError("התמונה גדולה מדי (עד 300KB)"); return; }
+                    setImageError(null);
+                    const reader = new FileReader();
+                    reader.onload = () => patchStamp(selectedStamp.id, { image: String(reader.result) });
+                    reader.readAsDataURL(file);
+                  }}
+                />
+                {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
               </div>
             )}
             <StampStyleControls stamp={selectedStamp} pageCount={pages.length} onPatch={(patch) => patchStamp(selectedStamp.id, patch)} />

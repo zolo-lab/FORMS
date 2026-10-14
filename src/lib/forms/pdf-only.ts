@@ -29,6 +29,9 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "signature", label: "חתימה", fieldType: "signature", fieldLabel: "חתימה", stamp: { kind: "signature" } },
   { id: "initials", label: "ראשי תיבות", fieldType: "short_text", fieldLabel: "ראשי תיבות", stamp: { kind: "initials" } },
   { id: "date_signed", label: "תאריך חתימה", fieldType: null, stamp: { kind: "date_signed", align: "center" } },
+  { id: "radio", label: "בחירה (רדיו)", fieldType: "radio", fieldLabel: "בחירה", stamp: { kind: "check", whenValue: "o1" } },
+  { id: "dropdown", label: "רשימה נפתחת", fieldType: "dropdown", fieldLabel: "רשימה", stamp: { kind: "text" } },
+  { id: "stamp", label: "חותמת (תמונה)", fieldType: null, stamp: { kind: "stamp_image" }, size: { width: 90, height: 90 } },
 ];
 
 /** Fields drawn on the PDF live on their own page so they are not mixed with the regular questions. */
@@ -67,6 +70,10 @@ export function addPdfOnlyElement(
       label: entry.fieldLabel ?? entry.label,
       settings: { pdfOnly: true },
     };
+    // Choice fields need options to be fillable; the admin renames them in the settings panel.
+    if (entry.fieldType === "radio" || entry.fieldType === "dropdown") {
+      field.options = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
+    }
     const has = def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID);
     definition = {
       ...def,

@@ -62,4 +62,17 @@ describe("pdf-only elements", () => {
     expect(restored.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields).toEqual([field]);
     expect(restorePdfOnlyField(restored, field)).toBe(restored);
   });
+
+  it("radio/dropdown elements come with options; the image stamp adds no field", () => {
+    const r = addPdfOnlyElement(empty(), entry("radio"), 0, { x: 0, y: 0 }, () => "r");
+    const f = r.definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields[0]!;
+    expect(f.type).toBe("radio");
+    expect(f.options?.length).toBe(2);
+    expect(r.stamp).toMatchObject({ kind: "check", whenValue: "o1" });
+    const d = addPdfOnlyElement(empty(), entry("dropdown"), 0, { x: 0, y: 0 }, () => "d");
+    expect(d.definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields[0]!.options?.length).toBe(2);
+    const s = addPdfOnlyElement(empty(), entry("stamp"), 0, { x: 0, y: 0 }, () => "s");
+    expect(s.definition.pages).toHaveLength(1);
+    expect(s.stamp).toMatchObject({ kind: "stamp_image", width: 90, height: 90 });
+  });
 });
