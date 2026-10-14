@@ -24,7 +24,7 @@ export function usePdfDocument(source: PdfSource | null) {
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        sharedWorker ??= new pdfjs.PDFWorker({ name: "gybs-pdf" });
+        sharedWorker ??= new pdfjs.PDFWorker();
         const loading = pdfjs.getDocument({ ...("url" in source ? { url: source.url } : { data: source.data.slice() }), worker: sharedWorker });
         task = loading;
         const loaded = await loading.promise;
