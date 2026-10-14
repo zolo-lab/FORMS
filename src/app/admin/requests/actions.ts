@@ -7,7 +7,7 @@ import { renderDefault } from "@/lib/notifications/templates";
 import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
-import { listPackagesForWizard } from "@/server/packages-store";
+import { getWizardPackage } from "@/server/packages-store";
 import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
 export interface ShareLink {
@@ -44,8 +44,9 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   if (phone && !normalizeIsraeliPhone(phone)) errors["subject.phone"] = "מספר טלפון לא תקין";
   if (input.send && !email && !phone) errors["subject.email"] = "נדרש מייל או טלפון כדי לשלוח לעובד";
 
-  const [packages, orgs] = await Promise.all([listPackagesForWizard(), listOrganizations()]);
-  const pkg = packages.find((p) => p.id === input.packageId);
+  // Only the chosen package (listing every package to find one was slow).
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations()]);
   const org = orgs.find((o) => o.id === input.organizationId);
   if (!pkg) errors["packageId"] = "ערכה לא נמצאה";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
