@@ -40,7 +40,7 @@ export async function listApiTemplates(orgId: string) {
       steps: p.workflow.steps.map((s) => ({ order: s.order, role: s.role, action: s.action })),
       /** The answers the caller must (or may) send in `answers`. */
       requesterFields: allFields(p.requesterDefinition)
-        .filter((f) => f.type !== "heading" && f.type !== "info_text" && f.type !== "image" && f.type !== "divider")
+        .filter((f) => f.type !== "heading" && f.type !== "info_text" && f.type !== "image" && f.type !== "divider" && f.type !== "section")
         .map((f) => ({ id: f.id, label: f.label, type: f.type, required: !!f.required })),
     }));
 }

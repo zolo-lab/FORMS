@@ -39,7 +39,7 @@ function Control(props: FieldProps & { renderChild: Parameters<typeof RepeatingT
     case "file_upload": return <FileUploadInput {...props} />;
     case "repeating_table": return <RepeatingTableInput {...props} renderChild={props.renderChild} />;
     case "hidden": return null;
-    case "heading": case "info_text": case "image": case "divider":
+    case "heading": case "info_text": case "image": case "divider": case "section":
       return <LayoutBlock field={props.field} />;
   }
 }

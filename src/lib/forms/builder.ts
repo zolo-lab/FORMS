@@ -42,7 +42,7 @@ export function newField(type: FieldType, taken: Set<string>): FormField {
     };
   }
   if (type === "repeating_table") field.fields = [{ id: "name", type: "short_text", label: "שם" }];
-  if (type === "yes_no" || type === "heading" || type === "info_text" || type === "divider") field.width = "full";
+  if (type === "yes_no" || type === "heading" || type === "info_text" || type === "divider" || type === "section") field.width = "full";
   return field;
 }
 
