@@ -282,6 +282,8 @@ function evalAst(a: Ast, ctx: FormulaContext): Value {
             return round6(a.op === "/" ? x / y : x % y);
           }
           if (y === null && num(l) === null && l === null && r === null) return null;
+          // A product with a missing factor is unknown, not 0 (e.g. hours × rate with no rate yet).
+          if (a.op === "*" && (num(l) === null || y === null)) return null;
           const yy = y ?? 0;
           return round6(a.op === "+" ? x + yy : a.op === "-" ? x - yy : x * yy);
         }

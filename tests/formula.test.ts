@@ -18,6 +18,12 @@ describe("formula", () => {
     expect(ev("{a} + {b}", {})).toBe(null);
   });
 
+  it("a product with an empty factor is empty, not 0", () => {
+    expect(ev("{a} * 2", {})).toBe(null);
+    expect(ev("{a} * {b}", { a: 3 })).toBe(null);
+    expect(ev("{a} * 2", { a: 0 })).toBe(0);
+  });
+
   it("division by zero or empty gives empty", () => {
     expect(ev("{a} / {b}", { a: 5, b: 0 })).toBe(null);
     expect(ev("{a} / {b}", { a: 5 })).toBe(null);
