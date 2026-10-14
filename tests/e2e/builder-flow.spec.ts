@@ -36,8 +36,8 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // Condition: the salary shows only for monthly employment.
   await page.getByRole("button", { name: /^שכר/ }).first().click();
   await page.getByRole("button", { name: "הוספת תנאי" }).first().click();
-  await page.getByLabel("שדה").first().selectOption({ label: "סוג העסקה" });
-  await page.getByLabel("ערך").first().selectOption({ label: "חודשי" });
+  await page.getByRole("combobox", { name: "שדה", exact: true }).first().selectOption({ label: "סוג העסקה" });
+  await page.getByRole("combobox", { name: "ערך", exact: true }).first().selectOption({ label: "חודשי" });
 
   // Second page with one field.
   await page.getByRole("button", { name: "עמוד חדש" }).click();
