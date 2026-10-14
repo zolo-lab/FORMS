@@ -23,5 +23,6 @@ export function PageCanvas({ doc, pageNumber, scale }: { doc: PDFDocumentProxy; 
     })();
     return () => { cancelled = true; task?.cancel(); };
   }, [doc, pageNumber, scale]);
-  return <canvas ref={ref} aria-label={`עמוד ${pageNumber} ב-PDF`} className="block bg-card" />;
+  // dir="ltr": canvas text inherits the page direction, and pdf.js positions glyphs assuming LTR (under RTL letters went missing).
+  return <canvas ref={ref} dir="ltr" aria-label={`עמוד ${pageNumber} ב-PDF`} className="block bg-card" />;
 }

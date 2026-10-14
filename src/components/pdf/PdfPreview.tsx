@@ -33,7 +33,9 @@ export function PdfPreview({ data, downloadUrl, fileName }: { data: Uint8Array; 
       {downloadUrl && (
         <a href={downloadUrl} download={fileName ?? "preview.pdf"} className="self-start text-sm text-primary underline">הורדת ה-PDF</a>
       )}
-      <div ref={box} className="min-h-0 flex-1 space-y-3 overflow-auto rounded border bg-muted p-2" data-testid="pdf-preview">
+      {/* LTR on purpose: a canvas inherits the page direction, and pdf.js draws each glyph at an x position that
+          assumes left-to-right; under dir="rtl" every glyph shifted by its own width and narrow letters (י, ו) vanished. */}
+      <div ref={box} dir="ltr" className="min-h-0 flex-1 space-y-3 overflow-auto rounded border bg-muted p-2" data-testid="pdf-preview">
         {error && <p role="alert" className="text-destructive">{error}</p>}
         {!doc && !error && <p role="status" className="py-16 text-center text-sm text-muted-foreground">טוען את ה-PDF…</p>}
         {doc && width > 0 && sizes.map((s, i) => (
