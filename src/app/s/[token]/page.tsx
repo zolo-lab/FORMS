@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
 import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
+import { withPrefill } from "@/lib/forms/prefill";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
 import { SigningClient } from "./signing-client";
@@ -48,7 +49,10 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           token={token}
           definition={ctx.definition}
           pipeDefinition={pipeDefinition(ctx.definition, ctx.fullDefinition)}
-          initialAnswers={answersForClient(ctx.definition, ctx.answers)}
+          initialAnswers={answersForClient(
+            ctx.definition,
+            withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone }, ctx.answers),
+          )}
           filled={ctx.filled}
           role={ctx.role}
           subjectName={ctx.request.subjectName}
