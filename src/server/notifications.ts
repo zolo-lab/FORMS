@@ -4,6 +4,7 @@
  */
 import { and, asc, eq, inArray, lt, lte } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { emailHtml } from "@/lib/email-html";
 import { MAX_ATTEMPTS, afterAttempt } from "@/lib/notifications/templates";
 import { getSmsProvider } from "@/server/sms/provider";
 
@@ -78,7 +79,7 @@ async function sendViaResend(apiKey: string, from: Sender, to: string, subject: 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: fromHeader, to: [to], subject, text }),
+    body: JSON.stringify({ from: fromHeader, to: [to], subject, text, html: emailHtml(text, from.name) }),
   });
   const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
   if (res.ok) return { ok: true, id: json.id };
