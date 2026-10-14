@@ -20,41 +20,56 @@ export interface WizardPackage {
   documentTitles: string[];
 }
 
-async function toWizardPackage(pkg: typeof packageTemplates.$inferSelect): Promise<WizardPackage> {
-  const items = await db.select().from(packageTemplateItems).where(eq(packageTemplateItems.packageTemplateId, pkg.id)).orderBy(asc(packageTemplateItems.order));
-  const docs: PackageDoc[] = [];
-  for (const it of items) {
-    const [t] = await db.select().from(formTemplates).where(eq(formTemplates.id, it.templateId));
-    if (!t?.publishedVersion) continue;
-    const versions = await db.select().from(formTemplateVersions).where(eq(formTemplateVersions.templateId, it.templateId));
-    const v = versions.find((x) => x.version === t.publishedVersion);
-    if (v) docs.push({ title: t.title, definition: v.definition });
-  }
-  const merged = docs.length ? mergedDefinitionForStep(docs, "requester") : { schemaVersion: 1 as const, title: pkg.name, pages: [], settings: { layout: "single" as const } };
-  const requesterDefinition = roleView(merged, {}, "requester").definition;
-  return {
-    id: pkg.id,
-    name: pkg.name,
-    description: pkg.description,
-    organizationId: pkg.organizationId,
-    workflow: pkg.workflow,
-    requesterDefinition: { ...requesterDefinition, settings: { ...requesterDefinition.settings, layout: "single" } },
-    documentTitles: docs.map((d) => d.title),
-  };
+/**
+ * Build wizard packages with a fixed number of queries (items, forms, published versions in bulk).
+ * It used to run ~5 queries per package one after another; with 86 packages in the dev DB that took
+ * over 30 seconds from CI and the request wizard timed out.
+ */
+async function toWizardPackages(pkgs: (typeof packageTemplates.$inferSelect)[]): Promise<WizardPackage[]> {
+  if (pkgs.length === 0) return [];
+  const items = await db
+    .select()
+    .from(packageTemplateItems)
+    .where(inArray(packageTemplateItems.packageTemplateId, pkgs.map((p) => p.id)))
+    .orderBy(asc(packageTemplateItems.order));
+  const templateIds = [...new Set(items.map((i) => i.templateId))];
+  const templates = templateIds.length ? await db.select().from(formTemplates).where(inArray(formTemplates.id, templateIds)) : [];
+  const versions = templateIds.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.templateId, templateIds)) : [];
+  const templateById = new Map(templates.map((t) => [t.id, t]));
+  const published = new Map<string, (typeof versions)[number]>();
+  for (const v of versions) if (templateById.get(v.templateId)?.publishedVersion === v.version) published.set(v.templateId, v);
+
+  return pkgs.map((pkg) => {
+    const docs: PackageDoc[] = [];
+    for (const it of items.filter((i) => i.packageTemplateId === pkg.id)) {
+      const t = templateById.get(it.templateId);
+      const v = published.get(it.templateId);
+      if (t && v) docs.push({ title: t.title, definition: v.definition });
+    }
+    const merged = docs.length ? mergedDefinitionForStep(docs, "requester") : { schemaVersion: 1 as const, title: pkg.name, pages: [], settings: { layout: "single" as const } };
+    const requesterDefinition = roleView(merged, {}, "requester").definition;
+    return {
+      id: pkg.id,
+      name: pkg.name,
+      description: pkg.description,
+      organizationId: pkg.organizationId,
+      workflow: pkg.workflow,
+      requesterDefinition: { ...requesterDefinition, settings: { ...requesterDefinition.settings, layout: "single" } },
+      documentTitles: docs.map((d) => d.title),
+    };
+  });
 }
 
 /** Active packages with the form the requester must fill, built from each form's published version. */
 export async function listPackagesForWizard(): Promise<WizardPackage[]> {
   const pkgs = await db.select().from(packageTemplates).where(isNull(packageTemplates.archivedAt)).orderBy(asc(packageTemplates.name));
-  const out: WizardPackage[] = [];
-  for (const pkg of pkgs) out.push(await toWizardPackage(pkg));
-  return out;
+  return toWizardPackages(pkgs);
 }
 
 /** One active package in the same shape, or null (unknown or archived). */
 export async function getWizardPackage(id: string): Promise<WizardPackage | null> {
   const [pkg] = await db.select().from(packageTemplates).where(and(eq(packageTemplates.id, id), isNull(packageTemplates.archivedAt)));
-  return pkg ? toWizardPackage(pkg) : null;
+  return pkg ? ((await toWizardPackages([pkg]))[0] ?? null) : null;
 }
 
 // ───────────────────────── Admin: manage packages ─────────────────────────
