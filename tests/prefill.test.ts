@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withPrefill } from "@/lib/forms/prefill";
+import { PREFILL_KEYS, withPrefill } from "@/lib/forms/prefill";
 import type { FormDefinition } from "@/lib/forms/schema";
 
 const def: FormDefinition = {
@@ -35,5 +35,13 @@ describe("withPrefill", () => {
   it("never overwrites a stored answer", () => {
     const a = withPrefill(def, subject, { m: "mine@x.co" });
     expect(a.m).toBe("mine@x.co");
+  });
+
+  it("every key offered in the builder list fills something", () => {
+    const subj = { name: "דנה כהן", idNumber: "000000018", email: "d@example.com", phone: "0501234567" };
+    for (const { key } of PREFILL_KEYS) {
+      const d: FormDefinition = { schemaVersion: 1, title: "t", pages: [{ id: "p", title: "", fields: [{ id: "f", type: "short_text", label: "f", prefill: key }] }] };
+      expect(withPrefill(d, subj, {}).f, key).toBeTruthy();
+    }
   });
 });

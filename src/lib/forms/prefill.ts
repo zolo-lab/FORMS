@@ -9,6 +9,16 @@ export interface PrefillSubject {
   phone?: string | null;
 }
 
+/** Data a field can be pre-filled from (the request's employee). Shown as a list in the builder. */
+export const PREFILL_KEYS = [
+  { key: "employee.name", label: "שם מלא של העובד" },
+  { key: "employee.firstName", label: "שם פרטי של העובד" },
+  { key: "employee.lastName", label: "שם משפחה של העובד" },
+  { key: "employee.idNumber", label: "מספר זהות של העובד" },
+  { key: "employee.email", label: "מייל של העובד" },
+  { key: "employee.phone", label: "טלפון של העובד" },
+] as const;
+
 /** Splits "ישראל בן דוד" into first "ישראל" and last "בן דוד". */
 function splitName(name: string): { first: string; last: string } {
   const [first = "", ...rest] = name.trim().split(/\s+/);

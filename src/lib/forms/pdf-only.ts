@@ -24,6 +24,8 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "long", label: "טקסט רב-שורה", fieldType: "long_text", fieldLabel: "פסקה", stamp: { kind: "text", multiline: true }, size: { width: 220, height: 60 } },
   { id: "id", label: 'ת"ז בתאים', fieldType: "id_number", fieldLabel: "מספר זהות", stamp: { kind: "comb", comb: { cells: 9 } }, size: { width: 180, height: 20 } },
   { id: "phone", label: "טלפון", fieldType: "phone", fieldLabel: "טלפון", stamp: { kind: "text" } },
+  { id: "email", label: "דוא\"ל", fieldType: "email", fieldLabel: "דוא\"ל", stamp: { kind: "text", align: "left" }, size: { width: 160, height: 16 } },
+  { id: "number", label: "מספר", fieldType: "number", fieldLabel: "מספר", stamp: { kind: "text", align: "center" }, size: { width: 40, height: 16 } },
   { id: "date", label: "תאריך", fieldType: "date", fieldLabel: "תאריך", stamp: { kind: "text", align: "center" }, size: { width: 80, height: 16 } },
   { id: "check", label: "תיבת סימון", fieldType: "consent", fieldLabel: "אישור", stamp: { kind: "check" } },
   { id: "signature", label: "חתימה", fieldType: "signature", fieldLabel: "חתימה", stamp: { kind: "signature" } },

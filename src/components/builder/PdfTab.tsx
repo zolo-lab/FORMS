@@ -7,6 +7,7 @@ import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
+import { tableCellOf } from "@/lib/forms/pdf-items";
 import { addPdfOnlyElement, clonePdfOnlyField, dropPdfOnlyField, pdfOnlyFieldOf, restorePdfOnlyField } from "@/lib/forms/pdf-only";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 
@@ -136,7 +137,13 @@ export function PdfTab({
           }}
           onFieldPatch={(fieldId, patch) => {
             const d = defRef.current;
-            changeDefinition({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) });
+            // A table cell ("children[0].birth") edits its column.
+            const cell = tableCellOf(fieldId);
+            const apply = (f: FormField): FormField => {
+              if (cell) return f.id === cell.table ? { ...f, fields: f.fields?.map((c) => (c.id === cell.column ? { ...c, ...patch } : c)) } : f;
+              return f.id === fieldId ? { ...f, ...patch } : f;
+            };
+            changeDefinition({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map(apply) })) });
           }}
           onCloneField={(fieldId) => {
             const r = clonePdfOnlyField(defRef.current, fieldId);

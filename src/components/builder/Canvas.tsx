@@ -9,6 +9,7 @@ import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { FieldIcon } from "./field-icon";
+import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { DRAG_FIELD, DRAG_TYPE } from "./Palette";
 
 export type Selection = { kind: "field"; id: string } | { kind: "page"; index: number };
@@ -88,7 +89,7 @@ export function Canvas(p: CanvasProps) {
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {FIELD_TYPE_META[f.type].label}
-                            {f.filledBy && f.filledBy !== "employee" ? ` · ממלא: ${f.filledBy}` : ""}
+                            {f.filledBy && f.filledBy !== "employee" ? ` · ממלא: ${ROLE_LABELS[f.filledBy]}` : ""}
                             {f.visibleIf ? " · מותנה" : ""}
                           </span>
                         </span>

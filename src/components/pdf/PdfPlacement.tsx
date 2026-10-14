@@ -106,8 +106,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const roleOf = (s: PdfStamp): FillerRole | "none" => allFields(definition).find((f) => f.id === baseFieldId(s.fieldId))?.filledBy ?? "none";
   const rolesUsed = [...new Set(mapping.stamps.map(roleOf))].filter((r): r is FillerRole => r !== "none");
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
-  /** The form field a stamp writes (table cells resolve to no field: their column is edited in the form editor). */
-  const fieldOf = (s: PdfStamp): FormField | undefined => allFields(definition).find((f) => f.id === s.fieldId);
+  /** The form field a stamp writes; a table cell resolves to its column. */
+  const fieldOf = (s: PdfStamp): FormField | undefined => {
+    const cell = tableCellOf(s.fieldId);
+    if (cell) return allFields(definition).find((f) => f.id === cell.table)?.fields?.find((c) => c.id === cell.column);
+    return allFields(definition).find((f) => f.id === s.fieldId);
+  };
+  /** What a box on the page says: the field's own name (all text boxes used to read "טקסט"). */
+  const chipOf = (s: PdfStamp) => {
+    if (s.kind === "check") return "X";
+    if (s.kind === "date_signed") return "תאריך חתימה";
+    const f = fieldOf(s);
+    const cell = tableCellOf(s.fieldId);
+    const name = f?.label || labelOf(s);
+    const part = s.part ? ` · ${labelOf(s)}` : "";
+    return cell ? `${name} ${cell.row + 1}` : `${name}${part}`;
+  };
 
   const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
   const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -487,7 +501,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
-                      <span className="pointer-events-none block truncate px-0.5 text-primary">{s.kind === "check" ? "X" : s.kind === "date_signed" ? "תאריך חתימה" : labelOf(s)}</span>
+                      <span className="pointer-events-none block truncate px-0.5 text-primary" title={chipOf(s)}>{chipOf(s)}</span>
                       {active && (
                         <span
                           aria-label="שינוי גודל"
