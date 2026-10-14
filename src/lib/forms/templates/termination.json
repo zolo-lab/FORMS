@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "title": "טופס סיום העסקה",
+  "description": "המבקש ממלא את פרטי הסיום, העובד מאשר וחותם.",
+  "settings": { "layout": "wizard", "submitLabel": "שליחה", "thankYou": "תודה, הטופס נשלח." },
+  "pages": [
+    {
+      "id": "p_end",
+      "title": "פרטי הסיום (ממלא המבקש)",
+      "fields": [
+        { "id": "end_date", "type": "date", "label": "תאריך סיום העסקה", "required": true, "filledBy": "requester", "exportKey": "EndDate" },
+        { "id": "end_reason", "type": "radio", "label": "סיבת הסיום", "required": true, "filledBy": "requester",
+          "options": [ { "value": "resign", "label": "התפטרות" }, { "value": "dismiss", "label": "פיטורים" }, { "value": "contract", "label": "סיום חוזה" } ], "allowOther": true, "exportKey": "EndReason" },
+        { "id": "notice_given", "type": "yes_no", "label": "ניתנה הודעה מוקדמת כנדרש?", "required": true, "filledBy": "requester" },
+        { "id": "last_work_day", "type": "date", "label": "יום עבודה אחרון בפועל", "filledBy": "requester" },
+        { "id": "requester_notes", "type": "long_text", "label": "הערות לחשבות שכר", "filledBy": "requester" }
+      ]
+    },
+    {
+      "id": "p_employee",
+      "title": "אישור העובד",
+      "fields": [
+        { "id": "full_name", "type": "full_name", "label": "שם מלא", "required": true, "prefill": "employee.name" },
+        { "id": "id_number", "type": "id_number", "label": "מספר זהות", "required": true, "prefill": "employee.idNumber" },
+        { "id": "equipment_returned", "type": "checkboxes", "label": "ציוד שהוחזר",
+          "options": [ { "value": "key", "label": "מפתחות" }, { "value": "card", "label": "כרטיס עובד" }, { "value": "laptop", "label": "מחשב נייד" }, { "value": "phone", "label": "טלפון" } ] },
+        { "id": "forward_email", "type": "email", "label": "דוא\"ל לקבלת טופס 161 ותלוש אחרון", "required": true, "prefill": "employee.email" },
+        { "id": "declaration", "type": "consent", "label": "אני מאשר/ת את פרטי סיום ההעסקה.", "required": true },
+        { "id": "signature", "type": "signature", "label": "חתימה", "required": true }
+      ]
+    }
+  ]
+}

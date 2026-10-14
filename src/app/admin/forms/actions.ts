@@ -3,10 +3,20 @@ import { redirect } from "next/navigation";
 import { createTemplate, duplicateTemplate, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
+import { findTemplate } from "@/lib/forms/templates";
 
 export async function createFormAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim() || "טופס חדש";
   const id = await createTemplate(title);
+  redirect(`/admin/forms/${id}`);
+}
+
+/** A form that starts from one of the built-in templates (docs/builder-plan.md §2.1). */
+export async function createFromTemplateAction(formData: FormData) {
+  const t = findTemplate(String(formData.get("template") ?? ""));
+  if (!t) redirect("/admin/forms?error=template");
+  const title = String(formData.get("title") ?? "").trim() || t.definition.title;
+  const id = await createTemplate(title, { ...t.definition, title });
   redirect(`/admin/forms/${id}`);
 }
 
