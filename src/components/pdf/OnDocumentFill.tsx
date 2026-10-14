@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SignatureInput } from "@/components/forms/fields/signature";
-import { STATIC_LOOKUPS } from "@/lib/forms/lookups";
+import { SignaturePicker } from "@/components/forms/fields/signature";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Answers } from "@/lib/forms/conditions";
@@ -118,17 +117,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
           );
         })}
       <Dialog open={!!signing} onClose={() => setSigning(null)} title="חתימה" className="sm:w-[min(92vw,40rem)]">
-        {signing && (
-          <SignatureInput
-            field={signing.field}
-            domId="od-signature"
-            value={rest.answers[signing.field.id]}
-            onChange={(v) => { setField(signing.field.id, v); setSigning(null); }}
-            disabled={false}
-            invalid={false}
-            lookups={STATIC_LOOKUPS}
-          />
-        )}
+        {signing && <SignaturePicker onCancel={() => setSigning(null)} onSave={(v) => { setField(signing.field.id, v); setSigning(null); }} />}
       </Dialog>
     </div>
   );
