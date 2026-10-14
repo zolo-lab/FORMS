@@ -106,8 +106,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const roleOf = (s: PdfStamp): FillerRole | "none" => allFields(definition).find((f) => f.id === baseFieldId(s.fieldId))?.filledBy ?? "none";
   const rolesUsed = [...new Set(mapping.stamps.map(roleOf))].filter((r): r is FillerRole => r !== "none");
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
-  /** The form field a stamp writes (table cells resolve to no field: their column is edited in the form editor). */
-  const fieldOf = (s: PdfStamp): FormField | undefined => allFields(definition).find((f) => f.id === s.fieldId);
+  /** The form field a stamp writes; a table cell resolves to its column. */
+  const fieldOf = (s: PdfStamp): FormField | undefined => {
+    const cell = tableCellOf(s.fieldId);
+    if (cell) return allFields(definition).find((f) => f.id === cell.table)?.fields?.find((c) => c.id === cell.column);
+    return allFields(definition).find((f) => f.id === s.fieldId);
+  };
+  /** What a box on the page says: the field's own name (all text boxes used to read "טקסט"). */
+  const chipOf = (s: PdfStamp) => {
+    if (s.kind === "check") return "X";
+    if (s.kind === "date_signed") return "תאריך חתימה";
+    const f = fieldOf(s);
+    const cell = tableCellOf(s.fieldId);
+    const name = f?.label || labelOf(s);
+    const part = s.part ? ` · ${labelOf(s)}` : "";
+    return cell ? `${name} ${cell.row + 1}` : `${name}${part}`;
+  };
 
   const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
   const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -487,7 +501,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
-                      <span className="pointer-events-none block truncate px-0.5 text-primary">{s.kind === "check" ? "X" : s.kind === "date_signed" ? "תאריך חתימה" : labelOf(s)}</span>
+                      <span className="pointer-events-none block truncate px-0.5 text-primary" title={chipOf(s)}>{chipOf(s)}</span>
                       {active && (
                         <span
                           aria-label="שינוי גודל"
@@ -607,6 +621,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 {pages.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}
               </Select>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              title="אותה תשובה תיכתב במקום נוסף (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
+              onClick={() => {
+                const pg = pages[selectedStamp.page]!;
+                const c = clampBox({ ...selectedStamp, x: selectedStamp.x + 12, y: selectedStamp.y - 12 }, pg.width, pg.height);
+                const copy = { ...selectedStamp, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+                setStamps([...mapping.stamps, copy]);
+                select(copy.id);
+                reveal(copy.id);
+              }}
+            >
+              מופע נוסף של אותה תשובה
+            </Button>
             <Button variant="destructive" size="sm" onClick={() => { setStamps(mapping.stamps.filter((s) => s.id !== selectedStamp.id)); setSelected(null); }}>
               <Trash2 className="size-4" />הסרת החותמת
             </Button>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { PREFILL_KEYS } from "@/lib/forms/prefill";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/checkbox";
@@ -296,8 +297,12 @@ export function FieldSettings({
               <option value="">אוטומטי</option><option value="full">מלא</option><option value="half">חצי</option><option value="third">שליש</option>
             </Select>
           </Row>
-          <Row label="מילוי אוטומטי מנתוני העובד/הבקשה" hint='למשל employee.firstName'>
-            <Input dir="ltr" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })} />
+          <Row label="מילוי אוטומטי מנתוני העובד/הבקשה">
+            <Select aria-label="מילוי אוטומטי מנתוני העובד/הבקשה" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })}>
+              <option value="">ללא</option>
+              {PREFILL_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+              {field.prefill && !PREFILL_KEYS.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
+            </Select>
           </Row>
         </Section>
       )}

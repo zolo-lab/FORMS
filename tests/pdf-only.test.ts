@@ -77,6 +77,9 @@ describe("pdf-only elements", () => {
     expect(f.type).toBe("radio");
     expect(f.options?.length).toBe(2);
     expect(r.stamp).toMatchObject({ kind: "check", whenValue: "o1" });
+    const m = addPdfOnlyElement(empty(), entry("multi"), 0, { x: 0, y: 0 }, () => "m");
+    expect(m.definition.pages[0]!.fields[0]).toMatchObject({ type: "checkboxes", options: [{ value: "o1" }, { value: "o2" }] });
+    expect(m.stamp).toMatchObject({ kind: "check", whenValue: "o1" });
     const d = addPdfOnlyElement(empty(), entry("dropdown"), 0, { x: 0, y: 0 }, () => "d");
     expect(d.definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields[0]!.options?.length).toBe(2);
     const s = addPdfOnlyElement(empty(), entry("stamp"), 0, { x: 0, y: 0 }, () => "s");
