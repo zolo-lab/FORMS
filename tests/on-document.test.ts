@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coversAll, inputAttrs, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { coversAll, inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields } from "@/lib/forms/schema";
 import { sampleForm } from "./fixtures/sample-form";
@@ -97,5 +97,18 @@ describe("comb, initials and computed fields", () => {
     expect(inputAttrs(f("idNumber")).inputMode).toBe("numeric");
     expect(inputAttrs(f("mobile")).type).toBe("tel");
     expect(inputAttrs(f("firstName")).type).toBe("text");
+  });
+});
+
+describe("isLockedOnDocument", () => {
+  it("a plain field (no disabledIf) is editable", () => {
+    expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א" }, {})).toBe(false);
+  });
+  it("locks computed, read-only and disabledIf-true fields", () => {
+    expect(isLockedOnDocument({ id: "a", type: "number", label: "א", formula: "1 + 1" }, {})).toBe(true);
+    expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א", readOnly: true }, {})).toBe(true);
+    const cond = { field: "x", op: "eq" as const, value: "1" };
+    expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א", disabledIf: cond }, { x: "1" })).toBe(true);
+    expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א", disabledIf: cond }, { x: "2" })).toBe(false);
   });
 });

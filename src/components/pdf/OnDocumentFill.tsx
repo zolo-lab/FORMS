@@ -11,7 +11,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
-import { inputAttrs, isComputedOrLocked, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument } from "./usePdfDocument";
@@ -78,7 +78,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                   const field = fields.get(s.fieldId)!;
                   const b = pdfBoxToScreen(s, pg.height, scale);
                   const value = shown[s.fieldId];
-                  const locked = isComputedOrLocked(field) || evaluateCondition(field.disabledIf, shown);
+                  const locked = isLockedOnDocument(field, shown);
                   if (!evaluateCondition(field.visibleIf, shown)) return null;
                   const invalid = errorFields.has(s.fieldId);
                   const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(10, Math.min(b.height * 0.7, 16)) } as const;

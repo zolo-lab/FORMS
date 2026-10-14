@@ -1,4 +1,5 @@
 /** Pure helpers for "fill on the document": which stamps get an input, and how input maps to answers. */
+import { evaluateCondition, type Answers } from "@/lib/forms/conditions";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
@@ -36,6 +37,11 @@ export function inputAttrs(field: FormField): { type: string; inputMode?: "numer
 /** Fields the signer can't type into: computed by a formula or read-only. */
 export function isComputedOrLocked(field: FormField): boolean {
   return !!field.formula || !!field.readOnly;
+}
+
+/** Locked on the document: computed, read-only, or its `disabledIf` holds. A field without `disabledIf` is never locked by it. */
+export function isLockedOnDocument(field: FormField, answers: Answers): boolean {
+  return isComputedOrLocked(field) || (!!field.disabledIf && evaluateCondition(field.disabledIf, answers));
 }
 
 export function readText(_field: FormField, value: unknown, stamp: StampLike): string {
