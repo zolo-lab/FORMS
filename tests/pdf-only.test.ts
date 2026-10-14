@@ -17,6 +17,14 @@ describe("pdf-only elements", () => {
     expect(pdfMappingSchema.safeParse({ schemaVersion: 1, pages: [{ width: 1, height: 1 }], stamps: [stamp] }).success).toBe(true);
   });
 
+  it("a fresh PDF form uses its empty first page for the drawn fields (no empty page left)", () => {
+    const r = addPdfOnlyElement(empty(), entry("text"), 0, { x: 0, y: 0 }, () => "s");
+    expect(r.definition.pages).toHaveLength(1);
+    expect(r.definition.pages[0]).toMatchObject({ id: PDF_FIELDS_PAGE_ID, title: "שדות במסמך" });
+    const dropped = dropPdfOnlyField(r.definition, r.stamp.fieldId);
+    expect(dropped.pages).toHaveLength(1);
+  });
+
   it("puts drawn fields on their own page, not the regular questions", () => {
     const base = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "שם" }] }] }).data!;
     const r = addPdfOnlyElement(base, entry("text"), 0, { x: 0, y: 0 }, () => "s");
@@ -47,7 +55,7 @@ describe("pdf-only elements", () => {
   it("drops only pdf-only fields", () => {
     const { definition, stamp } = addPdfOnlyElement(empty(), entry("signature"), 0, { x: 0, y: 0 }, () => "x");
     const dropped = dropPdfOnlyField(definition, stamp.fieldId);
-    expect(dropped.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID)).toBe(false);
+    expect(dropped.pages).toHaveLength(1);
     expect(dropped.pages[0]!.fields).toHaveLength(0);
     const normal = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "א" }] }] }).data!;
     expect(dropPdfOnlyField(normal, "a")).toBe(normal);
@@ -72,7 +80,7 @@ describe("pdf-only elements", () => {
     const d = addPdfOnlyElement(empty(), entry("dropdown"), 0, { x: 0, y: 0 }, () => "d");
     expect(d.definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields[0]!.options?.length).toBe(2);
     const s = addPdfOnlyElement(empty(), entry("stamp"), 0, { x: 0, y: 0 }, () => "s");
-    expect(s.definition.pages).toHaveLength(1);
+    expect(s.definition.pages[0]!.fields).toHaveLength(0);
     expect(s.stamp).toMatchObject({ kind: "stamp_image", width: 90, height: 90 });
   });
 });
