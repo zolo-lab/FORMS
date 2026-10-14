@@ -25,7 +25,7 @@ export const FIXED_HEADERS = ["מזהה בקשה", "שם", 'ת"ז', "ארגון"
 function columnOf(f: { id: string; exportKey?: string; type: string }) {
   return f.exportKey?.trim() || f.id;
 }
-const SKIP = new Set(["signature", "repeating_table", "heading", "info_text", "image", "divider", "file_upload", "hidden"]);
+const SKIP = new Set(["signature", "repeating_table", "heading", "info_text", "image", "divider", "section", "file_upload", "hidden"]);
 
 export function buildExportTable(requests: ExportRequest[]): string[][] {
   const columns: string[] = [];

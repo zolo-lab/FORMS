@@ -214,6 +214,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
     case "info_text":
     case "image":
     case "divider":
+    case "section":
       return null;
   }
 }
