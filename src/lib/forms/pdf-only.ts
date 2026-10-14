@@ -113,6 +113,18 @@ export function restorePdfOnlyField(def: FormDefinition, field: FormField): Form
   return { ...def, pages: pagesWithPdfField(def, field) };
 }
 
+/**
+ * Copy of a pdf-only field under a new id (copy/paste of a drawn element makes a new field, like iForms).
+ * Returns null for regular form fields: pasting their stamp just draws the same answer twice.
+ */
+export function clonePdfOnlyField(def: FormDefinition, fieldId: string): { definition: FormDefinition; fieldId: string } | null {
+  const source = pdfOnlyFieldOf(def, fieldId);
+  if (!source) return null;
+  const base = /^(.*?)(\d+)$/.exec(source.id)?.[1] ?? `${source.id}_`;
+  const id = uniqueFieldId(def, base);
+  return { definition: { ...def, pages: pagesWithPdfField(def, { ...source, id }) }, fieldId: id };
+}
+
 /** The pdf-only field a stamp refers to, if any (so it can be remembered before it is dropped). */
 export function pdfOnlyFieldOf(def: FormDefinition, fieldId: string): FormField | undefined {
   const f = allFields(def).find((x) => x.id === fieldId);

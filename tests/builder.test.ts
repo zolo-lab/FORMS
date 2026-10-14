@@ -94,6 +94,15 @@ describe("builder: options", () => {
     expect(out[2]!.value).toBe("b");
     expect(new Set(out.map((o) => o.value)).size).toBe(3);
   });
+
+  it("a renamed option keeps its value (PDF marks and conditions keep working)", () => {
+    const existing = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
+    expect(parseOptionsText("זכר\nנקבה", existing)).toEqual([{ value: "o1", label: "זכר" }, { value: "o2", label: "נקבה" }]);
+    const grown = parseOptionsText("זכר\nנקבה\nאחר", [{ value: "o1", label: "זכר" }, { value: "o2", label: "נקבה" }]);
+    expect(grown.map((o) => o.value)).toEqual(["o1", "o2", "o3"]);
+    // Removing the first line does not hand its value to the next one.
+    expect(parseOptionsText("נקבה", [{ value: "o1", label: "זכר" }, { value: "o2", label: "נקבה" }])).toEqual([{ value: "o2", label: "נקבה" }]);
+  });
 });
 
 describe("builder: publish checks", () => {
