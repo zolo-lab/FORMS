@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignBoxes, distributeBoxes, snapPosition } from "@/lib/pdf/arrange";
+import { alignBoxes, distributeBoxes, nextFreePosition, snapPosition } from "@/lib/pdf/arrange";
 
 const b = (x: number, y: number, width = 20, height = 10) => ({ x, y, width, height });
 
@@ -36,5 +36,28 @@ describe("arrange", () => {
     expect(near.y).toBe(302); // no vertical neighbour in range → grid
     const far = snapPosition(b(51.3, 77.9), others);
     expect(far).toMatchObject({ x: 52, y: 78, guides: [] });
+  });
+
+  it("places new elements one under the other, never stacked", () => {
+    const page = { width: 595, height: 842 };
+    const dims = { width: 120, height: 16 };
+    const placed: ReturnType<typeof b>[] = [];
+    for (let i = 0; i < 5; i++) {
+      const p = nextFreePosition(dims, page, placed);
+      placed.push(b(p.x, p.y, dims.width, dims.height));
+    }
+    const keys = new Set(placed.map((p) => `${p.x},${p.y}`));
+    expect(keys.size).toBe(5);
+    expect(placed[0]!.y).toBeGreaterThan(placed[1]!.y); // y grows upward: the second sits below the first
+    expect(placed.every((p) => p.y >= 40 && p.x >= 40)).toBe(true);
+  });
+
+  it("staggers when there is no room below the last element", () => {
+    const page = { width: 595, height: 842 };
+    const dims = { width: 120, height: 16 };
+    const last = b(40, 40, 120, 16); // already at the bottom margin
+    const p = nextFreePosition(dims, page, [last]);
+    expect(p).not.toEqual({ x: 40, y: 16 });
+    expect(p.y).toBeGreaterThanOrEqual(40);
   });
 });

@@ -26,8 +26,9 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   await page.mouse.move(box.x + 110, box.y - 42, { steps: 6 });
   await page.mouse.up();
   const moved = (await mapping())[0]!;
-  expect(moved.x - stamps[0]!.x).toBeCloseTo(100, 0);
-  expect(moved.y - stamps[0]!.y).toBeCloseTo(50, 0);
+  // Moves snap to a 2pt grid, so allow ±2pt.
+  expect(Math.abs(moved.x - stamps[0]!.x - 100)).toBeLessThanOrEqual(2);
+  expect(Math.abs(moved.y - stamps[0]!.y - 50)).toBeLessThanOrEqual(2);
 
   // Composite and table items map to their own keys.
   await page.getByRole("button", { name: "מיקום כתובת יישוב" }).click();

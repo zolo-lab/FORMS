@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { alignBoxes, distributeBoxes, snapPosition, type AlignMode } from "@/lib/pdf/arrange";
+import { alignBoxes, distributeBoxes, snapPosition, type AlignMode, nextFreePosition } from "@/lib/pdf/arrange";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
 import { DEFAULT_SIZE, orphanStamps, placeableItems, stampKey, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
@@ -114,7 +114,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (!onDrawElement) return;
     const dims = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
     const pg = pages[page]!;
-    const pos = at ?? { x: (pg.width - dims.width) / 2, y: pg.height / 2 };
+    const pos = at ?? nextFreePosition(dims, pg, latest.current.stamps.filter((o) => o.page === page));
     const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
     pushHistory();
     select(onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) }));
@@ -155,7 +155,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           : { x: origin.x, width: origin.width + dx, height: origin.height - dy, y: origin.y + dy };
         if (mode === "move" && origins.size === 1) {
           const others = latest.current.stamps.filter((o) => o.id !== id && o.page === origin.page);
-          const snapped = snapPosition(box, others, { grid: 0 });
+          const snapped = snapPosition(box, others);
           box = { ...box, x: snapped.x, y: snapped.y };
           hit.push(...snapped.guides.map((g) => ({ ...g, page: origin.page })));
         }
