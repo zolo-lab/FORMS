@@ -32,6 +32,7 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "initials", label: "ראשי תיבות", fieldType: "short_text", fieldLabel: "ראשי תיבות", stamp: { kind: "initials" } },
   { id: "date_signed", label: "תאריך חתימה", fieldType: null, stamp: { kind: "date_signed", align: "center" } },
   { id: "radio", label: "בחירה (רדיו)", fieldType: "radio", fieldLabel: "בחירה", stamp: { kind: "check", whenValue: "o1" } },
+  { id: "multi", label: "בחירה מרובה", fieldType: "checkboxes", fieldLabel: "בחירה מרובה", stamp: { kind: "check", whenValue: "o1" } },
   { id: "dropdown", label: "רשימה נפתחת", fieldType: "dropdown", fieldLabel: "רשימה", stamp: { kind: "text" } },
   { id: "stamp", label: "חותמת (תמונה)", fieldType: null, stamp: { kind: "stamp_image" }, size: { width: 90, height: 90 } },
 ];
@@ -87,7 +88,7 @@ export function addPdfOnlyElement(
       settings: { pdfOnly: true },
     };
     // Choice fields need options to be fillable; the admin renames them in the settings panel.
-    if (entry.fieldType === "radio" || entry.fieldType === "dropdown") {
+    if (entry.fieldType === "radio" || entry.fieldType === "dropdown" || entry.fieldType === "checkboxes") {
       field.options = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
     }
     definition = { ...def, pages: pagesWithPdfField(def, field) };
