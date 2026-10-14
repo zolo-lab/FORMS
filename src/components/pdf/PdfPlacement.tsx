@@ -62,6 +62,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const clipboard = useRef<PdfStamp[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
+  /** "צפה כ-": stamps of other roles are dimmed. */
+  const [viewAs, setViewAs] = useState<FillerRole | "">("");
   const [tableRows, setTableRows] = useState<Record<string, number>>({});
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -334,8 +336,35 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               )}
             </div>
           )}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            צפה כ-
+            <Select className="h-8 w-32" aria-label="צפה כתפקיד" value={viewAs} onChange={(e) => setViewAs(e.target.value as FillerRole | "")}>
+              <option value="">כולם</option>
+              {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </Select>
+          </label>
           {onPreview && <Button className="ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
+        {doc && pages.length > 1 && (
+          <nav aria-label="עמודים" className="flex gap-2 overflow-x-auto py-1" dir="ltr">
+            {pages.map((pg, pi) => {
+              const t = Math.min(90 / pg.width, 120 / pg.height);
+              return (
+                <button
+                  key={pi}
+                  type="button"
+                  aria-label={`עמוד ${pi + 1}`}
+                  aria-current={activePage === pi ? "page" : undefined}
+                  onClick={() => { setActivePage(pi); pageRefs.current[pi]?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                  className={cn("shrink-0 overflow-hidden rounded border-2 bg-card", activePage === pi ? "border-primary" : "border-transparent hover:border-muted-foreground/40")}
+                  style={{ width: pg.width * t, height: pg.height * t }}
+                >
+                  <PageCanvas doc={doc} pageNumber={pi + 1} scale={t} />
+                </button>
+              );
+            })}
+          </nav>
+        )}
         {rolesUsed.length > 0 && (
           <ul aria-label="מקרא תפקידים" className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {rolesUsed.map((r) => (
@@ -391,6 +420,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
                         inGroup ? ROLE_OVERLAY[roleOf(s)].boxActive : ROLE_OVERLAY[roleOf(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
+                        viewAs && (roleOf(s) === "none" ? "employee" : roleOf(s)) !== viewAs && !inGroup && "opacity-25",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >

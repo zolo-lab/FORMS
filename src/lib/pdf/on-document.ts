@@ -18,7 +18,22 @@ export const EDITABLE_KINDS: ReadonlySet<PdfStamp["kind"]> = new Set(["text", "c
 
 export function simpleStamps(mapping: PdfMapping, def: FormDefinition): PdfStamp[] {
   const ids = new Set(allFields(def).map((f) => f.id));
-  return mapping.stamps.filter((s) => EDITABLE_KINDS.has(s.kind) && ids.has(s.fieldId));
+  return tabOrder(mapping.stamps.filter((s) => EDITABLE_KINDS.has(s.kind) && ids.has(s.fieldId)));
+}
+
+/**
+ * Keyboard order of the inputs on the document: page, then explicit `tabIndex` (lower first), then reading order
+ * (top to bottom – PDF y grows upward – and start to end). Stable, so DOM order = Tab order.
+ */
+export function tabOrder<T extends { page: number; tabIndex?: number; x: number; y: number }>(stamps: T[]): T[] {
+  return [...stamps].sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page;
+    const ta = a.tabIndex ?? Number.POSITIVE_INFINITY;
+    const tb = b.tabIndex ?? Number.POSITIVE_INFINITY;
+    if (ta !== tb) return ta - tb;
+    if (Math.abs(a.y - b.y) > 2) return b.y - a.y;
+    return a.x - b.x;
+  });
 }
 
 /** HTML input attributes that match the field type, so phones show a number pad and dates a picker. */
