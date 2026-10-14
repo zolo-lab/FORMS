@@ -158,3 +158,11 @@ Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRO
 ## 13. Auto-migrations (P1-16)
 
 `vercel-build` runs `scripts/migrate.ts` before `next build`. It applies `drizzle/*.sql` files not yet listed in `schema_migrations` (so the manually applied 0000-0002 are skipped). Opt-in: only with `AUTO_MIGRATE=1` in the Vercel env.
+
+## 14. Mail, prefill, intake template (14.10.2026)
+
+- **Mail:** `misrad.org.il` is verified in Resend (DKIM TXT + two CNAMEs added at Box DNS; the Google records were left alone). Production `MAIL_FROM=forms@misrad.org.il`; sender name is the organization's. A real request was sent to the owner and arrived in the inbox. Emails are RTL HTML with a button, plain text kept as fallback (`src/lib/email-html.ts`).
+- **Prefill:** `FormField.prefill` now works (`src/lib/forms/prefill.ts`, applied on the signing page): `employee.name|firstName|lastName|idNumber|email|phone`; a stored answer always wins.
+- **Intake template:** `docs/templates/intake-employee.json` (requester page: job title, start date, scope, salary type/amount, manager, notes; employee page; consent + signature). It was imported in production via "ייבוא טופס מ-JSON", published, and attached to the package "קליטת עובד רגיל" (the QA form was removed from that package).
+- **Builder:** PDF-drawn fields live on their own page "שדות במסמך" (`PDF_FIELDS_PAGE_ID`); new layout type `section`; a product with an empty factor is empty (not 0); a stamp shows the field label.
+- Production still holds QA data (form "בדיקה QA – טופס קליטה", two test requests incl. "ישראל בדיקה"); delete only with the owner's approval.
