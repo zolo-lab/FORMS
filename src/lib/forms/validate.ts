@@ -7,6 +7,7 @@
  *    (each signer in the chain validates only their own part).
  *  - Error messages are Hebrew and user-facing.
  */
+import { validateGrid } from "./grid";
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
 import { reachedPageIndexes } from "./paths";
@@ -201,6 +202,8 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       }
       return null;
     }
+    case "grid":
+      return validateGrid(field, value).error;
     case "repeating_table": {
       if (!Array.isArray(value)) return MSG.required;
       const s = field.settings ?? {};
@@ -260,6 +263,7 @@ function validateFieldList(
     }
     // Numeric fields are stored as numbers, not as the text the browser sent ("21" -> 21).
     if (NUMERIC_TYPES.has(field.type)) cleaned[field.id] = toNumber(value);
+    if (field.type === "grid") cleaned[field.id] = validateGrid(field, value).cleaned;
     // Nested rows of a repeating table: each row is its own scope for conditions.
     if (field.type === "repeating_table" && field.fields && Array.isArray(value)) {
       const rowsOut: Answers[] = [];

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { CheckboxesInput, ConsentInput, DropdownInput, LinearScaleInput, RadioInput, RatingInput, YesNoInput } from "./choices";
 import { AddressInput, FullNameInput, BankAccountInput } from "./composite";
 import { FileUploadInput } from "./file";
-import { GridInput } from "./grids";
+import { GridInput, TypedGridInput } from "./grids";
 import { LongTextInput, TextLikeInput } from "./inputs";
 import { LayoutBlock } from "./layout";
 import { FieldShell } from "./shell";
@@ -32,6 +32,7 @@ function Control(props: FieldProps & { renderChild: Parameters<typeof RepeatingT
     case "rating": return <RatingInput {...props} />;
     case "consent": return <ConsentInput {...props} />;
     case "radio_grid": case "checkbox_grid": return <GridInput {...props} />;
+    case "grid": return <TypedGridInput {...props} />;
     case "full_name": return <FullNameInput {...props} />;
     case "bank_account": return <BankAccountInput {...props} />;
     case "address": return <AddressInput {...props} />;
