@@ -157,4 +157,4 @@ Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRO
 
 ## 13. Auto-migrations (P1-16)
 
-`vercel-build` runs `scripts/migrate.ts` before `next build`. It is opt-in: it only applies `drizzle/` migrations when `AUTO_MIGRATE=1` is set in the Vercel project env. Until Israel sets it, production migrations stay manual (`pnpm drizzle-kit migrate` against the production URL).
+`vercel-build` runs `scripts/migrate.ts` before `next build`. It applies `drizzle/*.sql` files not yet listed in `schema_migrations` (so the manually applied 0000-0002 are skipped). Opt-in: only with `AUTO_MIGRATE=1` in the Vercel env.
