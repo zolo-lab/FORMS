@@ -90,3 +90,21 @@ export function dropPdfOnlyField(def: FormDefinition, fieldId: string): FormDefi
   // The dedicated page goes away with its last field.
   return { ...def, pages: pages.filter((p) => !(p.id === PDF_FIELDS_PAGE_ID && p.fields.length === 0)) };
 }
+
+/** Put a previously dropped pdf-only field back (undo of a stamp deletion). No-op when the id already exists. */
+export function restorePdfOnlyField(def: FormDefinition, field: FormField): FormDefinition {
+  if (allFields(def).some((f) => f.id === field.id)) return def;
+  const has = def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID);
+  return {
+    ...def,
+    pages: has
+      ? def.pages.map((p) => (p.id === PDF_FIELDS_PAGE_ID ? { ...p, fields: [...p.fields, field] } : p))
+      : [...def.pages, { id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }],
+  };
+}
+
+/** The pdf-only field a stamp refers to, if any (so it can be remembered before it is dropped). */
+export function pdfOnlyFieldOf(def: FormDefinition, fieldId: string): FormField | undefined {
+  const f = allFields(def).find((x) => x.id === fieldId);
+  return f?.settings?.pdfOnly ? f : undefined;
+}

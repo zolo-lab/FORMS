@@ -6,8 +6,8 @@ import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
-import { addPdfOnlyElement, dropPdfOnlyField } from "@/lib/forms/pdf-only";
-import type { FormDefinition } from "@/lib/forms/schema";
+import { addPdfOnlyElement, dropPdfOnlyField, pdfOnlyFieldOf, restorePdfOnlyField } from "@/lib/forms/pdf-only";
+import type { FormDefinition, FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
   file: { id: string; name: string; url: string; pages: { width: number; height: number }[] };
@@ -26,6 +26,8 @@ export function PdfTab({
   onDefinitionChange: (d: FormDefinition) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  /** Pdf-only fields removed with their stamp, kept so undo can restore them. */
+  const dropped = useRef<Map<string, FormField>>(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -110,10 +112,19 @@ export function PdfTab({
           pages={pdf.file.pages}
           mapping={pdf.mapping}
           onMappingChange={(mapping) => {
-            // Deleting a stamp of a drawn-on-PDF field also removes the field it created.
+            // Deleting a stamp of a drawn-on-PDF field also removes the field it created; undo brings it back.
             const kept = new Set(mapping.stamps.map((st) => st.fieldId));
             let def = definition;
-            for (const st of pdf.mapping.stamps) if (!kept.has(st.fieldId)) def = dropPdfOnlyField(def, st.fieldId);
+            for (const st of pdf.mapping.stamps) {
+              if (kept.has(st.fieldId)) continue;
+              const f = pdfOnlyFieldOf(def, st.fieldId);
+              if (f) dropped.current.set(f.id, f);
+              def = dropPdfOnlyField(def, st.fieldId);
+            }
+            for (const st of mapping.stamps) {
+              const f = dropped.current.get(st.fieldId);
+              if (f) def = restorePdfOnlyField(def, f);
+            }
             if (def !== definition) onDefinitionChange(def);
             onChange({ ...pdf, mapping });
           }}
