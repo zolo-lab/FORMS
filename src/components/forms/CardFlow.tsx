@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
-import { buildCards, reviewItems } from "@/lib/forms/cards";
+import { buildCards, cardSteps, reviewItems } from "@/lib/forms/cards";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { LayoutBlock } from "./fields/layout";
@@ -27,10 +27,14 @@ export function CardFlow({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  // `cards.length` is the review screen.
-  const at = Math.min(index, cards.length);
-  const review = at >= cards.length;
-  const card = review ? null : cards[at]!;
+  // Questions, then the review, then the signature(s); the last screen submits (builder-plan 2.6).
+  const steps = useMemo(() => cardSteps(cards), [cards]);
+  const at = Math.min(index, steps.length - 1);
+  const step = steps[at]!;
+  const review = step.kind === "review";
+  const card = step.kind === "card" ? step.card : null;
+  const last = at === steps.length - 1;
+  const stepOf = (cardIndex: number) => Math.max(0, steps.findIndex((st) => st.kind === "card" && st.cardIndex === cardIndex));
   const allErrors = { ...serverErrors, ...errors };
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export function CardFlow({
       setErrors(result.errors);
       // Jump back to the first card with a problem.
       const bad = cards.findIndex((c) => c.field && Object.keys(result.errors).some((k) => k === c.field!.id || k.startsWith(`${c.field!.id}.`)));
-      if (bad >= 0) setIndex(bad);
+      if (bad >= 0) setIndex(stepOf(bad));
       return;
     }
     setSubmitting(true);
@@ -82,10 +86,10 @@ export function CardFlow({
       <div aria-label={`שאלה ${Math.min(at + 1, cards.length)} מתוך ${cards.length}`}>
         <div className="mb-1 flex justify-between text-sm text-muted-foreground">
           <span>{review ? "סיכום לפני שליחה" : definition.pages[card!.pageIndex]?.title}</span>
-          <span>{Math.min(at + 1, cards.length)} / {cards.length}</span>
+          <span>{at + 1} / {steps.length}</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={cards.length} aria-valuenow={Math.min(at, cards.length)}>
-          <div className="h-full bg-primary transition-all" style={{ width: `${cards.length ? (Math.min(at + 1, cards.length) / cards.length) * 100 : 100}%` }} />
+        <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={at + 1}>
+          <div className="h-full bg-primary transition-all" style={{ width: `${((at + 1) / steps.length) * 100}%` }} />
         </div>
       </div>
 
@@ -99,7 +103,7 @@ export function CardFlow({
                   <dt className="text-muted-foreground">{it.label}</dt>
                   <dd className="font-medium">{it.text}</dd>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setIndex(it.cardIndex)}>עריכה</Button>
+                <Button variant="ghost" size="sm" onClick={() => setIndex(stepOf(it.cardIndex))}>עריכה</Button>
               </div>
             ))}
           </dl>
@@ -118,10 +122,10 @@ export function CardFlow({
 
       <div className="flex justify-between gap-2 border-t pt-4">
         {at > 0 ? <Button variant="outline" onClick={() => { setErrors({}); setIndex(at - 1); }}>הקודם</Button> : <span />}
-        {review ? (
+        {last ? (
           onSubmit && <Button disabled={submitting} onClick={send}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button>
         ) : (
-          <Button onClick={next}>{at === cards.length - 1 ? "לסיכום" : "הבא"}</Button>
+          <Button onClick={next}>{steps[at + 1]?.kind === "review" ? "לסיכום" : review ? "לחתימה" : "הבא"}</Button>
         )}
       </div>
     </div>

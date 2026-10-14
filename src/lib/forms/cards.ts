@@ -45,3 +45,18 @@ export function reviewItems(cards: Card[], answers: Answers): ReviewItem[] {
     c.field ? [{ cardIndex, label: c.field.label || c.field.id, text: c.field.type === "signature" ? (answers[c.field.id] ? "נחתם" : "—") : formatAnswer(c.field, answers[c.field.id]) || "—" }] : [],
   );
 }
+
+export type CardStep = { kind: "card"; card: Card; cardIndex: number } | { kind: "review" };
+
+/**
+ * Screen order of the card layout: every non-signature question, then the review, then the signature
+ * questions (people sign after they have checked their answers). The last screen submits.
+ */
+export function cardSteps(cards: Card[]): CardStep[] {
+  const body: CardStep[] = [];
+  const signatures: CardStep[] = [];
+  cards.forEach((card, cardIndex) => {
+    (card.field?.type === "signature" ? signatures : body).push({ kind: "card", card, cardIndex });
+  });
+  return [...body, { kind: "review" }, ...signatures];
+}
