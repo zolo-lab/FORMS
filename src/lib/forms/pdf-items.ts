@@ -32,7 +32,7 @@ export const DEFAULT_SIZE: Record<PdfStamp["kind"], { width: number; height: num
   stamp_image: { width: 90, height: 90 },
 };
 
-const UNSUPPORTED = new Set(["radio_grid", "checkbox_grid", "file_upload", "hidden"]);
+const UNSUPPORTED = new Set(["radio_grid", "checkbox_grid", "grid", "file_upload", "hidden"]);
 
 function itemsForField(f: FormField, idPrefix: string, labelPrefix: string): PlaceableItem[] {
   const meta = FIELD_TYPE_META[f.type];

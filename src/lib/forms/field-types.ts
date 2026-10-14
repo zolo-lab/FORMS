@@ -42,6 +42,7 @@ export const FIELD_TYPES = [
   "signature",
   "consent",
   "repeating_table",
+  "grid",
   "hidden",
   // Layout (no answer)
   "heading",
@@ -125,6 +126,10 @@ export const FIELD_TYPE_META: Record<FieldType, FieldTypeMeta> = {
   signature: { label: "חתימה", category: "advanced", icon: "Signature", hasAnswer: true, hasOptions: false, pdf: "signature" },
   consent: { label: "הצהרה / אישור", category: "advanced", icon: "BadgeCheck", hasAnswer: true, hasOptions: false, pdf: "check" },
   repeating_table: { label: "טבלה חוזרת", category: "advanced", icon: "Table", hasAnswer: true, hasOptions: false, pdf: "text", defaultSettings: { minRows: 0, maxRows: 20, addLabel: "הוספת שורה" } },
+  grid: {
+    label: "טבלה קבועה", category: "advanced", icon: "Table", hasAnswer: true, hasOptions: false, pdf: "none",
+    defaultSettings: { rows: [{ value: "r1", label: "שורה 1" }, { value: "r2", label: "שורה 2" }], columns: [{ value: "c1", label: "עמודה 1", type: "text" }, { value: "c2", label: "עמודה 2", type: "number" }] },
+  },
   hidden: { label: "שדה מוסתר", category: "advanced", icon: "EyeOff", hasAnswer: true, hasOptions: false, pdf: "text" },
 
   heading: { label: "כותרת", category: "layout", icon: "Heading", hasAnswer: false, hasOptions: false, pdf: "none" },

@@ -7,6 +7,7 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { newField, parseOptionsText } from "@/lib/forms/builder";
 import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
+import { GRID_CELL_LABELS, GRID_CELL_TYPES, gridColumns, gridRows, type GridCellType, type GridColumn } from "@/lib/forms/grid";
 import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,36 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h4 className="text-sm font-semibold">{title}</h4>
       {children}
     </section>
+  );
+}
+
+/** Columns of a `grid` field: label, cell type, and options for dropdown cells. */
+function GridColumnsEditor({ columns, onChange }: { columns: GridColumn[]; onChange: (c: GridColumn[]) => void }) {
+  const patch = (i: number, p: Partial<GridColumn>) => onChange(columns.map((c, j) => (j === i ? { ...c, ...p } : c)));
+  return (
+    <div className="space-y-2">
+      {columns.map((c, i) => (
+        <div key={c.value} className="space-y-1 rounded-md border p-2">
+          <div className="flex gap-2">
+            <Input aria-label={`תווית עמודה ${i + 1}`} className="h-9" value={c.label} onChange={(e) => patch(i, { label: e.target.value })} />
+            <Select aria-label={`סוג עמודה ${i + 1}`} className="h-9 w-28" value={c.type ?? "text"} onChange={(e) => patch(i, { type: e.target.value as GridCellType })}>
+              {GRID_CELL_TYPES.map((t) => <option key={t} value={t}>{GRID_CELL_LABELS[t]}</option>)}
+            </Select>
+            <Button variant="ghost" size="sm" aria-label={`מחיקת עמודה ${i + 1}`} onClick={() => onChange(columns.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
+          </div>
+          {c.type === "dropdown" && (
+            <Input
+              aria-label={`אפשרויות עמודה ${i + 1}`}
+              className="h-9"
+              placeholder="אפשרויות מופרדות בפסיק"
+              defaultValue={(c.options ?? []).map((o) => o.label).join(", ")}
+              onBlur={(e) => patch(i, { options: parseOptionsText(e.target.value.split(",").map((x) => x.trim()).filter(Boolean).join("\n"), c.options ?? []) })}
+            />
+          )}
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={() => onChange([...columns, { value: `c${Date.now().toString(36)}`, label: `עמודה ${columns.length + 1}`, type: "text" }])}><Plus className="size-4" />הוספת עמודה</Button>
+    </div>
   );
 }
 
@@ -210,6 +241,15 @@ export function FieldSettings({
         <Section title="שורות ועמודות">
           <Row label="שורות (שורה לכל פריט)"><ListTextarea key={`${field.id}-r`} rows={4} items={(s.rows as FieldOption[]) ?? []} onChange={(rows) => setS({ rows })} /></Row>
           <Row label="עמודות (שורה לכל פריט)"><ListTextarea key={`${field.id}-c`} rows={4} items={(s.columns as FieldOption[]) ?? []} onChange={(columns) => setS({ columns })} /></Row>
+        </Section>
+      )}
+
+      {field.type === "grid" && (
+        <Section title="שורות ועמודות">
+          <Row label="שורות (שורה לכל פריט)"><ListTextarea key={`${field.id}-gr`} rows={4} items={gridRows(field)} onChange={(rows) => setS({ rows })} /></Row>
+          <Row label="עמודות">
+            <GridColumnsEditor key={`${field.id}-gc`} columns={gridColumns(field)} onChange={(columns) => setS({ columns })} />
+          </Row>
         </Section>
       )}
 

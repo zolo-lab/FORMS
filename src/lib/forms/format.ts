@@ -1,4 +1,5 @@
 /** Turn stored answers into display strings (PDF stamping, dashboard, exports). */
+import { formatGrid } from "./grid";
 import type { FormField } from "./schema";
 
 export function formatDateIL(iso: string): string {
@@ -64,6 +65,8 @@ export function formatAnswer(field: FormField, value: unknown, part?: string): s
     case "radio_grid":
     case "checkbox_grid":
       return ""; // not representable as one string; stamped specially
+    case "grid":
+      return formatGrid(field, value);
     default:
       return String(value);
   }
