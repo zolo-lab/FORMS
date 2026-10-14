@@ -3,7 +3,8 @@ import { useEffect, useRef } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 /** Renders one PDF page (1-based) into a canvas at `scale` CSS px per PDF point. */
-export function PageCanvas({ doc, pageNumber, scale }: { doc: PDFDocumentProxy; pageNumber: number; scale: number }) {
+/** `fit`: drawn at `scale`, then shown at 100% of the container width (no measuring needed). */
+export function PageCanvas({ doc, pageNumber, scale, fit = false }: { doc: PDFDocumentProxy; pageNumber: number; scale: number; fit?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let cancelled = false;
@@ -16,13 +17,13 @@ export function PageCanvas({ doc, pageNumber, scale }: { doc: PDFDocumentProxy; 
       const canvas = ref.current;
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
-      canvas.style.width = `${viewport.width / ratio}px`;
-      canvas.style.height = `${viewport.height / ratio}px`;
+      canvas.style.width = fit ? "100%" : `${viewport.width / ratio}px`;
+      canvas.style.height = fit ? "auto" : `${viewport.height / ratio}px`;
       task = page.render({ canvas, viewport });
       try { await task.promise; } catch { /* cancelled by a newer render */ }
     })();
     return () => { cancelled = true; task?.cancel(); };
-  }, [doc, pageNumber, scale]);
+  }, [doc, pageNumber, scale, fit]);
   // dir="ltr": canvas text inherits the page direction, and pdf.js positions glyphs assuming LTR (under RTL letters went missing).
   return <canvas ref={ref} dir="ltr" aria-label={`עמוד ${pageNumber} ב-PDF`} className="block bg-card" />;
 }
