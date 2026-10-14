@@ -621,6 +621,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 {pages.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}
               </Select>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              title="אותה תשובה תיכתב במקום נוסף (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
+              onClick={() => {
+                const pg = pages[selectedStamp.page]!;
+                const c = clampBox({ ...selectedStamp, x: selectedStamp.x + 12, y: selectedStamp.y - 12 }, pg.width, pg.height);
+                const copy = { ...selectedStamp, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+                setStamps([...mapping.stamps, copy]);
+                select(copy.id);
+                reveal(copy.id);
+              }}
+            >
+              מופע נוסף של אותה תשובה
+            </Button>
             <Button variant="destructive" size="sm" onClick={() => { setStamps(mapping.stamps.filter((s) => s.id !== selectedStamp.id)); setSelected(null); }}>
               <Trash2 className="size-4" />הסרת החותמת
             </Button>
