@@ -5,6 +5,14 @@ import { login } from "./helpers";
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
 test("creates a request and shows a copyable link plus a WhatsApp share link", async ({ page }) => {
+  const log: string[] = [];
+  const t0 = Date.now();
+  page.on("console", (m) => log.push(`${Date.now() - t0}ms console.${m.type()}: ${m.text().slice(0, 300)}`));
+  page.on("pageerror", (e) => log.push(`${Date.now() - t0}ms pageerror: ${e.message.slice(0, 300)}`));
+  page.on("crash", () => log.push(`${Date.now() - t0}ms CRASH`));
+  page.on("requestfinished", (r) => { if (r.method() === "POST") log.push(`${Date.now() - t0}ms POST ${r.url().slice(-60)} done`); });
+  page.on("requestfailed", (r) => log.push(`${Date.now() - t0}ms FAILED ${r.method()} ${r.url().slice(-60)} ${r.failure()?.errorText}`));
+  page.on("response", (r) => { if (r.request().method() === "POST") log.push(`${Date.now() - t0}ms POST ${r.status()} ${r.url().slice(-60)}`); });
   await login(page, "/admin/requests/new");
 
   await expect(page.getByRole("heading", { name: "בקשה חדשה" })).toBeVisible();
@@ -34,7 +42,8 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
     await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
   } catch (e) {
     // CI artifacts cannot be downloaded here: put what the page shows into the failure message.
-    throw new Error(`${(e as Error).message}\nPAGE: ${(await page.locator("body").innerText()).slice(0, 1500)}`);
+    const text = await Promise.race([page.locator("body").innerText(), new Promise<string>((r) => setTimeout(() => r("(page did not answer)"), 3000))]);
+    throw new Error(`${(e as Error).message}\nURL: ${page.url()}\nLOG:\n${log.join("\n")}\nPAGE: ${text.slice(0, 1200)}`);
   }
   const link = done.getByLabel(/קישור ל/).first();
   await expect(link).toHaveValue(/\/s\/[A-Za-z0-9_-]{43}$/);
