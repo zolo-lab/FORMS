@@ -70,7 +70,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const [viewAs, setViewAs] = useState<FillerRole | "">("");
   const [tableRows, setTableRows] = useState<Record<string, number>>({});
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const viewerRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
   const widest = Math.max(...pages.map((p) => p.width), 1);
   /** Zoom that makes the widest page fit the viewer (narrow windows). */
   const fitScale = () => {
@@ -79,13 +79,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   };
   // Start fitted when the window is narrower than the page, so the page is never cut off.
   const fitted = useRef(false);
-  useEffect(() => {
-    if (fitted.current || !viewerRef.current) return;
+  const attachViewer = (el: HTMLDivElement | null) => {
+    viewerRef.current = el;
+    if (!el || fitted.current) return;
     fitted.current = true;
     const f = fitScale();
     if (f < 1) setScale(f);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on first render
-  }, []);
+  };
   /** Bring a stamp into view after it was added (the page may be scrolled elsewhere). */
   const reveal = (id: string) => requestAnimationFrame(() => rootRef.current?.querySelector(`[data-stamp="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }));
 
@@ -435,7 +435,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           </ul>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
-        <div ref={viewerRef} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
+        <div ref={attachViewer} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
           {!doc && !error && <p role="status" className="py-16 text-center text-sm text-muted-foreground">טוען את ה-PDF…</p>}
           {/* PDF space is physical (origin bottom-left, x to the right), so this subtree is LTR. */}
           <div dir="ltr" className="space-y-4">
