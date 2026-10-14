@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { login, openPalette } from "./helpers";
 
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
@@ -11,6 +11,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
 
+  await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
 
   // Write the label right on the field (quick edit), without opening the side panel.
@@ -48,6 +49,7 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await page.getByLabel("אופן המילוי").selectOption("card");
   await page.getByLabel("הודעה אחרי השליחה").fill("תודה רבה");
   // One question: after a short-text field exists the preview shows it as a card, then the review screen.
+  await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
   await page.getByRole("tab", { name: "תצוגה מקדימה" }).click();
   await expect(page.getByText("מלאו בבקשה את כל השדות")).toBeVisible();
