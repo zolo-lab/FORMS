@@ -178,3 +178,23 @@ Bugs those tests found and fixed: an empty first page blocked publishing a PDF f
 New since §14: `nextFreePosition` (palette elements never stack), 2pt snap, palette radio/dropdown/image stamp (+ upload), undo restores dropped pdf-only fields, page thumbnails, "צפה כ-" dimming, `tabOrder` on the document, built-in templates (`src/lib/forms/templates/`), mobile palette drawer, `pickerLabels`, card layout review-before-signature (`cardSteps`), `grid` field type (`src/lib/forms/grid.ts`).
 
 **Next:** part 3 of the builder plan = Israel's manual pass in production on both routes. Only after his approval return to sending / approval rounds / dashboard work.
+
+## 16. Form 101 built in the browser (14.10 night)
+
+Production form "טופס 101 – כרטיס עובד" (id `435597c4-07f9-4054-a070-d1a21caae440`, published v1) on the official gov.il PDF
+(`https://www.gov.il/BlobFolder/service/itc101/he/Service_Pages_Income_tax_annual-report-2024_itc101.pdf`, 2 A4 pages, no AcroForm).
+Built through the UI (PDF tab + builder), which surfaced the fixes in PRs #94–#101 (see `docs/builder-plan.md` log).
+
+Still to do on that form: the X marks of choices with 3+ options were left at the stacked positions (bug fixed in #99).
+Checkbox glyph positions (PDF points, left/baseline of the printed box; stamp at x-0.5, y-1, 8×8):
+- p1 marital: רווק 489,555 · נשוי 430,555 · גרוש 363,555 · אלמן 489,542 · פרוד 442,542
+- p1 kibbutz: לא 271,555 · כן-מועברות 249,555 · כן-אינן 271,542
+- p1 ד income type: x 238, y 475/463/451/439/427/415
+- p1 ה other types: 237,342 · 237,331 · 237,320 · 119,342 · 119,331 · 119,320
+- p2 ח exemptions: x 511 (4: 512), y 791,775,753,737,708,671,647,623,567,515,497,472,449,433,420,394,381
+- p2 ט coordination: x 512, y 351, 322, 241
+
+CI notes: `pnpm install --no-frozen-lockfile` with no lockfile (deps float). e2e failures now print console/page errors/POST timings in the
+request wizard spec; the uploaded `e2e-results` artifact cannot be downloaded from the agent sandbox (blob host blocked).
+The dev DB accumulates e2e packages/forms; keep list queries bulk (no per-row queries).
+
