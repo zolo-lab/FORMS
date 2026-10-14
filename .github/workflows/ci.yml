@@ -49,6 +49,12 @@ jobs:
       - run: pnpm e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
   # reviewed from environments that cannot download Actions artifacts.
   previews:

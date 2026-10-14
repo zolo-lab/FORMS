@@ -13,6 +13,9 @@ export default defineConfig({
     ...devices["iPhone 13"],
     browserName: "chromium",
     locale: "he-IL",
+    // Evidence for CI failures (uploaded as an artifact by the workflow).
+    screenshot: "only-on-failure",
+    trace: "retain-on-failure",
   },
   webServer: {
     command: `pnpm build && pnpm start -p ${PORT}`,
