@@ -52,10 +52,11 @@ export function evaluateCondition(cond: Condition | undefined, answers: Answers)
       return isEmpty(actual);
     case "notEmpty":
       return !isEmpty(actual);
+    // A list answer (multiple choice) "equals" a single value when it includes it.
     case "eq":
-      return looseEq(actual, expected);
+      return Array.isArray(actual) && !Array.isArray(expected) ? actual.some((a) => looseEq(a, expected)) : looseEq(actual, expected);
     case "neq":
-      return !looseEq(actual, expected);
+      return !evaluateCondition({ field: cond.field, op: "eq", value: expected }, answers);
     case "in":
       return Array.isArray(expected) && expected.some((e) => looseEq(actual, e));
     case "notIn":
