@@ -38,6 +38,20 @@ export const PDF_PALETTE: PaletteEntry[] = [
 export const PDF_FIELDS_PAGE_ID = "pdf_fields";
 export const PDF_FIELDS_PAGE_TITLE = "שדות במסמך";
 
+/**
+ * Pages with `field` appended to the PDF-fields page. A form whose only page is still empty (a fresh "טופס מ-PDF")
+ * uses that page instead of adding a second one, so the form never has an empty page that blocks publishing.
+ */
+function pagesWithPdfField(def: FormDefinition, field: FormField) {
+  if (def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID)) {
+    return def.pages.map((p) => (p.id === PDF_FIELDS_PAGE_ID ? { ...p, fields: [...p.fields, field] } : p));
+  }
+  if (def.pages.length === 1 && def.pages[0]!.fields.length === 0) {
+    return [{ ...def.pages[0]!, id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }];
+  }
+  return [...def.pages, { id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }];
+}
+
 /** Smallest `<base>N` not used by any field in the form. */
 export function uniqueFieldId(def: FormDefinition, base: string): string {
   const used = new Set(allFields(def).map((f) => f.id));
@@ -74,13 +88,7 @@ export function addPdfOnlyElement(
     if (entry.fieldType === "radio" || entry.fieldType === "dropdown") {
       field.options = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
     }
-    const has = def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID);
-    definition = {
-      ...def,
-      pages: has
-        ? def.pages.map((p) => (p.id === PDF_FIELDS_PAGE_ID ? { ...p, fields: [...p.fields, field] } : p))
-        : [...def.pages, { id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }],
-    };
+    definition = { ...def, pages: pagesWithPdfField(def, field) };
   } else {
     // Stamp-only elements point at a fixed id that stampPdf never resolves.
     fieldId = `_${entry.id}`;
@@ -94,20 +102,15 @@ export function dropPdfOnlyField(def: FormDefinition, fieldId: string): FormDefi
   const target = allFields(def).find((f) => f.id === fieldId);
   if (!target?.settings?.pdfOnly) return def;
   const pages = def.pages.map((p) => ({ ...p, fields: p.fields.filter((f) => f.id !== fieldId) }));
-  // The dedicated page goes away with its last field.
-  return { ...def, pages: pages.filter((p) => !(p.id === PDF_FIELDS_PAGE_ID && p.fields.length === 0)) };
+  // The dedicated page goes away with its last field (unless it is the only page).
+  const kept = pages.filter((p) => !(p.id === PDF_FIELDS_PAGE_ID && p.fields.length === 0));
+  return { ...def, pages: kept.length ? kept : pages };
 }
 
 /** Put a previously dropped pdf-only field back (undo of a stamp deletion). No-op when the id already exists. */
 export function restorePdfOnlyField(def: FormDefinition, field: FormField): FormDefinition {
   if (allFields(def).some((f) => f.id === field.id)) return def;
-  const has = def.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID);
-  return {
-    ...def,
-    pages: has
-      ? def.pages.map((p) => (p.id === PDF_FIELDS_PAGE_ID ? { ...p, fields: [...p.fields, field] } : p))
-      : [...def.pages, { id: PDF_FIELDS_PAGE_ID, title: PDF_FIELDS_PAGE_TITLE, fields: [field] }],
-  };
+  return { ...def, pages: pagesWithPdfField(def, field) };
 }
 
 /** The pdf-only field a stamp refers to, if any (so it can be remembered before it is dropped). */
