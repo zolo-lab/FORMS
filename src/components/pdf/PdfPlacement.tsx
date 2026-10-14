@@ -215,8 +215,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (moving.length === 1) select(stamp.id);
     pushHistory();
     const startX = e.clientX, startY = e.clientY;
+    let moved = false;
     const origins = new Map(latest.current.stamps.filter((s) => moving.includes(s.id)).map((s) => [s.id, { x: s.x, y: s.y, width: s.width, height: s.height, page: s.page }]));
     const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < 3) return;
+      moved = true;
       const dx = (ev.clientX - startX) / scale;
       const dy = -(ev.clientY - startY) / scale; // screen down = PDF down
       const patches = new Map<string, Partial<PdfStamp>>();
@@ -239,7 +242,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       setGuides(hit);
       onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)) });
     };
-    const up = () => { setGuides([]); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    const up = () => {
+      setGuides([]);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      // A click (no drag) on one box of a multi-selection selects just that box, so its own position can be edited.
+      if (!moved && moving.length > 1) select(stamp.id);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }
