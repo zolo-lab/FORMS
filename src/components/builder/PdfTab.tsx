@@ -31,7 +31,7 @@ export function PdfTab({
   const dropped = useRef<Map<string, FormField>>(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ url: string; data: Uint8Array } | null>(null);
+  const [filled, setFilled] = useState<{ url: string; data: Uint8Array } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [acro, setAcro] = useState<AcroImport | null>(null);
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
@@ -76,7 +76,7 @@ export function PdfTab({
       });
       if (!res.ok) { setError((await res.json()).error ?? "יצירת התצוגה נכשלה"); return; }
       const blob = await res.blob();
-      setPreview({ url: URL.createObjectURL(blob), data: new Uint8Array(await blob.arrayBuffer()) });
+      setFilled({ url: URL.createObjectURL(blob), data: new Uint8Array(await blob.arrayBuffer()) });
     } finally {
       setPreviewBusy(false);
     }
@@ -154,8 +154,8 @@ export function PdfTab({
           previewBusy={previewBusy}
         />
       )}
-      <Dialog open={!!preview} onClose={() => { if (preview) URL.revokeObjectURL(preview.url); setPreview(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
-        {preview && <PdfPreview data={preview.data} downloadUrl={preview.url} fileName={`${definition.title}.pdf`} />}
+      <Dialog open={!!filled} onClose={() => { if (filled) URL.revokeObjectURL(filled.url); setFilled(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
+        {filled && <PdfPreview data={filled.data} downloadUrl={filled.url} fileName={`${definition.title}.pdf`} />}
       </Dialog>
     </div>
   );
