@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPdfOnlyElement, dropPdfOnlyField, PDF_PALETTE, uniqueFieldId } from "@/lib/forms/pdf-only";
+import { addPdfOnlyElement, dropPdfOnlyField, PDF_FIELDS_PAGE_ID, PDF_PALETTE, uniqueFieldId } from "@/lib/forms/pdf-only";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 
@@ -10,11 +10,20 @@ describe("pdf-only elements", () => {
   it("creates a field and a stamp together", () => {
     let n = 0;
     const { definition, stamp } = addPdfOnlyElement(empty(), entry("id"), 0, { x: 100, y: 200 }, () => `s${++n}`);
-    const f = definition.pages[0]!.fields[0]!;
+    const f = definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields[0]!;
     expect(f).toMatchObject({ type: "id_number", settings: { pdfOnly: true } });
     expect(stamp).toMatchObject({ kind: "comb", fieldId: f.id, comb: { cells: 9 }, x: 100, y: 200, page: 0 });
     expect(parseFormDefinition(definition).success).toBe(true);
     expect(pdfMappingSchema.safeParse({ schemaVersion: 1, pages: [{ width: 1, height: 1 }], stamps: [stamp] }).success).toBe(true);
+  });
+
+  it("puts drawn fields on their own page, not the regular questions", () => {
+    const base = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "שם" }] }] }).data!;
+    const r = addPdfOnlyElement(base, entry("text"), 0, { x: 0, y: 0 }, () => "s");
+    expect(r.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["a"]);
+    expect(r.definition.pages[1]).toMatchObject({ id: PDF_FIELDS_PAGE_ID, title: "שדות במסמך" });
+    const r2 = addPdfOnlyElement(r.definition, entry("id"), 0, { x: 0, y: 0 }, () => "s2");
+    expect(r2.definition.pages).toHaveLength(2);
   });
 
   it("keeps ids unique across repeated adds", () => {
@@ -37,7 +46,9 @@ describe("pdf-only elements", () => {
 
   it("drops only pdf-only fields", () => {
     const { definition, stamp } = addPdfOnlyElement(empty(), entry("signature"), 0, { x: 0, y: 0 }, () => "x");
-    expect(dropPdfOnlyField(definition, stamp.fieldId).pages[0]!.fields).toHaveLength(0);
+    const dropped = dropPdfOnlyField(definition, stamp.fieldId);
+    expect(dropped.pages.some((p) => p.id === PDF_FIELDS_PAGE_ID)).toBe(false);
+    expect(dropped.pages[0]!.fields).toHaveLength(0);
     const normal = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "א" }] }] }).data!;
     expect(dropPdfOnlyField(normal, "a")).toBe(normal);
   });
