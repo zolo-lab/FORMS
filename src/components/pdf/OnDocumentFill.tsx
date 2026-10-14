@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SignatureInput } from "@/components/forms/fields/signature";
-import { STATIC_LOOKUPS } from "@/lib/forms/lookups";
+import { SignaturePicker } from "@/components/forms/fields/signature";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Answers } from "@/lib/forms/conditions";
@@ -11,7 +10,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
-import { inputAttrs, isComputedOrLocked, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument } from "./usePdfDocument";
@@ -78,7 +77,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                   const field = fields.get(s.fieldId)!;
                   const b = pdfBoxToScreen(s, pg.height, scale);
                   const value = shown[s.fieldId];
-                  const locked = isComputedOrLocked(field) || evaluateCondition(field.disabledIf, shown);
+                  const locked = isLockedOnDocument(field, shown);
                   if (!evaluateCondition(field.visibleIf, shown)) return null;
                   const invalid = errorFields.has(s.fieldId);
                   const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(10, Math.min(b.height * 0.7, 16)) } as const;
@@ -118,17 +117,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
           );
         })}
       <Dialog open={!!signing} onClose={() => setSigning(null)} title="חתימה" className="sm:w-[min(92vw,40rem)]">
-        {signing && (
-          <SignatureInput
-            field={signing.field}
-            domId="od-signature"
-            value={rest.answers[signing.field.id]}
-            onChange={(v) => { setField(signing.field.id, v); setSigning(null); }}
-            disabled={false}
-            invalid={false}
-            lookups={STATIC_LOOKUPS}
-          />
-        )}
+        {signing && <SignaturePicker onCancel={() => setSigning(null)} onSave={(v) => { setField(signing.field.id, v); setSigning(null); }} />}
       </Dialog>
     </div>
   );

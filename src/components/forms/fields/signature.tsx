@@ -119,9 +119,25 @@ function TypedSignature({ onSave, onCancel }: { onSave: (dataUrl: string, text: 
   );
 }
 
+export type SignatureValue = { image: string; kind: "drawn" | "typed"; text?: string; signedAt: string };
+
+/** Draw-or-type chooser (the body of the signature dialog). Used by the form field and by "fill on the document". */
+export function SignaturePicker({ onCancel, onSave }: { onCancel: () => void; onSave: (v: SignatureValue) => void }) {
+  const [mode, setMode] = useState<"draw" | "type">("draw");
+  return (
+    <div className="flex flex-1 flex-col gap-3">
+      <Tabs tabs={[{ id: "draw", label: "ציור" }, { id: "type", label: "הקלדה" }]} value={mode} onChange={setMode} />
+      {mode === "draw" ? (
+        <SignatureCanvas onCancel={onCancel} onSave={(dataUrl) => onSave({ image: dataUrl, kind: "drawn", signedAt: new Date().toISOString() })} />
+      ) : (
+        <TypedSignature onCancel={onCancel} onSave={(dataUrl, text) => onSave({ image: dataUrl, kind: "typed", text, signedAt: new Date().toISOString() })} />
+      )}
+    </div>
+  );
+}
+
 export function SignatureInput({ domId, value, onChange, disabled }: FieldProps) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"draw" | "type">("draw");
   const image = (value as { image?: string } | null | undefined)?.image;
   return (
     <div id={domId}>
@@ -138,20 +154,7 @@ export function SignatureInput({ domId, value, onChange, disabled }: FieldProps)
         </div>
       )}
       <Dialog open={open} onClose={() => setOpen(false)} title="חתימה" fullScreenOnMobile className="sm:w-[min(92vw,40rem)]">
-        <div className="flex flex-1 flex-col gap-3">
-          <Tabs tabs={[{ id: "draw", label: "ציור" }, { id: "type", label: "הקלדה" }]} value={mode} onChange={setMode} />
-          {mode === "draw" ? (
-            <SignatureCanvas
-              onCancel={() => setOpen(false)}
-              onSave={(dataUrl) => { onChange({ image: dataUrl, kind: "drawn", signedAt: new Date().toISOString() }); setOpen(false); }}
-            />
-          ) : (
-            <TypedSignature
-              onCancel={() => setOpen(false)}
-              onSave={(dataUrl, text) => { onChange({ image: dataUrl, kind: "typed", text, signedAt: new Date().toISOString() }); setOpen(false); }}
-            />
-          )}
-        </div>
+        <SignaturePicker onCancel={() => setOpen(false)} onSave={(v) => { onChange(v); setOpen(false); }} />
       </Dialog>
     </div>
   );

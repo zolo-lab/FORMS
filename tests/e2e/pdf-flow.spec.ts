@@ -5,7 +5,8 @@ import { login } from "./helpers";
 // builder-plan.md §1.7 (route B): a form built from an existing PDF, iForms-style.
 // Needs the dev database; skipped when DATABASE_URL is not provided.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
-test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false });
+test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false, actionTimeout: 20_000 });
+test.setTimeout(180_000);
 
 async function samplePdf(): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -16,7 +17,7 @@ async function samplePdf(): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-test("PDF form: upload, draw five elements, assign a role, publish, attach to a package", async ({ page }) => {
+test("PDF form: upload, draw, publish, package, request, fill on the document, final PDF", async ({ page, browser, baseURL }) => {
   await login(page, "/admin/forms");
   const title = `PDF e2e ${Date.now()}`;
   await page.getByPlaceholder("שם הטופס החדש").fill(title);
@@ -60,4 +61,58 @@ test("PDF form: upload, draw five elements, assign a role, publish, attach to a 
   await page.getByRole("button", { name: "הוספת טופס" }).click();
   await expect(page.locator("main").getByText(title).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("הוסיפו לפחות טופס אחד")).toHaveCount(0);
+
+  // ---- Stage B: a request from that package, filled by the employee on the document, final PDF. ----
+  await page.goto("/admin/requests/new");
+  await page.getByLabel("ערכת מסמכים").selectOption({ label: pkg });
+  await page.getByRole("button", { name: "הבא" }).click();
+  const employee = `עובד PDF e2e ${Date.now()}`;
+  await page.getByLabel("שם העובד").fill(employee);
+  await page.getByLabel("מייל").fill("e2e-pdf@example.invalid");
+  await page.getByRole("button", { name: "הבא" }).click();
+  const next = page.getByRole("button", { name: "הבא" });
+  if (await next.isVisible()) await next.click();
+  await page.getByRole("button", { name: "שליחה" }).click();
+  const done = page.getByTestId("request-done");
+  await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
+  const link = await done.getByLabel(/קישור ל/).first().inputValue();
+  await done.getByRole("link", { name: "לעמוד הבקשה" }).click();
+  await page.waitForURL(/\/admin\/requests\/[0-9a-f-]+$/);
+  const requestUrl = page.url();
+
+  // The employee, in a fresh context, fills straight on the document.
+  const ctx = await browser.newContext({ baseURL: baseURL!, viewport: { width: 1400, height: 900 } });
+  const guest = await ctx.newPage();
+  await guest.goto(new URL(link).pathname);
+  await expect(guest.getByText(`עבור: ${employee}`)).toBeVisible({ timeout: 20_000 });
+  await guest.getByRole("button", { name: "על גבי המסמך" }).click();
+  await expect(guest.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
+  await guest.getByLabel("טקסט", { exact: true }).fill("דנה כהן");
+  await guest.getByLabel("מספר זהות", { exact: true }).fill("000000018");
+  await guest.getByLabel("תאריך", { exact: true }).fill("2026-11-01");
+  await guest.getByLabel("אישור", { exact: true }).check();
+  await guest.getByRole("button", { name: "חתימה", exact: true }).click();
+  await guest.getByRole("tab", { name: "הקלדה" }).click();
+  await guest.getByPlaceholder("הקלידו את שמכם").fill("דנה כהן");
+  await guest.getByRole("button", { name: "שמירת חתימה" }).click();
+  await guest.getByRole("button", { name: "שליחה" }).click();
+  await expect(guest.getByText(/תודה|נשלח|הושלם/).first()).toBeVisible({ timeout: 30_000 });
+  await ctx.close();
+
+  // The final PDF exists (made when the last step completes, or on demand) and is a real one-page PDF.
+  await page.goto(requestUrl);
+  const finalize = page.getByRole("button", { name: "יצירת קבצי PDF סופיים" });
+  if (await finalize.isVisible()) {
+    await finalize.click();
+    await expect(page.getByRole("status")).toBeVisible({ timeout: 30_000 });
+    await page.reload();
+  }
+  const pdfLink = page.getByRole("link", { name: "פתיחת ה-PDF (כולל אסמכתא)" }).first();
+  await expect(pdfLink).toBeVisible({ timeout: 30_000 });
+  const res = await page.request.get((await pdfLink.getAttribute("href"))!);
+  expect(res.ok()).toBe(true);
+  const body = await res.body();
+  expect(body.subarray(0, 5).toString()).toBe("%PDF-");
+  const finalDoc = await PDFDocument.load(body, { ignoreEncryption: true });
+  expect(finalDoc.getPageCount()).toBeGreaterThanOrEqual(1);
 });
