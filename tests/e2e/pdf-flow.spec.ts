@@ -42,7 +42,7 @@ test("PDF form: upload, draw five elements, assign a role, publish, attach to a 
   await page.getByLabel("מי ממלא").selectOption("employee");
 
   // The drawn fields live on their own page in the form editor, not among the questions.
-  await page.getByRole("button", { name: "עריכה", exact: true }).click();
+  await page.getByRole("tab", { name: "עריכה" }).click();
   await expect(page.getByText("שדות במסמך")).toBeVisible();
 
   // Publish.
