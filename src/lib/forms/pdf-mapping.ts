@@ -71,6 +71,15 @@ export const pdfMappingSchema = z.object({
 });
 export type PdfMapping = z.infer<typeof pdfMappingSchema>;
 
+/**
+ * What goes into comb boxes. Dates and phone numbers lose their separators: forms print the "/" or "-" themselves
+ * (form 101: dd mm yyyy in 8 boxes).
+ */
+export function combText(field: FormField, text: string): string {
+  if (field.type === "date" || field.type === "phone") return text.replace(/\D/g, "");
+  return text;
+}
+
 /** Resolve "children[0].birthDate" → { field, value }. */
 export function resolveStampValue(
   form: FormDefinition,
@@ -212,9 +221,10 @@ export async function stampPdf(
     if (!text) continue;
 
     if (stamp.kind === "comb") {
+      const cellsText = combText(field, text);
       const size = stamp.fontSize ?? Math.min(11, stamp.height * 0.75);
       for (const page of targets) {
-        for (const cell of combCells(text, stamp.width, stamp.comb?.cells)) {
+        for (const cell of combCells(cellsText, stamp.width, stamp.comb?.cells)) {
           drawText(page, cell.char, { ...stamp, x: stamp.x + cell.x, width: cell.width, fontSize: size }, { align: "center", multiline: false });
         }
       }

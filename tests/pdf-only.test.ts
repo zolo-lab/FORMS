@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPdfOnlyElement, dropPdfOnlyField, pdfOnlyFieldOf, PDF_FIELDS_PAGE_ID, PDF_PALETTE, restorePdfOnlyField, uniqueFieldId } from "@/lib/forms/pdf-only";
+import { addPdfOnlyElement, clonePdfOnlyField, dropPdfOnlyField, pdfOnlyFieldOf, PDF_FIELDS_PAGE_ID, PDF_PALETTE, restorePdfOnlyField, uniqueFieldId } from "@/lib/forms/pdf-only";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 
@@ -82,5 +82,21 @@ describe("pdf-only elements", () => {
     const s = addPdfOnlyElement(empty(), entry("stamp"), 0, { x: 0, y: 0 }, () => "s");
     expect(s.definition.pages[0]!.fields).toHaveLength(0);
     expect(s.stamp).toMatchObject({ kind: "stamp_image", width: 90, height: 90 });
+  });
+
+  it("copy/paste of a drawn element makes a new field; a regular field is not cloned", () => {
+    const r = addPdfOnlyElement(empty(), entry("radio"), 0, { x: 0, y: 0 }, () => "r");
+    const id = r.stamp.fieldId;
+    const c = clonePdfOnlyField(r.definition, id)!;
+    expect(c.fieldId).not.toBe(id);
+    expect(c.fieldId).toBe("pdf_radio_2");
+    const fields = c.definition.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields;
+    expect(fields.map((f) => f.id)).toEqual([id, "pdf_radio_2"]);
+    expect(fields[1]!.options).toEqual(fields[0]!.options);
+    expect(parseFormDefinition(c.definition).success).toBe(true);
+    const twice = clonePdfOnlyField(c.definition, id)!;
+    expect(twice.fieldId).toBe("pdf_radio_3");
+    const normal = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "א" }] }] }).data!;
+    expect(clonePdfOnlyField(normal, "a")).toBeNull();
   });
 });

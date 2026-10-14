@@ -7,9 +7,9 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { alignBoxes, distributeBoxes, snapPosition, type AlignMode, nextFreePosition } from "@/lib/pdf/arrange";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
-import { DEFAULT_SIZE, orphanStamps, placeableItems, stampKey, type PlaceableItem } from "@/lib/forms/pdf-items";
+import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
-import { allFields, type FormDefinition } from "@/lib/forms/schema";
+import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -17,6 +17,8 @@ import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
 import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-only";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
+import { StampFieldControls } from "./StampFieldControls";
+import { RowReplicator } from "./RowReplicator";
 import { usePdfDocument, type PdfSource } from "./usePdfDocument";
 
 const ITEM_DRAG = "application/x-pdf-item";
@@ -46,11 +48,13 @@ export interface PdfPlacementProps {
    * Returns the new stamp id so it can be selected.
    */
   /** Change a field of the form from the stamp panel (e.g. who fills it). */
-  onFieldPatch?: (fieldId: string, patch: { filledBy?: FillerRole }) => void;
+  onFieldPatch?: (fieldId: string, patch: Partial<FormField>) => void;
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
+  /** Copy/paste of a drawn element: make a copy of its field and return the new field id (null = keep the same field). */
+  onCloneField?: (fieldId: string) => string | null;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -66,6 +70,24 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const [viewAs, setViewAs] = useState<FillerRole | "">("");
   const [tableRows, setTableRows] = useState<Record<string, number>>({});
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
+  const widest = Math.max(...pages.map((p) => p.width), 1);
+  /** Zoom that makes the widest page fit the viewer (narrow windows). */
+  const fitScale = () => {
+    const w = viewerRef.current?.clientWidth ?? 0;
+    return w > 0 ? Math.max(0.3, Math.floor(((w - 32) / widest) * 100) / 100) : 1;
+  };
+  // Start fitted when the window is narrower than the page, so the page is never cut off.
+  const fitted = useRef(false);
+  const attachViewer = (el: HTMLDivElement | null) => {
+    viewerRef.current = el;
+    if (!el || fitted.current) return;
+    fitted.current = true;
+    const f = fitScale();
+    if (f < 1) setScale(f);
+  };
+  /** Bring a stamp into view after it was added (the page may be scrolled elsewhere). */
+  const reveal = (id: string) => requestAnimationFrame(() => rootRef.current?.querySelector(`[data-stamp="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }));
 
   const items = useMemo(() => placeableItems(definition, tableRows), [definition, tableRows]);
   const groups = useMemo(() => {
@@ -84,6 +106,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const roleOf = (s: PdfStamp): FillerRole | "none" => allFields(definition).find((f) => f.id === baseFieldId(s.fieldId))?.filledBy ?? "none";
   const rolesUsed = [...new Set(mapping.stamps.map(roleOf))].filter((r): r is FillerRole => r !== "none");
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
+  /** The form field a stamp writes (table cells resolve to no field: their column is edited in the form editor). */
+  const fieldOf = (s: PdfStamp): FormField | undefined => allFields(definition).find((f) => f.id === s.fieldId);
 
   const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
   const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -111,16 +135,40 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (stamp.whenValue === undefined) delete stamp.whenValue;
     setStamps([...mapping.stamps, stamp]);
     select(stamp.id);
+    reveal(stamp.id);
+  }
+
+  /** Place several items at once (e.g. every option of a choice), stacked under `from`. */
+  function placeMany(list: PlaceableItem[], from: PdfStamp) {
+    const pg = pages[from.page]!;
+    const added: PdfStamp[] = list.map((item, i) => {
+      const dims = DEFAULT_SIZE[item.kind];
+      const box = clampBox({ x: from.x, y: from.y - (i + 1) * (dims.height + 6), ...dims }, pg.width, pg.height);
+      const st: PdfStamp = { id: nanoid(8), fieldId: item.fieldId, kind: item.kind, page: from.page, x: round1(box.x), y: round1(box.y), width: box.width, height: box.height };
+      if (item.part !== undefined) st.part = item.part;
+      if (item.whenValue !== undefined) st.whenValue = item.whenValue;
+      return st;
+    });
+    if (added.length === 0) return;
+    setStamps([...mapping.stamps, ...added]);
+    setSelected(added[0]!.id);
+    setExtra(added.slice(1).map((a) => a.id));
+    reveal(added[0]!.id);
   }
 
   function draw(entry: PaletteEntry, page: number, at?: { x: number; y: number }) {
     if (!onDrawElement) return;
     const dims = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
     const pg = pages[page]!;
-    const pos = at ?? nextFreePosition(dims, pg, latest.current.stamps.filter((o) => o.page === page));
+    // A new element lands under the selected one (or under the last one added on that page).
+    const onPage = latest.current.stamps.filter((o) => o.page === page && o.id !== selected);
+    const anchor = latest.current.stamps.find((o) => o.id === selected && o.page === page);
+    const pos = at ?? nextFreePosition(dims, pg, anchor ? [...onPage, anchor] : onPage);
     const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
     pushHistory();
-    select(onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) }));
+    const id = onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) });
+    select(id);
+    reveal(id);
   }
 
   function startDrag(e: React.PointerEvent, stamp: PdfStamp, mode: "move" | "resize") {
@@ -205,13 +253,16 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const copies = clipboard.current.map((s) => {
       const pg = pages[s.page]!;
       const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
-      return { ...s, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+      // A drawn element gets its own new field; a regular field's stamp is just drawn again.
+      const fieldId = onCloneField?.(s.fieldId) ?? s.fieldId;
+      return { ...s, id: nanoid(8), fieldId, x: round1(c.x), y: round1(c.y) };
     });
     // Shift the clipboard so repeated pastes cascade.
     clipboard.current = copies;
     setStamps([...mapping.stamps, ...copies]);
     setSelected(copies[0]!.id);
     setExtra(copies.slice(1).map((c) => c.id));
+    reveal(copies[0]!.id);
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -243,12 +294,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
 
   const tables = allFields(definition).filter((f) => f.type === "repeating_table");
+  // The selection is cells of one row of one table → offer to repeat it on the next rows.
+  const rowSelection = (() => {
+    const list = selectedBoxes();
+    const cells = list.map((s) => tableCellOf(s.fieldId));
+    const first = cells[0];
+    if (!first || cells.some((c) => !c || c.table !== first.table || c.row !== first.row)) return null;
+    const table = tables.find((t) => t.id === first.table);
+    if (!table) return null;
+    return { list, row: first.row, table, maxRows: Number(table.settings?.maxRows ?? 20) };
+  })();
   const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
     <div ref={rootRef} tabIndex={-1} className="grid gap-4 outline-none lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
-      <aside className="space-y-3 lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
+      <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
         <p className="text-xs text-muted-foreground">לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד. פריט מסומן ב-✓ כבר ממוקם.</p>
         {onDrawElement && (
           <section aria-label="הוספה על המסמך">
@@ -313,12 +374,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       </aside>
 
       {/* Pages */}
-      <div className="min-w-0 space-y-3">
-        <div className="flex items-center gap-2 text-sm">
+      <div className="order-1 min-w-0 space-y-3 lg:order-none">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>זום</span>
           {[0.75, 1, 1.25, 1.5].map((z) => (
             <Button key={z} size="sm" variant={scale === z ? "default" : "outline"} onClick={() => setScale(z)}>{Math.round(z * 100)}%</Button>
           ))}
+          <Button size="sm" variant="outline" onClick={() => setScale(fitScale())}>התאמה לרוחב</Button>
           {group.length >= 2 && (
             <div role="toolbar" aria-label="יישור" className="flex flex-wrap items-center gap-1 rounded-md border bg-card px-2 py-1">
               <span className="text-xs text-muted-foreground">{group.length} נבחרו</span>
@@ -343,7 +405,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </Select>
           </label>
-          {onPreview && <Button className="ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
+          {onPreview && <Button className="lg:ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
         {doc && pages.length > 1 && (
           <nav aria-label="עמודים" className="flex gap-2 overflow-x-auto py-1" dir="ltr">
@@ -373,7 +435,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           </ul>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
-        <div className="space-y-4 overflow-auto rounded-lg bg-muted p-3 lg:max-h-[75vh]">
+        <div ref={attachViewer} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
+          {!doc && !error && <p role="status" className="py-16 text-center text-sm text-muted-foreground">טוען את ה-PDF…</p>}
           {/* PDF space is physical (origin bottom-left, x to the right), so this subtree is LTR. */}
           <div dir="ltr" className="space-y-4">
             {doc && pages.map((pg, pi) => (
@@ -448,13 +511,28 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       </div>
 
       {/* Selected stamp settings */}
-      <aside className="space-y-3 rounded-lg border bg-card p-3" aria-label="הגדרות חותמת">
+      <aside className="order-3 space-y-3 rounded-lg border bg-card p-3 lg:order-none" aria-label="הגדרות חותמת">
         {!selectedStamp ? (
           <p className="text-sm text-muted-foreground">בחרו חותמת על העמוד כדי לערוך אותה. חיצים מזיזים (Shift = 10), Delete מוחק.</p>
         ) : (
           <>
-            <p className="text-sm font-medium">{labelOf(selectedStamp)}</p>
-            <p className="text-xs text-muted-foreground" dir="ltr">{selectedStamp.fieldId}{selectedStamp.part ? `.${selectedStamp.part}` : ""}</p>
+            <p className="text-sm font-medium">{fieldOf(selectedStamp)?.label || labelOf(selectedStamp)}</p>
+            <p className="text-xs text-muted-foreground">
+              {labelOf(selectedStamp)} · <bdi dir="ltr">{selectedStamp.fieldId}{selectedStamp.part ? `.${selectedStamp.part}` : ""}</bdi>
+            </p>
+            {onFieldPatch && fieldOf(selectedStamp) && (
+              <StampFieldControls
+                field={fieldOf(selectedStamp)!}
+                stamp={selectedStamp}
+                placed={(value) => stampByKey.has(stampKey({ fieldId: selectedStamp.fieldId, whenValue: value }))}
+                onFieldPatch={(patch) => onFieldPatch(selectedStamp.fieldId, patch)}
+                onStampPatch={(patch) => patchStamp(selectedStamp.id, patch)}
+                onPlaceOptions={(values) => placeMany(
+                  values.map((v) => items.find((i) => i.key === stampKey({ fieldId: selectedStamp.fieldId, whenValue: v }))).filter((i): i is PlaceableItem => !!i),
+                  selectedStamp,
+                )}
+              />
+            )}
             <div className="grid grid-cols-2 gap-2">
               {(["x", "y", "width", "height"] as const).map((k) => (
                 <div key={k} className="space-y-1">
@@ -500,6 +578,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 />
                 {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
               </div>
+            )}
+            {rowSelection && (
+              <RowReplicator
+                key={rowSelection.list.map((s) => s.id).join()}
+                row={rowSelection.row}
+                maxRows={rowSelection.maxRows}
+                cells={rowSelection.list.length}
+                pitch={guessRowPitch(mapping.stamps, rowSelection.list)}
+                onApply={(count, pitch) => {
+                  const added = replicateTableRow(mapping.stamps, rowSelection.list, count, pitch, () => nanoid(8));
+                  if (added.length === 0) return;
+                  setStamps([...mapping.stamps, ...added]);
+                  const t = rowSelection.table.id;
+                  setTableRows((r) => ({ ...r, [t]: Math.max(r[t] ?? 1, rowSelection.row + count + 1) }));
+                }}
+              />
             )}
             <StampStyleControls stamp={selectedStamp} pageCount={pages.length} onPatch={(patch) => patchStamp(selectedStamp.id, patch)} />
             <div className="space-y-1">

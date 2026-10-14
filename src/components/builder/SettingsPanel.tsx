@@ -80,7 +80,7 @@ function NumberInput({ value, onChange, ...rest }: { value: unknown; onChange: (
 }
 
 /** Edits a list of {value,label} (options, grid rows/columns) as one line per item. */
-function ListTextarea({ items, onChange, rows = 5 }: { items: FieldOption[]; onChange: (items: FieldOption[]) => void; rows?: number }) {
+export function ListTextarea({ items, onChange, rows = 5 }: { items: FieldOption[]; onChange: (items: FieldOption[]) => void; rows?: number }) {
   const [text, setText] = useState(items.map((o) => o.label).join("\n"));
   return (
     <Textarea

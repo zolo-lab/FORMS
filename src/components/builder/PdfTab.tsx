@@ -1,12 +1,13 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
+import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
-import { addPdfOnlyElement, dropPdfOnlyField, pdfOnlyFieldOf, restorePdfOnlyField } from "@/lib/forms/pdf-only";
+import { addPdfOnlyElement, clonePdfOnlyField, dropPdfOnlyField, pdfOnlyFieldOf, restorePdfOnlyField } from "@/lib/forms/pdf-only";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
@@ -30,9 +31,13 @@ export function PdfTab({
   const dropped = useRef<Map<string, FormField>>(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [filled, setFilled] = useState<{ url: string; data: Uint8Array } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [acro, setAcro] = useState<AcroImport | null>(null);
+  /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
+  const defRef = useRef(definition);
+  useEffect(() => { defRef.current = definition; }, [definition]);
+  const changeDefinition = (d: FormDefinition) => { defRef.current = d; onDefinitionChange(d); };
 
   async function upload(file: File | undefined) {
     if (!file) return;
@@ -70,7 +75,8 @@ export function PdfTab({
         body: JSON.stringify({ pdfFileId: pdf.file.id, definition, mapping: pdf.mapping }),
       });
       if (!res.ok) { setError((await res.json()).error ?? "יצירת התצוגה נכשלה"); return; }
-      setPreviewUrl(URL.createObjectURL(await res.blob()));
+      const blob = await res.blob();
+      setFilled({ url: URL.createObjectURL(blob), data: new Uint8Array(await blob.arrayBuffer()) });
     } finally {
       setPreviewBusy(false);
     }
@@ -83,7 +89,7 @@ export function PdfTab({
         <Button variant={pdf ? "outline" : "default"} disabled={busy} onClick={() => input.current?.click()}>
           {busy ? "מעלה…" : pdf ? "החלפת PDF" : "העלאת PDF"}
         </Button>
-        {pdf && <span className="text-sm text-muted-foreground">{pdf.file.name} · {pdf.file.pages.length} עמודים</span>}
+        {pdf && <span className="text-sm text-muted-foreground"><bdi>{pdf.file.name}</bdi> · {pdf.file.pages.length} עמודים</span>}
         {pdf && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>הסרת ה-PDF מהטופס</Button>}
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -114,7 +120,7 @@ export function PdfTab({
           onMappingChange={(mapping) => {
             // Deleting a stamp of a drawn-on-PDF field also removes the field it created; undo brings it back.
             const kept = new Set(mapping.stamps.map((st) => st.fieldId));
-            let def = definition;
+            let def = defRef.current;
             for (const st of pdf.mapping.stamps) {
               if (kept.has(st.fieldId)) continue;
               const f = pdfOnlyFieldOf(def, st.fieldId);
@@ -125,16 +131,22 @@ export function PdfTab({
               const f = dropped.current.get(st.fieldId);
               if (f) def = restorePdfOnlyField(def, f);
             }
-            if (def !== definition) onDefinitionChange(def);
+            if (def !== defRef.current) changeDefinition(def);
             onChange({ ...pdf, mapping });
           }}
           onFieldPatch={(fieldId, patch) => {
-            const patched = { ...definition, pages: definition.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) };
-            onDefinitionChange(patched);
+            const d = defRef.current;
+            changeDefinition({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) });
+          }}
+          onCloneField={(fieldId) => {
+            const r = clonePdfOnlyField(defRef.current, fieldId);
+            if (!r) return null;
+            changeDefinition(r.definition);
+            return r.fieldId;
           }}
           onDrawElement={(entry, page, at) => {
-            const { definition: next, stamp } = addPdfOnlyElement(definition, entry, page, at, () => nanoid(8));
-            if (next !== definition) onDefinitionChange(next);
+            const { definition: next, stamp } = addPdfOnlyElement(defRef.current, entry, page, at, () => nanoid(8));
+            if (next !== defRef.current) changeDefinition(next);
             onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, stamp] } });
             return stamp.id;
           }}
@@ -142,8 +154,8 @@ export function PdfTab({
           previewBusy={previewBusy}
         />
       )}
-      <Dialog open={!!previewUrl} onClose={() => { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
-        {previewUrl && <iframe src={previewUrl} title="PDF ממולא" className="min-h-0 w-full flex-1 rounded border" />}
+      <Dialog open={!!filled} onClose={() => { if (filled) URL.revokeObjectURL(filled.url); setFilled(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
+        {filled && <PdfPreview data={filled.data} downloadUrl={filled.url} fileName={`${definition.title}.pdf`} />}
       </Dialog>
     </div>
   );

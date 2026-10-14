@@ -191,13 +191,16 @@ export function movePage(def: FormDefinition, index: number, to: number): FormDe
 /** Parse pasted lines ("שורה לכל אפשרות") into options with stable generated values. */
 export function parseOptionsText(text: string, existing: FieldOption[] = []): FieldOption[] {
   const byLabel = new Map(existing.map((o) => [o.label, o]));
+  const labels = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const kept = new Set(labels);
   const used = new Set<string>();
   const out: FieldOption[] = [];
   let n = 0;
-  for (const raw of text.split(/\r?\n/)) {
-    const label = raw.trim();
-    if (!label) continue;
-    const keep = byLabel.get(label);
+  for (const [i, label] of labels.entries()) {
+    // Same label → same option. Otherwise a renamed line keeps the value of the option it replaced (same position,
+    // old label gone), so PDF marks, conditions and stored answers that use the value keep working.
+    const renamed = existing[i] && !kept.has(existing[i]!.label) ? existing[i] : undefined;
+    const keep = byLabel.get(label) ?? (renamed ? { ...renamed, label } : undefined);
     let value = keep && !used.has(keep.value) ? keep.value : "";
     if (!value) {
       do value = `o${++n}`; while (used.has(value) || existing.some((o) => o.value === value && o.label !== label));
