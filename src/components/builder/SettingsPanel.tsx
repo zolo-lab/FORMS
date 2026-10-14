@@ -123,12 +123,14 @@ function StyleControls({ style, sample, onChange }: { style: FieldStyle | undefi
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename,
+  def, field, onPatch, onRename, onMoveToPage,
 }: {
   def: FormDefinition;
   field: FormField;
   onPatch: (patch: Partial<FormField>) => void;
   onRename: (to: string) => string | undefined;
+  /** Move the field to the end of another page of the form. */
+  onMoveToPage?: (page: number) => void;
 }) {
   const meta = FIELD_TYPE_META[field.type];
   const v: FieldValidation = field.validation ?? {};
@@ -287,6 +289,17 @@ export function FieldSettings({
 
       {meta.hasAnswer && (
         <Section title="מי ממלא ומיקום">
+          {onMoveToPage && def.pages.length > 1 && (
+            <Row label="עמוד בטופס">
+              <Select
+                aria-label="עמוד בטופס"
+                value={def.pages.findIndex((p) => p.fields.some((f) => f.id === field.id))}
+                onChange={(e) => onMoveToPage(Number(e.target.value))}
+              >
+                {def.pages.map((p, i) => <option key={p.id} value={i}>{`${i + 1}. ${p.title || "ללא כותרת"}`}</option>)}
+              </Select>
+            </Row>
+          )}
           <Row label="ממלא בשרשרת החתימות">
             <Select value={field.filledBy ?? "employee"} onChange={(e) => onPatch({ filledBy: e.target.value === "employee" ? undefined : (e.target.value as FormField["filledBy"]) })}>
               {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}

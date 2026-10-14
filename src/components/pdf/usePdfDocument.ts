@@ -1,8 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFWorker } from "pdfjs-dist";
 
 export type PdfSource = { url: string } | { data: Uint8Array };
+
+/**
+ * One worker for every document on the page. Each worker numbers its documents from 0 and pdf.js registers fonts
+ * as "g_d<doc>_f<n>", so two documents in two workers (the editor and the filled preview, or a replaced PDF) both
+ * got "g_d0_f1": the second one drew text with the first one's glyphs (letters went missing).
+ */
+let sharedWorker: PDFWorker | null = null;
 
 /** Loads pdfjs lazily on the client (it needs the DOM) and opens the document. */
 export function usePdfDocument(source: PdfSource | null) {
@@ -17,7 +24,8 @@ export function usePdfDocument(source: PdfSource | null) {
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        const loading = pdfjs.getDocument("url" in source ? { url: source.url } : { data: source.data.slice() });
+        sharedWorker ??= new pdfjs.PDFWorker();
+        const loading = pdfjs.getDocument({ ...("url" in source ? { url: source.url } : { data: source.data.slice() }), worker: sharedWorker });
         task = loading;
         const loaded = await loading.promise;
         if (cancelled) { void loading.destroy(); return; }

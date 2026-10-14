@@ -209,6 +209,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   def={def}
                   field={selectedField}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
+                  onMoveToPage={(pi) => commit(moveField(def, selectedField.id, { page: pi, index: def.pages[pi]!.fields.length }))}
                   onRename={(to) => {
                     const r = renameFieldId(def, selectedField.id, to);
                     if (r.error) return r.error;

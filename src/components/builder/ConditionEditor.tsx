@@ -34,6 +34,8 @@ export function ConditionEditor({
   const names = pickerLabels(candidates);
   const update = (rules: Rule[], mode = set.mode) => onChange(fromRuleSet({ mode, rules }));
   const patch = (i: number, r: Partial<Rule>) => update(set.rules.map((x, j) => (j === i ? { ...x, ...r } : x)));
+  /** A multiple-choice answer is a list: "שווה ל" never matches it, "מכיל" does. */
+  const defaultOp = (id: string): ComparisonOp => (byId.get(id)?.type === "checkboxes" ? "contains" : "eq");
 
   return (
     <div className="space-y-2">
@@ -44,7 +46,7 @@ export function ConditionEditor({
           <div key={i} className="space-y-1.5 rounded-md border p-2">
             <div className="flex items-center gap-2 text-sm">
               <span className="shrink-0 text-muted-foreground">{i === 0 ? lead : set.mode === "all" ? "וגם" : "או"}</span>
-              <Select aria-label="שדה" value={r.field} onChange={(e) => patch(i, { field: e.target.value, value: undefined })} className="h-9">
+              <Select aria-label="שדה" value={r.field} onChange={(e) => patch(i, { field: e.target.value, op: defaultOp(e.target.value), value: undefined })} className="h-9">
                 <option value="">בחר שדה…</option>
                 {candidates.map((f) => <option key={f.id} value={f.id}>{names.get(f.id)}</option>)}
               </Select>
@@ -60,7 +62,7 @@ export function ConditionEditor({
         );
       })}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={candidates.length === 0} onClick={() => update([...set.rules, { field: candidates[0]!.id, op: "eq" }])}><Plus className="size-4" />הוספת תנאי</Button>
+        <Button variant="outline" size="sm" disabled={candidates.length === 0} onClick={() => update([...set.rules, { field: candidates[0]!.id, op: defaultOp(candidates[0]!.id) }])}><Plus className="size-4" />הוספת תנאי</Button>
         {candidates.length === 0 && <p className="text-xs text-muted-foreground">אין עדיין שדה אחר שאפשר להתנות בו.</p>}
         {set.rules.length > 1 && (
           <Select aria-label="קשר בין התנאים" value={set.mode} onChange={(e) => update(set.rules, e.target.value as "all" | "any")} className="h-8 w-auto">
@@ -74,7 +76,8 @@ export function ConditionEditor({
 }
 
 function ValueInput({ target, rule, onChange }: { target?: FormField; rule: Rule; lookups?: undefined; onChange: (v: unknown) => void }) {
-  const single = rule.op === "eq" || rule.op === "neq";
+  // Choosing one option also fits "מכיל" / "לא מכיל" of a multiple-choice field.
+  const single = rule.op === "eq" || rule.op === "neq" || ((rule.op === "contains" || rule.op === "notContains") && target?.type === "checkboxes");
   if (single && target?.type === "yes_no") {
     return (
       <Select aria-label="ערך" value={String(rule.value ?? "")} onChange={(e) => onChange(e.target.value)} className="h-9">
