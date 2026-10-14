@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
+import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
@@ -30,7 +31,7 @@ export function PdfTab({
   const dropped = useRef<Map<string, FormField>>(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ url: string; data: Uint8Array } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [acro, setAcro] = useState<AcroImport | null>(null);
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
@@ -74,7 +75,8 @@ export function PdfTab({
         body: JSON.stringify({ pdfFileId: pdf.file.id, definition, mapping: pdf.mapping }),
       });
       if (!res.ok) { setError((await res.json()).error ?? "יצירת התצוגה נכשלה"); return; }
-      setPreviewUrl(URL.createObjectURL(await res.blob()));
+      const blob = await res.blob();
+      setPreview({ url: URL.createObjectURL(blob), data: new Uint8Array(await blob.arrayBuffer()) });
     } finally {
       setPreviewBusy(false);
     }
@@ -152,8 +154,8 @@ export function PdfTab({
           previewBusy={previewBusy}
         />
       )}
-      <Dialog open={!!previewUrl} onClose={() => { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
-        {previewUrl && <iframe src={previewUrl} title="PDF ממולא" className="min-h-0 w-full flex-1 rounded border" />}
+      <Dialog open={!!preview} onClose={() => { if (preview) URL.revokeObjectURL(preview.url); setPreview(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
+        {preview && <PdfPreview data={preview.data} downloadUrl={preview.url} fileName={`${definition.title}.pdf`} />}
       </Dialog>
     </div>
   );
