@@ -14,7 +14,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       <p className="mb-4 rounded-md bg-muted p-2 text-xs text-muted-foreground">
         תצוגה של {version.publishedAt ? `גרסה ${version.version} (פורסמה)` : `גרסה ${version.version} (טיוטה)`}. המילוי כאן לא נשמר.
       </p>
-      <FormPreview definition={version.definition} />
+      <FormPreview
+        definition={version.definition}
+        pdf={version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined}
+      />
     </main>
   );
 }
