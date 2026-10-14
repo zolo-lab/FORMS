@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPdfOnlyElement, dropPdfOnlyField, PDF_FIELDS_PAGE_ID, PDF_PALETTE, uniqueFieldId } from "@/lib/forms/pdf-only";
+import { addPdfOnlyElement, dropPdfOnlyField, pdfOnlyFieldOf, PDF_FIELDS_PAGE_ID, PDF_PALETTE, restorePdfOnlyField, uniqueFieldId } from "@/lib/forms/pdf-only";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 
@@ -51,5 +51,15 @@ describe("pdf-only elements", () => {
     expect(dropped.pages[0]!.fields).toHaveLength(0);
     const normal = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields: [{ id: "a", type: "short_text", label: "א" }] }] }).data!;
     expect(dropPdfOnlyField(normal, "a")).toBe(normal);
+  });
+
+  it("a dropped field can be restored (undo of a stamp deletion)", () => {
+    const { definition, stamp } = addPdfOnlyElement(empty(), entry("id"), 0, { x: 0, y: 0 }, () => "x");
+    const field = pdfOnlyFieldOf(definition, stamp.fieldId)!;
+    expect(field).toBeDefined();
+    const dropped = dropPdfOnlyField(definition, stamp.fieldId);
+    const restored = restorePdfOnlyField(dropped, field);
+    expect(restored.pages.find((p) => p.id === PDF_FIELDS_PAGE_ID)!.fields).toEqual([field]);
+    expect(restorePdfOnlyField(restored, field)).toBe(restored);
   });
 });
