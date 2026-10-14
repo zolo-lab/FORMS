@@ -166,3 +166,15 @@ Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRO
 - **Intake template:** `docs/templates/intake-employee.json` (requester page: job title, start date, scope, salary type/amount, manager, notes; employee page; consent + signature). It was imported in production via "ייבוא טופס מ-JSON", published, and attached to the package "קליטת עובד רגיל" (the QA form was removed from that package).
 - **Builder:** PDF-drawn fields live on their own page "שדות במסמך" (`PDF_FIELDS_PAGE_ID`); new layout type `section`; a product with an empty factor is empty (not 0); a stamp shows the field label.
 - Production still holds QA data (form "בדיקה QA – טופס קליטה", two test requests incl. "ישראל בדיקה"); delete only with the owner's approval.
+
+## 15. Builder focus (14.10.2026, evening) – see `docs/builder-plan.md`
+
+Parts 1 and 2 of the builder plan are done and merged (PRs #82–#92). Both routes have a real end-to-end Playwright test against the dev DB:
+- `tests/e2e/pdf-flow.spec.ts` – "טופס מ-PDF" → upload → 5 palette elements → role → publish → package → request → employee fills on the document (typed signature) → final PDF parsed.
+- `tests/e2e/builder-flow.spec.ts` – from scratch: 8 field types, options + "אחר", condition, second page, full preview fill + submit, publish, package; plus the template path.
+
+Bugs those tests found and fixed: an empty first page blocked publishing a PDF form; every field was locked in "fill on document" (`evaluateCondition(undefined)` is `true`); the on-document signature needed two dialogs; "הוספת תנאי" did nothing (empty rule dropped at once).
+
+New since §14: `nextFreePosition` (palette elements never stack), 2pt snap, palette radio/dropdown/image stamp (+ upload), undo restores dropped pdf-only fields, page thumbnails, "צפה כ-" dimming, `tabOrder` on the document, built-in templates (`src/lib/forms/templates/`), mobile palette drawer, `pickerLabels`, card layout review-before-signature (`cardSteps`), `grid` field type (`src/lib/forms/grid.ts`).
+
+**Next:** part 3 of the builder plan = Israel's manual pass in production on both routes. Only after his approval return to sending / approval rounds / dashboard work.
