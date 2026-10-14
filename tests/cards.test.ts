@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCards, reviewItems } from "@/lib/forms/cards";
+import { buildCards, cardSteps, reviewItems } from "@/lib/forms/cards";
 import { parseFormDefinition } from "@/lib/forms/schema";
 
 const def = parseFormDefinition({
@@ -39,5 +39,17 @@ describe("card layout", () => {
       { cardIndex: 0, label: "שם", text: "דנה" },
       { cardIndex: 1, label: "לדלג?", text: expect.stringContaining("לא") },
     ]);
+  });
+
+  it("puts the review before the signature, and the signature last", () => {
+    const sig = { ...def, pages: [{ ...def.pages[0]!, fields: [...def.pages[0]!.fields, { id: "sig", type: "signature" as const, label: "חתימה" }] }, ...def.pages.slice(1)] };
+    const cards = buildCards(sig, { name: "דנה", skip: "no" });
+    const steps = cardSteps(cards);
+    const kinds = steps.map((s) => (s.kind === "review" ? "review" : s.card.field?.type ?? "blocks"));
+    expect(kinds.at(-1)).toBe("signature");
+    expect(kinds.at(-2)).toBe("review");
+    expect(kinds.filter((k) => k === "signature")).toHaveLength(1);
+    // Without a signature the review is the last screen.
+    expect(cardSteps(buildCards(def, { name: "דנה", skip: "no" })).at(-1)).toEqual({ kind: "review" });
   });
 });
