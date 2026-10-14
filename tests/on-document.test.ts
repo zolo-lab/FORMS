@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coversAll, inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { coversAll, inputAttrs, isLockedOnDocument, tabOrder, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields } from "@/lib/forms/schema";
 import { sampleForm } from "./fixtures/sample-form";
@@ -110,5 +110,19 @@ describe("isLockedOnDocument", () => {
     const cond = { field: "x", op: "eq" as const, value: "1" };
     expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א", disabledIf: cond }, { x: "1" })).toBe(true);
     expect(isLockedOnDocument({ id: "a", type: "short_text", label: "א", disabledIf: cond }, { x: "2" })).toBe(false);
+  });
+});
+
+describe("tabOrder", () => {
+  it("explicit tabIndex first, then top-to-bottom, start-to-end, per page", () => {
+    const st = [
+      { id: "c", page: 0, x: 10, y: 700 },
+      { id: "a", page: 0, x: 200, y: 700, tabIndex: 1 },
+      { id: "d", page: 0, x: 10, y: 600 },
+      { id: "b", page: 0, x: 300, y: 500, tabIndex: 2 },
+      { id: "e", page: 0, x: 50, y: 700 },
+      { id: "z", page: 1, x: 0, y: 800, tabIndex: 0 },
+    ];
+    expect(tabOrder(st).map((s) => s.id)).toEqual(["a", "b", "c", "e", "d", "z"]);
   });
 });
