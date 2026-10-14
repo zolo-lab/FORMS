@@ -30,7 +30,12 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
 
   const done = page.getByTestId("request-done");
   // Sending creates tokens, outbox rows and events one by one on a remote DB: allow it time.
-  await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
+  try {
+    await expect(done.getByRole("heading", { name: "הבקשה נשלחה" })).toBeVisible({ timeout: 30_000 });
+  } catch (e) {
+    // CI artifacts cannot be downloaded here: put what the page shows into the failure message.
+    throw new Error(`${(e as Error).message}\nPAGE: ${(await page.locator("body").innerText()).slice(0, 1500)}`);
+  }
   const link = done.getByLabel(/קישור ל/).first();
   await expect(link).toHaveValue(/\/s\/[A-Za-z0-9_-]{43}$/);
   await expect(done.getByRole("link", { name: "שתף בוואטסאפ" }).first()).toHaveAttribute("href", /^https:\/\/wa\.me\/972501234567\?text=/);
