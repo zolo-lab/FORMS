@@ -86,3 +86,45 @@ export function orphanStamps(def: FormDefinition, stamps: PdfStamp[]): PdfStamp[
   // Stamps that do not read an answer are never orphans.
   return stamps.filter((s) => s.kind !== "date_signed" && s.kind !== "stamp_image" && !known.has(stampKey(s)));
 }
+
+const CELL = /^([A-Za-z]\w*)\[(\d+)\]\.([A-Za-z]\w*)$/;
+
+/** "children[2].name" → { table: "children", row: 2, column: "name" }. */
+export function tableCellOf(fieldId: string): { table: string; row: number; column: string } | null {
+  const m = CELL.exec(fieldId);
+  return m ? { table: m[1]!, row: Number(m[2]), column: m[3]! } : null;
+}
+
+/**
+ * Repeat the selected cells of one table row on the next `count` rows, `pitch` pt lower each time
+ * (a printed table: place row 1, then fill the rest). Cells that are already placed are skipped.
+ * Returns only the new stamps; empty when the selection is not one row of one table.
+ */
+export function replicateTableRow(all: PdfStamp[], selected: PdfStamp[], count: number, pitch: number, newId: () => string): PdfStamp[] {
+  const cells = selected.map((s) => ({ s, c: tableCellOf(s.fieldId) }));
+  if (cells.length === 0 || cells.some((x) => !x.c)) return [];
+  const { table, row } = cells[0]!.c!;
+  if (cells.some((x) => x.c!.table !== table || x.c!.row !== row)) return [];
+  const taken = new Set(all.map(stampKey));
+  const out: PdfStamp[] = [];
+  for (let k = 1; k <= count; k++) {
+    for (const { s, c } of cells) {
+      const copy: PdfStamp = { ...s, id: newId(), fieldId: `${table}[${row + k}].${c!.column}`, y: Math.round((s.y - k * pitch) * 10) / 10 };
+      if (copy.y < 0 || taken.has(stampKey(copy))) continue;
+      taken.add(stampKey(copy));
+      out.push(copy);
+    }
+  }
+  return out;
+}
+
+/** Row distance guessed from the selection: the same column one row lower if it is placed, else the row height + 6pt. */
+export function guessRowPitch(all: PdfStamp[], selected: PdfStamp[]): number {
+  for (const s of selected) {
+    const c = tableCellOf(s.fieldId);
+    if (!c) continue;
+    const next = all.find((o) => o.fieldId === `${c.table}[${c.row + 1}].${c.column}` && o.page === s.page && (o.whenValue ?? "") === (s.whenValue ?? ""));
+    if (next && s.y - next.y > 0) return Math.round((s.y - next.y) * 10) / 10;
+  }
+  return Math.max(...selected.map((s) => s.height)) + 6;
+}

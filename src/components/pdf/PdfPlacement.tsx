@@ -7,7 +7,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { alignBoxes, distributeBoxes, snapPosition, type AlignMode, nextFreePosition } from "@/lib/pdf/arrange";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
-import { DEFAULT_SIZE, orphanStamps, placeableItems, stampKey, type PlaceableItem } from "@/lib/forms/pdf-items";
+import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-only";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
 import { StampFieldControls } from "./StampFieldControls";
+import { RowReplicator } from "./RowReplicator";
 import { usePdfDocument, type PdfSource } from "./usePdfDocument";
 
 const ITEM_DRAG = "application/x-pdf-item";
@@ -293,6 +294,16 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
 
   const tables = allFields(definition).filter((f) => f.type === "repeating_table");
+  // The selection is cells of one row of one table → offer to repeat it on the next rows.
+  const rowSelection = (() => {
+    const list = selectedBoxes();
+    const cells = list.map((s) => tableCellOf(s.fieldId));
+    const first = cells[0];
+    if (!first || cells.some((c) => !c || c.table !== first.table || c.row !== first.row)) return null;
+    const table = tables.find((t) => t.id === first.table);
+    if (!table) return null;
+    return { list, row: first.row, table, maxRows: Number(table.settings?.maxRows ?? 20) };
+  })();
   const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
@@ -567,6 +578,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 />
                 {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
               </div>
+            )}
+            {rowSelection && (
+              <RowReplicator
+                key={rowSelection.list.map((s) => s.id).join()}
+                row={rowSelection.row}
+                maxRows={rowSelection.maxRows}
+                cells={rowSelection.list.length}
+                pitch={guessRowPitch(mapping.stamps, rowSelection.list)}
+                onApply={(count, pitch) => {
+                  const added = replicateTableRow(mapping.stamps, rowSelection.list, count, pitch, () => nanoid(8));
+                  if (added.length === 0) return;
+                  setStamps([...mapping.stamps, ...added]);
+                  const t = rowSelection.table.id;
+                  setTableRows((r) => ({ ...r, [t]: Math.max(r[t] ?? 1, rowSelection.row + count + 1) }));
+                }}
+              />
             )}
             <StampStyleControls stamp={selectedStamp} pageCount={pages.length} onPatch={(patch) => patchStamp(selectedStamp.id, patch)} />
             <div className="space-y-1">
