@@ -30,7 +30,7 @@ test("PDF form: upload, draw five elements, assign a role, publish, attach to a 
 
   // Five elements from the palette; each lands on its own spot.
   for (const label of ["טקסט", 'ת"ז בתאים', "תאריך", "תיבת סימון", "חתימה"]) {
-    await page.getByRole("button", { name: `הוספת ${label}` }).click();
+    await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   }
   const stamps = page.locator("[data-stamp]");
   await expect(stamps).toHaveCount(5);
