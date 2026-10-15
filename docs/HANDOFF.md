@@ -198,3 +198,11 @@ CI notes: `pnpm install --no-frozen-lockfile` with no lockfile (deps float). e2e
 request wizard spec; the uploaded `e2e-results` artifact cannot be downloaded from the agent sandbox (blob host blocked).
 The dev DB accumulates e2e packages/forms; keep list queries bulk (no per-row queries).
 
+
+## 17. Signer kinds, contacts and groups (15.10.2026, PR #106)
+
+- Tables `contacts`, `groups`, `group_members` (migration `0003_shiny_black_bolt`): **applied to dev**, **not yet to production** (Israel pastes the SQL in the Neon console, then `insert into schema_migrations(name) values ('0003_shiny_black_bolt')`). Until then the editor and package pages show empty contact/group lists (`people-store.ts` swallows 42P01).
+- `WorkflowStep.assigneeKind`: `fixed | contact | from_field | group_all` (`src/lib/workflow/assignee.ts`). `group_all` fans out to one parallel step per member in `planSteps(workflow, answers, newId, people)`; `requests-store.sendRequest` builds `people` with `peopleForWorkflow`.
+- A dropdown with `optionsSource: "group:<id>"` lists the group's members (value = contact id); `lookupsFor(definitions)` builds the lists for `/s/[token]` and the request wizard. A step `from_field` on that field resolves the contact.
+- Admin: `/admin/settings/people` (contacts + groups), package step editor has "מי הנמען".
+- Not done: permissions per form type / group (who may open a request) – needs login first (6.10).
