@@ -14,13 +14,26 @@ export type GroupRow = typeof groups.$inferSelect;
 
 const toPerson = (c: ContactRow): Person => ({ id: c.id, name: c.name, email: c.email ?? undefined, phone: c.phone ?? undefined });
 
+/**
+ * Until the migration that creates these tables is applied (dev gets it after the merge, production when Israel
+ * runs it), the lists are empty instead of crashing every editor page: Postgres 42P01 = relation does not exist.
+ */
+async function orEmpty<T>(q: Promise<T[]>): Promise<T[]> {
+  try {
+    return await q;
+  } catch (e) {
+    if ((e as { code?: string })?.code === "42P01" || /does not exist/.test(String((e as Error)?.message))) return [];
+    throw e;
+  }
+}
+
 export async function listContacts(includeInactive = false): Promise<ContactRow[]> {
   const q = db.select().from(contacts).orderBy(asc(contacts.name));
-  return includeInactive ? q : q.where(eq(contacts.active, true));
+  return orEmpty(includeInactive ? q : q.where(eq(contacts.active, true)));
 }
 
 export async function listGroups(): Promise<(GroupRow & { memberIds: string[] })[]> {
-  const gs = await db.select().from(groups).orderBy(asc(groups.name));
+  const gs = await orEmpty(db.select().from(groups).orderBy(asc(groups.name)));
   if (!gs.length) return [];
   const ms = await db.select().from(groupMembers).where(inArray(groupMembers.groupId, gs.map((g) => g.id)));
   return gs.map((g) => ({ ...g, memberIds: ms.filter((m) => m.groupId === g.id).map((m) => m.contactId) }));
