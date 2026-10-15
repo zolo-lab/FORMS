@@ -16,3 +16,14 @@ describe("comb boxes", () => {
     expect(combText(field("short_text"), "א/ב")).toBe("א/ב");
   });
 });
+
+describe("table answers as text", () => {
+  it("one line per row with column labels, empty cells left out", () => {
+    const table: FormField = { id: "kids", type: "repeating_table", label: "ילדים", fields: [
+      { id: "name", type: "short_text", label: "שם" },
+      { id: "birth", type: "date", label: "תאריך לידה" },
+    ] };
+    expect(formatAnswer(table, [{ name: "יואב", birth: "2015-03-02" }, { name: "מאיה" }, {}])).toBe("1. שם: יואב · תאריך לידה: 02/03/2015\n2. שם: מאיה");
+    expect(formatAnswer(table, undefined)).toBe("");
+  });
+});

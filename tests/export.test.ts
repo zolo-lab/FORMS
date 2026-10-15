@@ -73,9 +73,9 @@ describe("export", () => {
       createdAt: new Date("2026-10-13T10:00:00Z"), expiresAt: null, answers, definitions: [def],
     });
     const table = buildExportTable([mk("r1", "א", { firstName: "דנה", city: "חיפה" }), mk("r2", "ב", { firstName: "יוסי" })]);
-    expect(table[0]!.slice(-2)).toEqual(["FNAME", "עיר"]);
-    expect(table[1]!.slice(-2)).toEqual(["דנה", "חיפה"]);
-    expect(table[2]!.slice(-2)).toEqual(["יוסי", ""]);
+    expect(table[0]!.slice(-3)).toEqual(["FNAME", "עיר", "חתימה"]);
+    expect(table[1]!.slice(-3)).toEqual(["דנה", "חיפה", ""]);
+    expect(table[2]!.slice(-3)).toEqual(["יוסי", "", ""]);
     expect(table[1]![6]).toBe("2026-10-13");
   });
 
@@ -83,5 +83,33 @@ describe("export", () => {
     const rows = Array.from({ length: 500 }, (_, i) => [String(i), "שם", "x"]);
     expect(toCsv(rows).split("\r\n")).toHaveLength(501);
     expect(zipList(buildXlsx(rows)).length).toBeGreaterThan(3);
+  });
+
+  it("exports repeating tables as row × column cells, signatures as חתום, and the ID from the form when the request has none", () => {
+    const def = parseFormDefinition({
+      schemaVersion: 1, title: "t",
+      pages: [{ id: "p", title: "", fields: [
+        { id: "idn", type: "id_number", label: "מספר זהות", prefill: "employee.idNumber" },
+        { id: "kids", type: "repeating_table", label: "ילדים", fields: [
+          { id: "name", type: "short_text", label: "שם" },
+          { id: "birth", type: "date", label: "תאריך לידה" },
+          { id: "custody", type: "consent", label: "בחזקתי" },
+        ] },
+        { id: "sig", type: "signature", label: "חתימה" },
+      ] }],
+    }).data!;
+    const mk = (id: string, answers: Record<string, unknown>) => ({
+      id, subjectName: "x", subjectIdNumber: "", organization: "o", package: "p", status: "הושלם",
+      createdAt: new Date("2026-10-13T10:00:00Z"), expiresAt: null, answers, definitions: [def],
+    });
+    const table = buildExportTable([
+      mk("r1", { idn: "000000018", kids: [{ name: "יואב", birth: "2015-03-02", custody: true }, { name: "מאיה" }], sig: { image: "data:" } }),
+      mk("r2", { kids: [] }),
+    ]);
+    const h = table[0]!;
+    expect(h.slice(8)).toEqual(["מספר זהות", "ילדים 1 – שם", "ילדים 1 – תאריך לידה", "ילדים 1 – בחזקתי", "ילדים 2 – שם", "ילדים 2 – תאריך לידה", "ילדים 2 – בחזקתי", "חתימה"]);
+    expect(table[1]!.slice(8)).toEqual(["000000018", "יואב", "02/03/2015", "מאושר", "מאיה", "", "", "חתום"]);
+    expect(table[1]![2]).toBe("000000018");
+    expect(table[2]!.slice(8)).toEqual(["", "", "", "", "", "", "", ""]);
   });
 });
