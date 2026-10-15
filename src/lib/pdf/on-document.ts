@@ -1,4 +1,5 @@
 /** Pure helpers for "fill on the document": which stamps get an input, and how input maps to answers. */
+import { filterCharset } from "@/lib/forms/charset";
 import { evaluateCondition, type Answers } from "@/lib/forms/conditions";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -45,7 +46,7 @@ export function inputAttrs(field: FormField): { type: string; inputMode?: "numer
     case "phone": return { type: "tel", inputMode: "tel", dir: "ltr" };
     case "email": return { type: "email", inputMode: "email", dir: "ltr" };
     case "number": case "currency": case "percent": return { type: "text", inputMode: "decimal", dir: "ltr" };
-    default: return { type: "text" };
+    default: return field.validation?.charset === "digits" ? { type: "text", inputMode: "numeric", dir: "ltr" } : { type: "text" };
   }
 }
 
@@ -71,6 +72,7 @@ export function writeText(field: FormField, current: unknown, stamp: StampLike, 
     else obj[stamp.part] = input;
     return Object.keys(obj).length ? obj : undefined;
   }
+  if (field.type === "short_text" || field.type === "long_text") input = filterCharset(input, field.validation?.charset);
   if (input === "") return undefined;
   if (NUMERIC.has(field.type)) {
     const n = Number(input);

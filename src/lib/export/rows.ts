@@ -25,7 +25,7 @@ export const FIXED_HEADERS = ["מזהה בקשה", "שם", 'ת"ז', "ארגון"
 function columnOf(f: { id: string; exportKey?: string; type: string }) {
   return f.exportKey?.trim() || f.id;
 }
-const SKIP = new Set(["heading", "info_text", "image", "divider", "section", "file_upload", "hidden"]);
+const SKIP = new Set(["heading", "info_text", "image", "divider", "section", "link", "file_upload", "hidden"]);
 
 interface Column { key: string; title: string; value: (r: ExportRequest) => string }
 

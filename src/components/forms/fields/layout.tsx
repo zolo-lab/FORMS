@@ -2,6 +2,7 @@ import { fieldStyleClass } from "@/lib/forms/field-style";
 import type { FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
 import { Markdown } from "../Markdown";
+import { safeLinkUrl } from "@/lib/forms/link";
 
 export function LayoutBlock({ field, pipe = (t) => t }: { field: FormField; pipe?: (text: string) => string }) {
   switch (field.type) {
@@ -28,6 +29,15 @@ export function LayoutBlock({ field, pipe = (t) => t }: { field: FormField; pipe
       );
     case "divider":
       return <hr className="my-2" />;
+    case "link": {
+      const url = safeLinkUrl(String(field.settings?.url ?? ""));
+      if (!url) return null;
+      return (
+        <a href={url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1 text-primary underline underline-offset-4", fieldStyleClass(field.style))}>
+          {pipe(field.label) || url}
+        </a>
+      );
+    }
     default:
       return null;
   }

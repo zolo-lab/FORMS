@@ -59,6 +59,8 @@ export const validationSchema = z
     maxLength: z.number().int().positive().optional(),
     pattern: z.string().optional(),
     patternMessage: z.string().optional(),
+    /** Text fields: allowed characters ("ספרות בלבד" / "עברית בלבד" / "אנגלית בלבד" in iForms). */
+    charset: z.enum(["digits", "hebrew", "english"]).optional(),
     /** For checkbox/multi-select: min/max selected items. */
     minSelected: z.number().int().nonnegative().optional(),
     maxSelected: z.number().int().positive().optional(),
