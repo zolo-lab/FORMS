@@ -16,14 +16,35 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">טפסים</h1>
-        <form action={createFormAction} className="flex gap-2">
-          <Input name="title" placeholder="שם הטופס החדש" className="w-56" />
-          <Button type="submit">טופס חדש</Button>
-          <Button type="submit" variant="outline" formAction={createPdfFormAction}>טופס מ-PDF</Button>
+      <h1 className="text-2xl font-bold">טפסים</h1>
+      {/* Every new form starts with a choice of kind: a PDF to place fields on, or a form built from questions. */}
+      <Card className="p-4">
+        <form action={createFormAction} className="space-y-3">
+          <h2 className="font-semibold">יצירת טופס חדש</h2>
+          <div className="space-y-1">
+            <label htmlFor="new-form-title" className="text-sm text-muted-foreground">שם הטופס</label>
+            <Input id="new-form-title" name="title" placeholder="שם הטופס החדש" className="sm:w-80" />
+          </div>
+          <p className="text-sm text-muted-foreground">איזה סוג טופס?</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="submit"
+              className="flex flex-col items-start gap-1 rounded-lg border-2 border-primary/30 bg-card p-4 text-start transition hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span className="text-base font-semibold">טופס חדש – בנייה משאלות</span>
+              <span className="text-sm text-muted-foreground">בונים טופס משאלות, עמודים ותנאים, כמו JotForm או Google Forms. בסוף נוצר PDF מסכם.</span>
+            </button>
+            <button
+              type="submit"
+              formAction={createPdfFormAction}
+              className="flex flex-col items-start gap-1 rounded-lg border-2 border-primary/30 bg-card p-4 text-start transition hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span className="text-base font-semibold">טופס מ-PDF</span>
+              <span className="text-sm text-muted-foreground">מעלים PDF קיים (למשל טופס 101), מניחים עליו שדות, והעובד ממלא וחותם ישירות על המסמך.</span>
+            </button>
+          </div>
         </form>
-      </div>
+      </Card>
       <Card className="p-4">
         <h2 className="mb-2 font-semibold">התחלה מתבנית</h2>
         <div className="grid gap-3 sm:grid-cols-2">
