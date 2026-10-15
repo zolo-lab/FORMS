@@ -206,3 +206,10 @@ The dev DB accumulates e2e packages/forms; keep list queries bulk (no per-row qu
 - A dropdown with `optionsSource: "group:<id>"` lists the group's members (value = contact id); `lookupsFor(definitions)` builds the lists for `/s/[token]` and the request wizard. A step `from_field` on that field resolves the contact.
 - Admin: `/admin/settings/people` (contacts + groups), package step editor has "מי הנמען".
 - Not done: permissions per form type / group (who may open a request) – needs login first (6.10).
+
+## 18. Export templates (15.10.2026, PR #108)
+
+- `export_templates` (migration `0004_worried_sumo`): **applied to dev**, **not to production** (the auto-mode classifier blocks production DDL from Claude even with Israel's approval; he pastes 0003 + 0004 in the Neon console).
+- `src/lib/export/template.ts`: `guessColumns`, `cellValue`, `applyTemplate`, formats `text|code|digits|date_ddmmyyyy|date_iso|number`, composite parts (`bank.branch`).
+- `/admin/settings/exports` (create from XLSX/CSV header row or typed names), `/admin/settings/exports/[id]` (map + preview of the package's last 5 requests). Requests export takes `?template=<id>`.
+- Local git: the remote URL is `.../FORMS` (repo renamed); `git fetch origin` may leave `origin/main` stale – use `git fetch origin main` + `FETCH_HEAD`.
