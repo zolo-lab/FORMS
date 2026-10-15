@@ -50,6 +50,13 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
 
+  // Viewing the published form shows the PDF itself with the placed fields to fill.
+  const formId = new URL(page.url()).pathname.split("/").pop()!;
+  await page.goto(`/preview/form/${formId}`);
+  await expect(page.getByRole("button", { name: "על גבי המסמך" })).toBeVisible();
+  await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByLabel("מספר זהות", { exact: true })).toBeVisible();
+
   // Attach to a new package.
   await page.goto("/admin/packages");
   const pkg = `ערכת PDF e2e ${Date.now()}`;

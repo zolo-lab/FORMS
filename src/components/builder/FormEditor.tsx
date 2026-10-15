@@ -19,6 +19,7 @@ import { Canvas, type Selection } from "./Canvas";
 import { FormSettings } from "./FormSettings";
 import { Palette } from "./Palette";
 import { FieldSettings, PageSettings } from "./SettingsPanel";
+import { FormTestFill } from "@/components/forms/FormTestFill";
 import { PdfTab, type PdfState } from "./PdfTab";
 
 type TabId = "edit" | "preview" | "pdf" | "json";
@@ -227,9 +228,13 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         )}
 
         {tab === "preview" && (
-          <div className="mx-auto max-w-3xl p-4">
+          <div className={pdf ? "mx-auto max-w-5xl p-4" : "mx-auto max-w-3xl p-4"}>
             <p className="mb-4 rounded-md bg-muted p-2 text-xs text-muted-foreground">תצוגה מקדימה חיה. המילוי כאן לא נשמר.</p>
-            <FormRenderer definition={def} answers={previewAnswers} onChange={setPreviewAnswers} onUpload={async (f) => ({ url: URL.createObjectURL(f), name: f.name, size: f.size, mime: f.type })} />
+            {pdf ? (
+              <FormTestFill key={`${pdf.file.id}-${pdf.mapping.stamps.length}`} definition={def} pdf={{ fileId: pdf.file.id, url: pdf.file.url, mapping: pdf.mapping }} />
+            ) : (
+              <FormRenderer definition={def} answers={previewAnswers} onChange={setPreviewAnswers} onUpload={async (f) => ({ url: URL.createObjectURL(f), name: f.name, size: f.size, mime: f.type })} />
+            )}
           </div>
         )}
 
