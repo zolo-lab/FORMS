@@ -5,7 +5,8 @@
  */
 import { evaluateCondition, type Answers } from "@/lib/forms/conditions";
 import type { Condition } from "@/lib/forms/schema";
-import type { RequestStatus, StepActionKind, StepRole, StepStatus, Workflow } from "./types";
+import { assigneeKindOf } from "./assignee";
+import type { PeopleDirectory, Person, RequestStatus, StepActionKind, StepRole, StepStatus, Workflow, WorkflowStep } from "./types";
 
 export interface EngineStep {
   id: string;
@@ -40,9 +41,16 @@ const DONE: StepStatus[] = ["completed", "skipped", "cancelled", "delegated"];
 const OPEN: StepStatus[] = ["pending", "active", "in_progress", "returned"];
 const defaultId = () => crypto.randomUUID();
 
-function assigneeFrom(value: unknown): Pick<EngineStep, "assigneeName" | "assigneeEmail" | "assigneePhone"> {
+type AssigneeFields = Pick<EngineStep, "assigneeName" | "assigneeEmail" | "assigneePhone">;
+
+const fromPerson = (p: Person): AssigneeFields => ({ assigneeName: p.name, assigneeEmail: p.email, assigneePhone: p.phone });
+
+/** The answer of an assignee field: a saved contact's id, an email, a phone, or a {name,email,phone} object. */
+function assigneeFrom(value: unknown, contacts: Record<string, Person> = {}): AssigneeFields {
   if (typeof value === "string" && value.trim()) {
     const v = value.trim();
+    const contact = contacts[v];
+    if (contact) return fromPerson(contact);
     return v.includes("@") ? { assigneeEmail: v, assigneeName: v } : { assigneePhone: v };
   }
   if (value && typeof value === "object") {
@@ -53,24 +61,41 @@ function assigneeFrom(value: unknown): Pick<EngineStep, "assigneeName" | "assign
   return {};
 }
 
-/** Build the (all pending) steps of a request from the package workflow. */
-export function planSteps(workflow: Workflow, answers: Answers, newId: () => string = defaultId): EngineStep[] {
+/**
+ * Build the (all pending) steps of a request from the package workflow.
+ * A `group_all` step becomes one parallel step per member (none when the group is empty: the step is
+ * created without a person, so the admin sees it waiting and can delegate it).
+ */
+export function planSteps(workflow: Workflow, answers: Answers, newId: () => string = defaultId, people: PeopleDirectory = {}): EngineStep[] {
+  const base = (w: WorkflowStep, who: AssigneeFields): EngineStep => ({
+    id: newId(),
+    order: w.order,
+    role: w.role,
+    action: w.action,
+    status: "pending" as const,
+    otpRequired: !!w.otpRequired,
+    skipIf: w.skipIf,
+    assigneeFromFieldId: w.assigneeFromFieldId,
+    ...who,
+  });
   return [...workflow.steps]
     .sort((a, b) => a.order - b.order)
-    .map((w) => ({
-      id: newId(),
-      order: w.order,
-      role: w.role,
-      action: w.action,
-      status: "pending" as const,
-      otpRequired: !!w.otpRequired,
-      skipIf: w.skipIf,
-      assigneeFromFieldId: w.assigneeFromFieldId,
-      assigneeName: w.assignee?.name,
-      assigneeEmail: w.assignee?.email,
-      assigneePhone: w.assignee?.phone,
-      ...(w.assigneeFromFieldId ? assigneeFrom(answers[w.assigneeFromFieldId]) : {}),
-    }));
+    .flatMap((w) => {
+      switch (assigneeKindOf(w)) {
+        case "contact": {
+          const c = w.contactId ? people.contacts?.[w.contactId] : undefined;
+          return [base(w, c ? fromPerson(c) : { assigneeName: w.assignee?.name })];
+        }
+        case "group_all": {
+          const members = (w.groupId ? people.groups?.[w.groupId] : undefined) ?? [];
+          return members.length ? members.map((m) => base(w, fromPerson(m))) : [base(w, {})];
+        }
+        case "from_field":
+          return [base(w, { assigneeName: w.assignee?.name, assigneeEmail: w.assignee?.email, assigneePhone: w.assignee?.phone, ...assigneeFrom(answers[w.assigneeFromFieldId!], people.contacts) })];
+        default:
+          return [base(w, { assigneeName: w.assignee?.name, assigneeEmail: w.assignee?.email, assigneePhone: w.assignee?.phone })];
+      }
+    });
 }
 
 function find(steps: EngineStep[], id: string): EngineStep {

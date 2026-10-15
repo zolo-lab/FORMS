@@ -28,6 +28,7 @@ import {
   type EngineStep,
 } from "@/lib/workflow/engine";
 import { renderDefault } from "@/lib/notifications/templates";
+import { peopleForWorkflow } from "./people-store";
 import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import type { StepRole } from "@/lib/workflow/types";
 
@@ -284,9 +285,13 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   if (req.status !== "draft") throw new Error(`request is ${req.status}, not draft`);
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   const answers = await collectedAnswers(requestId);
+  // Saved contacts and group members the steps may be routed to (a "group" dropdown stores the contact id).
+  const docRows = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
+  const versions = docRows.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.templateVersionId))) : [];
+  const people = await peopleForWorkflow(pkg!.workflow, versions.map((v) => v.definition));
 
   // The employee step goes to the person the request is about.
-  const planned = planSteps(pkg!.workflow, answers).map((st) =>
+  const planned = planSteps(pkg!.workflow, answers, undefined, people).map((st) =>
     st.role === "employee" && !st.assigneeEmail && !st.assigneePhone
       ? { ...st, assigneeName: req.subjectName, assigneeEmail: req.subjectEmail ?? undefined, assigneePhone: req.subjectPhone ?? undefined }
       : st,

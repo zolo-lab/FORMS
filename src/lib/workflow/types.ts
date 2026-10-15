@@ -34,12 +34,42 @@ export const REQUEST_STATUSES = [
 ] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
+/**
+ * How the person of a step is chosen (the signer types of iForms Flow):
+ *  - fixed: `assignee` (name/email/phone typed in the package)
+ *  - contact: one saved contact (`contactId`)
+ *  - from_field: the answer of `assigneeFromFieldId` – free text (email/phone) or, when the field lists a group
+ *    (`optionsSource: "group:<id>"`), the contact chosen there
+ *  - group_all: every member of `groupId`, as parallel steps
+ *  - implicit (requester/employee): the person is known from the request itself
+ */
+export const ASSIGNEE_KINDS = ["fixed", "contact", "from_field", "group_all"] as const;
+export type AssigneeKind = (typeof ASSIGNEE_KINDS)[number];
+
+/** A person a step can go to (a contact row, or someone typed by hand). */
+export interface Person {
+  id?: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
+/** Saved people the engine needs to plan a workflow (looked up by the server before planning). */
+export interface PeopleDirectory {
+  contacts?: Record<string, Person>;
+  groups?: Record<string, Person[]>;
+}
+
 /** One step in a package workflow. Same `order` = parallel steps. */
 export interface WorkflowStep {
   order: number;
   role: StepRole;
   action: StepActionKind;
   otpRequired?: boolean;
+  /** Missing = "from_field" when `assigneeFromFieldId` is set, otherwise "fixed" (older packages). */
+  assigneeKind?: AssigneeKind;
+  contactId?: string;
+  groupId?: string;
   /** Take the assignee (name/email/phone) from this answer instead of a fixed person. */
   assigneeFromFieldId?: string;
   /** Skip the step when this condition holds on the answers collected so far. */

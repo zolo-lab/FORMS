@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { getEditorData, getPdfFile } from "@/server/forms-store";
+import { listGroups } from "@/server/people-store";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,12 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const data = await getEditorData(id);
   if (!data) notFound();
-  const pdf = await getPdfFile(data.version.pdfFileId);
+  const [pdf, groups] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups()]);
   return (
     <FormEditor
       templateId={id}
       initialTab={tab === "pdf" ? "pdf" : "edit"}
+      groups={groups.map((g) => ({ id: g.id, name: g.name }))}
       initial={data.version.definition}
       initialVersion={data.version.version}
       initiallyPublished={!!data.version.publishedAt}

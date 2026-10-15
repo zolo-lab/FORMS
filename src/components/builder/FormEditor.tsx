@@ -32,9 +32,11 @@ export interface FormEditorProps {
   initiallyPublished: boolean;
   initialPdf: PdfState | null;
   initialTab?: TabId;
+  /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
+  groups?: { id: string; name: string }[];
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit" }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", groups = [] }: FormEditorProps) {
   const [def, setDef] = useState(initial);
   const [past, setPast] = useState<FormDefinition[]>([]);
   const [future, setFuture] = useState<FormDefinition[]>([]);
@@ -209,6 +211,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   key={selectedField.id}
                   def={def}
                   field={selectedField}
+                  groups={groups}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onMoveToPage={(pi) => commit(moveField(def, selectedField.id, { page: pi, index: def.pages[pi]!.fields.length }))}
                   onRename={(to) => {

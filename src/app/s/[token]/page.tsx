@@ -3,6 +3,7 @@ import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
 import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
 import { withPrefill } from "@/lib/forms/prefill";
+import { lookupsFor } from "@/server/people-store";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
 import { SigningClient } from "./signing-client";
@@ -59,6 +60,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           action={ctx.step.action}
           returnTargets={ctx.returnTargets}
           pdfDocs={ctx.pdfDocs.map((d) => ({ title: d.title, url: `/api/s/${token}/pdf/${d.fileId}`, mapping: d.mapping }))}
+          lookups={await lookupsFor([ctx.definition])}
         />
       </OrgTheme>
     </main>
