@@ -22,9 +22,17 @@ async function orEmpty<T>(q: Promise<T[]>): Promise<T[]> {
   try {
     return await q;
   } catch (e) {
-    if ((e as { code?: string })?.code === "42P01" || /does not exist/.test(String((e as Error)?.message))) return [];
+    if (isMissingRelation(e)) return [];
     throw e;
   }
+}
+
+/** Drizzle wraps the driver error (`DrizzleQueryError.cause`), so look at both levels. */
+function isMissingRelation(e: unknown): boolean {
+  for (let cur = e as { code?: string; message?: string; cause?: unknown } | undefined, i = 0; cur && i < 4; cur = cur.cause as typeof cur, i++) {
+    if (cur.code === "42P01" || /does not exist/.test(String(cur.message ?? ""))) return true;
+  }
+  return false;
 }
 
 export async function listContacts(includeInactive = false): Promise<ContactRow[]> {
