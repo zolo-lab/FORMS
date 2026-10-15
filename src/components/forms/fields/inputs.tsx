@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Input, Textarea } from "@/components/ui/input";
 import { formatIsraeliPhone, isValidIsraeliId } from "@/lib/validators/israeli";
 import { applyMask, stripMask } from "@/lib/forms/mask";
+import { filterCharset } from "@/lib/forms/charset";
 import type { FieldProps } from "./types";
 
 const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
@@ -36,7 +37,7 @@ export function TextLikeInput({ field, domId, value, onChange, disabled, invalid
         <Input
           id={domId}
           type={mode.type ?? "text"}
-          inputMode={mode.inputMode}
+          inputMode={v?.charset === "digits" ? "numeric" : mode.inputMode}
           dir={mode.ltr ? "ltr" : undefined}
           className={mode.ltr ? "text-start" : undefined}
           value={text}
@@ -48,7 +49,7 @@ export function TextLikeInput({ field, domId, value, onChange, disabled, invalid
           aria-invalid={invalid || !!live}
           aria-describedby={field.description ? `${domId}-desc` : undefined}
           autoComplete={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "off"}
-          onChange={(e) => onChange(field.type === "id_number" ? e.target.value.replace(/\D/g, "") : masked ? stripMask(e.target.value, masked) : e.target.value)}
+          onChange={(e) => onChange(field.type === "id_number" ? e.target.value.replace(/\D/g, "") : masked ? stripMask(e.target.value, masked) : field.type === "short_text" ? filterCharset(e.target.value, v?.charset) : e.target.value)}
           onBlur={() => {
             setTouched(true);
             if (field.type === "phone" && text) onChange(formatIsraeliPhone(text));
@@ -71,7 +72,7 @@ export function LongTextInput({ field, domId, value, onChange, disabled, invalid
       disabled={disabled}
       maxLength={field.validation?.maxLength}
       aria-invalid={invalid}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange(filterCharset(e.target.value, field.validation?.charset))}
     />
   );
 }

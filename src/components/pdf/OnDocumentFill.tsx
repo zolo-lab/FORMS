@@ -10,6 +10,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
+import { withDefaults } from "@/lib/forms/defaults";
 import { inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
@@ -124,7 +125,10 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 }
 
 /** Fill the form directly on the PDF pages. Shows how many required fields remain and jumps to the next one. */
-export function OnDocumentFill({ pdfs, definition, answers, onChange, role, errors, onSubmit, onErrors }: Props) {
+export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors }: Props) {
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Default values show on the document; setField keeps them in the answers it passes up.
+  const answers = useMemo(() => withDefaults(definition, rawAnswers, today), [definition, rawAnswers, today]);
   const result = useMemo(() => validateAnswers(definition, answers, { role }), [definition, answers, role]);
   const remaining = Object.keys(result.errors).length;
   const [busy, setBusy] = useState(false);

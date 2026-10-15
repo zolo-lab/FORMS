@@ -13,6 +13,8 @@ import { computeFormulas } from "./compute";
 import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
+import { withDefaults } from "./defaults";
+import { matchesCharset } from "./charset";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import {
   isValidBankAccount,
@@ -43,6 +45,7 @@ const MSG = {
   maxLength: (n: number) => `עד ${n} תווים`,
   mask: "הערך אינו תואם לתבנית הנדרשת",
   pattern: "הערך אינו בפורמט הנדרש",
+  charset: { digits: "ספרות בלבד", hebrew: "עברית בלבד (בלי אותיות באנגלית)", english: "אנגלית בלבד (בלי אותיות בעברית)" },
   option: "יש לבחור מהאפשרויות",
   minSelected: (n: number) => `יש לבחור לפחות ${n}`,
   maxSelected: (n: number) => `ניתן לבחור עד ${n}`,
@@ -110,6 +113,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       if (field.mask && !matchesMask(value, field.mask)) return MSG.mask;
       if (v.minLength !== undefined && value.trim().length < v.minLength) return MSG.minLength(v.minLength);
       if (v.maxLength !== undefined && value.length > v.maxLength) return MSG.maxLength(v.maxLength);
+      if (v.charset && !matchesCharset(value, v.charset)) return MSG.charset[v.charset];
       if (v.pattern && !new RegExp(v.pattern).test(value)) return v.patternMessage ?? MSG.pattern;
       return null;
     }
@@ -217,6 +221,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
     case "info_text":
     case "image":
     case "divider":
+    case "link":
     case "section":
       return null;
   }
@@ -288,7 +293,8 @@ export interface ValidationResult {
 export function validateAnswers(form: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   // Formula fields are always recomputed here, whatever the client sent.
-  const answers = computeFormulas(form, rawAnswers, today);
+  // Defaults first (formulas may use them); read-only defaults always win over what the client sent.
+  const answers = computeFormulas(form, withDefaults(form, rawAnswers, today), today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.

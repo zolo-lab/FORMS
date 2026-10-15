@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
+import { withDefaults } from "@/lib/forms/defaults";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
@@ -37,8 +38,8 @@ export function FormRenderer({
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
-  // Computed (formula) fields are filled live; the server recomputes them on submit.
-  const answers = useMemo(() => computeFormulas(definition, rawAnswers, todayStr), [definition, rawAnswers, todayStr]);
+  // Defaults and computed (formula) fields are filled live; the server applies both again on submit.
+  const answers = useMemo(() => computeFormulas(definition, withDefaults(definition, rawAnswers, todayStr), todayStr), [definition, rawAnswers, todayStr]);
   const layout = definition.settings?.layout ?? "wizard";
   const wizard = layout === "wizard" && !readonly;
   const cardMode = layout === "card" && !readonly;

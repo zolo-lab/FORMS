@@ -12,10 +12,15 @@ import { GRID_CELL_LABELS, GRID_CELL_TYPES, gridColumns, gridRows, type GridCell
 import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
+import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
+import { TODAY } from "@/lib/forms/defaults";
+import { STANDARD_FIELD_IDS } from "@/lib/forms/standard-ids";
 import { ConditionEditor } from "./ConditionEditor";
 import { FormulaEditor } from "./FormulaEditor";
 
 const ROLE_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
+/** Types whose answer can start with a default value set by the form designer. */
+export const DEFAULT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown", "radio", "date", "time", "hidden"];
 const TEXT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown"];
 
 function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -173,9 +178,10 @@ export function FieldSettings({
             <Switch checked={!!field.required} onCheckedChange={(c) => onPatch({ required: c || undefined })} label="שדה חובה" />
             שדה חובה
           </label>
+          {DEFAULT_TYPES.includes(field.type) && <DefaultValueRow field={field} onPatch={onPatch} />}
           <label className="flex items-center gap-3 text-sm">
             <Switch checked={!!field.readOnly} onCheckedChange={(c) => onPatch({ readOnly: c || undefined })} label="לקריאה בלבד" />
-            לקריאה בלבד (מולא מראש)
+            לקריאה בלבד (ערך ברירת המחדל או מה שמולא מראש לא ניתן לשינוי)
           </label>
         </>
       )}
@@ -216,7 +222,7 @@ export function FieldSettings({
         </Section>
       )}
 
-      {(field.type === "linear_scale" || field.type === "rating" || field.type === "long_text" || field.type === "image" || field.type === "hidden") && (
+      {(field.type === "linear_scale" || field.type === "rating" || field.type === "long_text" || field.type === "image" || field.type === "link") && (
         <Section title="הגדרות הסוג">
           {field.type === "linear_scale" && (
             <>
@@ -236,7 +242,11 @@ export function FieldSettings({
               <Row label="טקסט חלופי"><Input value={String(s.alt ?? "")} onChange={(e) => setS({ alt: e.target.value })} /></Row>
             </>
           )}
-          {field.type === "hidden" && <Row label="ערך ברירת מחדל"><Input value={String(field.defaultValue ?? "")} onChange={(e) => onPatch({ defaultValue: e.target.value || undefined })} /></Row>}
+          {field.type === "link" && (
+            <Row label="כתובת הקישור" hint="התווית היא כותרת הקישור. https://… או mailto: או tel:">
+              <Input dir="ltr" aria-label="כתובת הקישור" value={String(s.url ?? "")} onChange={(e) => setS({ url: e.target.value })} />
+            </Row>
+          )}
         </Section>
       )}
 
@@ -329,18 +339,64 @@ export function FieldSettings({
       </Section>
 
       <Section title="מתקדם">
-        <Row label="מזהה השדה (לא משנים אחרי שמגישים טפסים)" hint={idError}>
+        <Row label="שם מזהה (API, ייבוא מגיליון, תנאים) – לא משנים אחרי שמגישים טפסים" hint={idError ?? "אותם שמות כמו ב-iForms מאפשרים לשלוח את אותם נתונים לשתי המערכות."}>
           <Input
             dir="ltr"
+            aria-label="שם מזהה"
+            list="standard-field-ids"
             value={idDraft}
             aria-invalid={!!idError}
             onChange={(e) => setIdDraft(e.target.value)}
             onBlur={() => { const err = onRename(idDraft); setIdError(err); if (err) setIdDraft(field.id); }}
           />
+          <datalist id="standard-field-ids">
+            {STANDARD_FIELD_IDS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          </datalist>
         </Row>
         {meta.hasAnswer && <Row label="מפתח ייצוא (Priority/CSV)"><Input dir="ltr" value={field.exportKey ?? ""} onChange={(e) => onPatch({ exportKey: e.target.value || undefined })} /></Row>}
       </Section>
     </div>
+  );
+}
+
+/** "ערך ברירת מחדל": free text, one of the options, or for a date a fixed date / the date of filling. */
+export function DefaultValueRow({ field, onPatch }: { field: FormField; onPatch: (p: Partial<FormField>) => void }) {
+  const d = field.defaultValue;
+  const text = d === undefined || d === null ? "" : String(d);
+  const set = (x: unknown) => onPatch({ defaultValue: x === "" || x === undefined ? undefined : x });
+  if (field.type === "date") {
+    const isToday = d === TODAY;
+    return (
+      <div className="space-y-2">
+        <label className="flex items-center gap-3 text-sm">
+          <Switch checked={isToday} onCheckedChange={(c) => set(c ? TODAY : undefined)} label="הצגת תאריך נוכחי" />
+          הצגת תאריך נוכחי (תאריך המילוי)
+        </label>
+        {!isToday && <Row label="תאריך ברירת מחדל"><Input type="date" dir="ltr" className="text-start" aria-label="תאריך ברירת מחדל" value={text} onChange={(e) => set(e.target.value)} /></Row>}
+      </div>
+    );
+  }
+  if ((field.type === "dropdown" || field.type === "radio") && !field.optionsSource) {
+    return (
+      <Row label="ערך ברירת מחדל">
+        <Select aria-label="ערך ברירת מחדל" value={text} onChange={(e) => set(e.target.value)}>
+          <option value="">ללא</option>
+          {(field.options ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </Select>
+      </Row>
+    );
+  }
+  const numeric = field.type === "number" || field.type === "currency" || field.type === "percent";
+  return (
+    <Row label="ערך ברירת מחדל">
+      <Input
+        aria-label="ערך ברירת מחדל"
+        type={field.type === "time" ? "time" : "text"}
+        dir={numeric || field.type === "email" || field.type === "phone" || field.type === "id_number" ? "ltr" : undefined}
+        value={text}
+        onChange={(e) => set(e.target.value)}
+      />
+    </Row>
   );
 }
 
@@ -353,6 +409,12 @@ function ValidationSection({ field, v, setV }: { field: FormField; v: FieldValid
         <Row label="אורך מינימלי"><NumberInput value={v.minLength} min={0} onChange={(n) => setV({ minLength: n })} /></Row>
         <Row label="אורך מקסימלי"><NumberInput value={v.maxLength} min={1} onChange={(n) => setV({ maxLength: n })} /></Row>
       </div>,
+      <Row key="cs" label="סוג תווים">
+        <Select aria-label="סוג תווים" value={v.charset ?? ""} onChange={(e) => setV({ charset: (e.target.value || undefined) as Charset | undefined })}>
+          <option value="">כל התווים</option>
+          {(Object.keys(CHARSET_LABELS) as Charset[]).map((c) => <option key={c} value={c}>{CHARSET_LABELS[c]}</option>)}
+        </Select>
+      </Row>,
       <Row key="pat" label="תבנית (Regex)"><Input dir="ltr" value={v.pattern ?? ""} onChange={(e) => setV({ pattern: e.target.value || undefined })} /></Row>,
       <Row key="patm" label="הודעת שגיאה לתבנית"><Input value={v.patternMessage ?? ""} onChange={(e) => setV({ patternMessage: e.target.value || undefined })} /></Row>,
     );

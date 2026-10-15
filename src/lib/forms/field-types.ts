@@ -50,6 +50,7 @@ export const FIELD_TYPES = [
   "image",
   "divider",
   "section",
+  "link",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -137,6 +138,7 @@ export const FIELD_TYPE_META: Record<FieldType, FieldTypeMeta> = {
   image: { label: "תמונה", category: "layout", icon: "Image", hasAnswer: false, hasOptions: false, pdf: "none", defaultSettings: { src: "", alt: "" } },
   section: { label: "מקטע", category: "layout", icon: "PanelTop", hasAnswer: false, hasOptions: false, pdf: "none" },
   divider: { label: "קו מפריד", category: "layout", icon: "Minus", hasAnswer: false, hasOptions: false, pdf: "none" },
+  link: { label: "קישור", category: "layout", icon: "Link", hasAnswer: false, hasOptions: false, pdf: "none", defaultSettings: { url: "" } },
 };
 
 export const FIELD_CATEGORY_LABELS: Record<FieldCategory, string> = {

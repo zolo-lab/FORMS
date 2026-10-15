@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/checkbox";
-import { ListTextarea } from "@/components/builder/SettingsPanel";
+import { DEFAULT_TYPES, DefaultValueRow, ListTextarea } from "@/components/builder/SettingsPanel";
+import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormField } from "@/lib/forms/schema";
@@ -49,11 +50,40 @@ export function StampFieldControls({
         <Label htmlFor={`stamp-field-label-${field.id}`} className="text-muted-foreground">שם השדה (מה שהממלא רואה)</Label>
         <Input id={`stamp-field-label-${field.id}`} className="h-9" value={field.label} onChange={(e) => onFieldPatch({ label: e.target.value })} />
       </div>
+      <div className="space-y-1">
+        <Label htmlFor={`stamp-field-desc-${field.id}`} className="text-muted-foreground">הסבר (מופיע לממלא)</Label>
+        <Input id={`stamp-field-desc-${field.id}`} className="h-9" value={field.description ?? ""} onChange={(e) => onFieldPatch({ description: e.target.value || undefined })} />
+      </div>
       {FIELD_TYPE_META[field.type].hasAnswer && (
         <label className="flex items-center gap-3 text-sm">
           <Switch checked={!!field.required} onCheckedChange={(c) => onFieldPatch({ required: c || undefined })} label="שדה חובה" />
           שדה חובה
         </label>
+      )}
+      {DEFAULT_TYPES.includes(field.type) && <DefaultValueRow field={field} onPatch={onFieldPatch} />}
+      {FIELD_TYPE_META[field.type].hasAnswer && (
+        <label className="flex items-center gap-3 text-sm">
+          <Switch checked={!!field.readOnly} onCheckedChange={(c) => onFieldPatch({ readOnly: c || undefined })} label="לקריאה בלבד" />
+          לקריאה בלבד
+        </label>
+      )}
+      {(field.type === "short_text" || field.type === "long_text") && (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-3 space-y-1">
+            <Label className="text-muted-foreground">סוג תווים</Label>
+            <Select
+              className="h-9"
+              aria-label="סוג תווים"
+              value={field.validation?.charset ?? ""}
+              onChange={(e) => onFieldPatch({ validation: { ...field.validation, charset: (e.target.value || undefined) as Charset | undefined } })}
+            >
+              <option value="">כל התווים</option>
+              {(Object.keys(CHARSET_LABELS) as Charset[]).map((c) => <option key={c} value={c}>{CHARSET_LABELS[c]}</option>)}
+            </Select>
+          </div>
+          <LengthInput label="מינימום תווים" value={field.validation?.minLength} onChange={(n) => onFieldPatch({ validation: { ...field.validation, minLength: n } })} />
+          <LengthInput label="מקסימום תווים" value={field.validation?.maxLength} onChange={(n) => onFieldPatch({ validation: { ...field.validation, maxLength: n } })} />
+        </div>
       )}
       {(stamp.kind === "text" || stamp.kind === "comb") && COMB_ABLE.has(field.type) && (
         <div className="space-y-1">
@@ -69,6 +99,7 @@ export function StampFieldControls({
           </Select>
         </div>
       )}
+      <p className="text-xs text-muted-foreground">שם מזהה: <bdi dir="ltr" className="font-mono">{field.id}</bdi> (משנים בלשונית השאלות ← מתקדם)</p>
       {hasOptions && (
         <div className="space-y-1">
           <Label className="text-muted-foreground">אפשרויות (שורה לכל אפשרות)</Label>
@@ -91,5 +122,22 @@ export function StampFieldControls({
         </div>
       )}
     </section>
+  );
+}
+
+function LengthInput({ label, value, onChange }: { label: string; value: number | undefined; onChange: (n: number | undefined) => void }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        type="number"
+        dir="ltr"
+        min={0}
+        className="h-9 text-start"
+        aria-label={label}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : Math.max(0, Math.floor(Number(e.target.value))) || undefined)}
+      />
+    </div>
   );
 }
