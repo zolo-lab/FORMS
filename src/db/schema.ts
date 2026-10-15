@@ -23,6 +23,7 @@ import type { FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import type { Condition } from "@/lib/forms/schema";
 import type { ReminderPolicy, Workflow } from "@/lib/workflow/types";
+import type { ExportTemplate } from "@/lib/export/template";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -466,5 +467,18 @@ export const bulkJobs = pgTable("bulk_jobs", {
   errors: jsonb("errors").$type<{ row: number; message: string }[]>().notNull().default([]),
   status: text("status").notNull().default("pending"),
   createdBy: uuid("created_by").references(() => users.id),
+  ...timestamps,
+});
+
+/**
+ * Export templates ("תבנית העלאה לפריוריטי" and the like): the header row of a file another system imports,
+ * with each column mapped to a field, a request value or a constant. See src/lib/export/template.ts.
+ */
+export const exportTemplates = pgTable("export_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** The package whose forms the columns map to; null = mapping by field ids across any package. */
+  packageTemplateId: uuid("package_template_id").references(() => packageTemplates.id, { onDelete: "set null" }),
+  template: jsonb("template").$type<ExportTemplate>().notNull(),
   ...timestamps,
 });

@@ -15,6 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/packages" className="hover:text-foreground">ערכות</Link>
           <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
           <Link href="/admin/settings/people" className="hover:text-foreground">אנשי קשר</Link>
+          <Link href="/admin/settings/exports" className="hover:text-foreground">תבניות ייצוא</Link>
           <Link href="/admin/settings/webhooks" className="hover:text-foreground">Webhooks</Link>
           <Link href="/admin/settings/api-keys" className="hover:text-foreground">API</Link>
         </nav>

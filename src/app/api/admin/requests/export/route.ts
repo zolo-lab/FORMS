@@ -1,6 +1,8 @@
 import { toCsv } from "@/lib/export/csv";
 import { buildExportTable } from "@/lib/export/rows";
 import { buildXlsx } from "@/lib/export/xlsx";
+import { applyTemplate } from "@/lib/export/template";
+import { getExportTemplate } from "@/server/export-templates-store";
 import { zipStream } from "@/lib/export/zip";
 import { parseFilters } from "@/lib/requests/list";
 import { finalPdfEntries, listFinalPdfs, loadExport } from "@/server/export-store";
@@ -41,17 +43,22 @@ export async function GET(req: Request) {
     });
   }
 
-  const table = buildExportTable(await loadExport(sel));
+  // A saved export template (e.g. the Priority import sheet) decides the columns; otherwise one column per field.
+  const templateId = url.searchParams.get("template") ?? "";
+  const tpl = UUID.test(templateId) ? await getExportTemplate(templateId) : null;
+  const loaded = await loadExport(sel);
+  const table = tpl ? applyTemplate(tpl.template, loaded) : buildExportTable(loaded);
+  const base = tpl ? `export-${stamp}` : `requests-${stamp}`;
   if (format === "xlsx") {
-    return new Response(Buffer.from(buildXlsx(table, "בקשות")), {
+    return new Response(Buffer.from(buildXlsx(table, tpl?.template.sheetName || "בקשות")), {
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="requests-${stamp}.xlsx"`,
+        "content-disposition": `attachment; filename="${base}.xlsx"`,
         "cache-control": "no-store",
       },
     });
   }
   return new Response(toCsv(table), {
-    headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="requests-${stamp}.csv"`, "cache-control": "no-store" },
+    headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${base}.csv"`, "cache-control": "no-store" },
   });
 }

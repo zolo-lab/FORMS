@@ -11,6 +11,7 @@ import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
 import { bulkCancelAction } from "./actions";
+import { listExportTemplates } from "@/server/export-templates-store";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   const filters = parseFilters(sp);
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
   const skipped = typeof sp.skipped === "string" ? Number(sp.skipped) : 0;
-  const [orgs, packages, kpis, result] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined)]);
+  const [orgs, packages, kpis, result, exportTemplates] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined), listExportTemplates()]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
   const link = (over: Parameters<typeof filtersToQuery>[1]) => {
@@ -174,6 +175,14 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <Button type="submit" name="format" value="csv" variant="outline" size="sm">ייצוא CSV</Button>
           <Button type="submit" name="format" value="xlsx" variant="outline" size="sm">ייצוא Excel</Button>
           <Button type="submit" name="format" value="zip" variant="outline" size="sm">PDF חתומים (ZIP)</Button>
+          {exportTemplates.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Select name="template" defaultValue="" aria-label="תבנית ייצוא" className="h-8 w-48">
+                <option value="">ללא תבנית (כל השדות)</option>
+                {exportTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Select>
+            </span>
+          )}
           <span className="ms-auto flex items-center gap-2">
             <Input name="reason" placeholder="סיבת ביטול" className="h-8 w-40" aria-label="סיבת ביטול" />
             <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
