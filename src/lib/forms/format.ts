@@ -59,9 +59,22 @@ export function formatAnswer(field: FormField, value: unknown, part?: string): s
       const street = [a.street, a.house].filter(Boolean).join(" ");
       return [street, a.apartment && `דירה ${a.apartment}`, a.city, a.zip].filter(Boolean).join(", ");
     }
+    case "repeating_table": {
+      // One line per row: "1. שם: יואב · מספר זהות: 000000026".
+      if (!Array.isArray(value)) return "";
+      return value
+        .map((row, i) => {
+          const cells = (field.fields ?? [])
+            .map((c) => [c.label || c.id, formatAnswer(c, (row as Record<string, unknown>)?.[c.id])] as const)
+            .filter(([, t]) => t !== "")
+            .map(([l, t]) => `${l}: ${t}`);
+          return cells.length ? `${i + 1}. ${cells.join(" · ")}` : "";
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
     case "signature":
     case "file_upload":
-    case "repeating_table":
     case "radio_grid":
     case "checkbox_grid":
       return ""; // not representable as one string; stamped specially

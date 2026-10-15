@@ -140,7 +140,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
               {answers.map((a, i) => (
                 <div key={i} className="contents">
                   <dt className="text-muted-foreground">{a.label}</dt>
-                  <dd className="break-words">{a.text}</dd>
+                  <dd className="whitespace-pre-line break-words">{a.text}</dd>
                 </div>
               ))}
             </dl>
