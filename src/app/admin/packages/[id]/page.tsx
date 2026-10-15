@@ -6,7 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
-import { STEP_ACTIONS } from "@/lib/workflow/types";
+import { ASSIGNEE_KINDS, STEP_ACTIONS } from "@/lib/workflow/types";
+import { ASSIGNEE_KIND_LABELS, assigneeKindOf } from "@/lib/workflow/assignee";
+import { listContacts, listGroups } from "@/server/people-store";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
@@ -28,6 +30,7 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await getPackage(id);
   if (!data) notFound();
+  const [contacts, groups] = await Promise.all([listContacts(), listGroups()]);
   const { pkg, items } = data;
   const [orgs, forms] = await Promise.all([listOrgs(), availableForms()]);
   const inPackage = new Set(items.map((i) => i.templateId));
@@ -111,7 +114,10 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
 
       <section className="space-y-2" aria-labelledby="steps-h">
         <h2 id="steps-h" className="text-lg font-semibold">מסלול חתימות</h2>
-        <p className="text-sm text-muted-foreground">שלבים עם אותו מספר סדר פועלים במקביל. המבקש והעובד מזוהים לפי הבקשה; לשאר התפקידים יש להגדיר נמען קבוע.</p>
+        <p className="text-sm text-muted-foreground">
+          שלבים עם אותו מספר סדר פועלים במקביל. המבקש והעובד מזוהים לפי הבקשה; לשאר התפקידים בוחרים מי הנמען: נמען קבוע, איש קשר שמור, כל חברי קבוצה
+          במקביל, או לפי שדה בטופס (למשל רשימה נפתחת שמקורה קבוצה – המבקש בוחר את המאשר). אנשי קשר וקבוצות מנהלים ב<Link href="/admin/settings/people" className="underline">אנשי קשר</Link>.
+        </p>
         <div className="space-y-3">
           {pkg.workflow.steps.map((s, i) => (
             <Card key={i} className="p-3">
@@ -138,6 +144,30 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
                   <Label htmlFor={`s${i}-due`}>יעד (שעות)</Label>
                   <Input id={`s${i}-due`} name="dueHours" type="number" min={1} defaultValue={s.dueHours ?? ""} />
                 </div>
+                <div className="space-y-1 sm:col-span-3">
+                  <Label htmlFor={`s${i}-ak`}>מי הנמען</Label>
+                  <Select id={`s${i}-ak`} name="assigneeKind" defaultValue={assigneeKindOf(s)}>
+                    {ASSIGNEE_KINDS.map((k) => <option key={k} value={k}>{ASSIGNEE_KIND_LABELS[k]}</option>)}
+                  </Select>
+                </div>
+                <div className="space-y-1 sm:col-span-3">
+                  <Label htmlFor={`s${i}-ac`}>איש קשר שמור</Label>
+                  <Select id={`s${i}-ac`} name="contactId" defaultValue={s.contactId ?? ""}>
+                    <option value="">–</option>
+                    {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : ""}</option>)}
+                  </Select>
+                </div>
+                <div className="space-y-1 sm:col-span-3">
+                  <Label htmlFor={`s${i}-ag`}>קבוצה (כל החברים במקביל)</Label>
+                  <Select id={`s${i}-ag`} name="groupId" defaultValue={s.groupId ?? ""}>
+                    <option value="">–</option>
+                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.memberIds.length})</option>)}
+                  </Select>
+                </div>
+                <div className="space-y-1 sm:col-span-3">
+                  <Label htmlFor={`s${i}-af`}>שדה בטופס שממנו נלקח הנמען</Label>
+                  <Input id={`s${i}-af`} name="assigneeFromFieldId" dir="ltr" defaultValue={s.assigneeFromFieldId ?? ""} />
+                </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor={`s${i}-an`}>שם הנמען הקבוע</Label>
                   <Input id={`s${i}-an`} name="assigneeName" defaultValue={s.assignee?.name ?? ""} />
@@ -150,11 +180,7 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
                   <Label htmlFor={`s${i}-ap`}>טלפון</Label>
                   <Input id={`s${i}-ap`} name="assigneePhone" type="tel" dir="ltr" defaultValue={s.assignee?.phone ?? ""} />
                 </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor={`s${i}-af`}>או: מזהה שדה שממנו נלקח הנמען</Label>
-                  <Input id={`s${i}-af`} name="assigneeFromFieldId" dir="ltr" defaultValue={s.assigneeFromFieldId ?? ""} />
-                </div>
-                <label className="flex items-center gap-2 text-sm sm:col-span-3">
+                <label className="flex items-center gap-2 text-sm sm:col-span-6">
                   <Checkbox name="otpRequired" defaultChecked={!!s.otpRequired} />
                   אימות בקוד במייל לפני מילוי
                 </label>

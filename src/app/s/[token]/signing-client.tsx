@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
+import type { Lookups } from "@/lib/forms/lookups";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -23,6 +24,8 @@ interface Props {
   action: string;
   returnTargets?: { id: string; label: string }[];
   pdfDocs?: OnDocPdf[];
+  /** Option lists of dynamic sources (group members …), built on the server. */
+  lookups?: Lookups;
 }
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
@@ -97,7 +100,7 @@ const ACTION_ERRORS: Record<string, string> = {
   closed: "הפעולה כבר בוצעה. רעננו את הדף.",
 };
 
-export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [] }: Props) {
+export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [], lookups }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const hasForm = definition.pages.length > 0;
   // On-document mode only when every field of this role is placed on a PDF.
@@ -176,7 +179,7 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
       {hasForm && canOnDoc && mode === "document" ? (
         <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} />
       ) : hasForm ? (
-        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} />
+        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
       )}

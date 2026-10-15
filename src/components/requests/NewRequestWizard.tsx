@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Answers } from "@/lib/forms/conditions";
+import type { Lookups } from "@/lib/forms/lookups";
 import type { FieldErrors } from "@/lib/forms/validate";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { WizardPackage } from "@/server/packages-store";
@@ -20,7 +21,7 @@ interface Org {
 
 const STEPS = ["ערכה וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
 
-export function NewRequestWizard({ packages, orgs }: { packages: WizardPackage[]; orgs: Org[] }) {
+export function NewRequestWizard({ packages, orgs, lookups }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups }) {
   const [step, setStep] = useState(0);
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
@@ -150,6 +151,7 @@ export function NewRequestWizard({ packages, orgs }: { packages: WizardPackage[]
           {hasRequesterFields ? (
             <FormRenderer
               definition={pkg.requesterDefinition}
+              lookups={lookups}
               answers={answers}
               onChange={setAnswers}
               errors={errors}

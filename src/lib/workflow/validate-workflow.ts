@@ -2,6 +2,7 @@
 import { STEP_ACTIONS, type StepRole, type Workflow, type WorkflowStep } from "./types";
 import { ROLE_LABELS } from "./labels";
 import { normalizeIsraeliPhone } from "@/lib/whatsapp";
+import { assigneeKindOf } from "./assignee";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Roles whose person is known from the request itself (the requester is logged in, the employee is the subject). */
@@ -19,10 +20,14 @@ export function validateWorkflow(w: Workflow): string[] {
     const a = s.assignee;
     if (a?.email && !EMAIL.test(a.email)) errors.push(`${name}: כתובת מייל לא תקינה`);
     if (a?.phone && !normalizeIsraeliPhone(a.phone)) errors.push(`${name}: מספר טלפון לא תקין`);
-    if (!IMPLICIT.includes(s.role) && !s.assigneeFromFieldId && !a?.name?.trim()) {
-      errors.push(`${name}: נדרש שם לנמען הקבוע (או שדה שממנו נלקח הנמען). בלי מייל/טלפון הקישור יימסר ידנית`);
+    const kind = assigneeKindOf(s);
+    if (!IMPLICIT.includes(s.role)) {
+      if (kind === "fixed" && !a?.name?.trim()) errors.push(`${name}: נדרש שם לנמען הקבוע. בלי מייל/טלפון הקישור יימסר ידנית`);
+      if (kind === "contact" && !s.contactId) errors.push(`${name}: יש לבחור איש קשר`);
+      if (kind === "group_all" && !s.groupId) errors.push(`${name}: יש לבחור קבוצה`);
+      if (kind === "from_field" && !s.assigneeFromFieldId) errors.push(`${name}: יש לציין את השדה שממנו נלקח הנמען`);
+      if (s.otpRequired && kind === "fixed" && !a?.email) errors.push(`${name}: אימות בקוד נשלח במייל, הגדירו מייל לנמען`);
     }
-    if (s.otpRequired && !IMPLICIT.includes(s.role) && !a?.email && !s.assigneeFromFieldId) errors.push(`${name}: אימות בקוד נשלח במייל, הגדירו מייל לנמען`);
   });
   return errors;
 }

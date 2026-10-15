@@ -13,6 +13,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -74,6 +75,40 @@ export const users = pgTable("users", {
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });
+
+/**
+ * People who can be the next signer of a step: staff (secretariats, managers, payroll) and outside contacts
+ * (suppliers, advisers). A contact never logs in; a `users` row is for login, a contact is for routing.
+ */
+export const contacts = pgTable("contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** null = shared by all organizations */
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  /** "internal" = staff of one of the associations, "external" = supplier/adviser. */
+  kind: text("kind").$type<"internal" | "external">().notNull().default("internal"),
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+});
+
+/** A team or group of contacts (e.g. "מזכירות ארצנו", "ספקי לינה"): a step can go to one of them or to all of them. */
+export const groups = pgTable("groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  name: text("name").notNull(),
+  ...timestamps,
+});
+
+export const groupMembers = pgTable(
+  "group_members",
+  {
+    groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.contactId] })],
+);
 
 /**
  * File metadata for PDFs and uploads. Bytes live in a private Vercel Blob object `files/<id>` (data_base64 = "");
