@@ -266,6 +266,9 @@ export const packageDocuments = pgTable("package_documents", {
   finalFileId: uuid("final_file_id"),
   finalSha256: text("final_sha256"),
   generatedAt: timestamp("generated_at", { withTimezone: true }),
+  /** Copy filed in the Drive archive (null until archived, or when the archive is not configured). */
+  driveFileId: text("drive_file_id"),
+  driveUrl: text("drive_url"),
   ...timestamps,
 });
 
