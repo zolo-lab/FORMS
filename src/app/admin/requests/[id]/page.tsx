@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
-import { driveEnabled } from "@/server/drive";
+import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,9 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             ))}
           </Card>
           {documents.some((d) => !d.finalFileId) && <FinalizeButton requestId={request.id} />}
+          {!driveEnabled() && documents.some((d) => !d.driveUrl) && driveProblem() && (
+            <p className="text-xs text-muted-foreground">ארכיון Drive כבוי: {driveProblem()}.</p>
+          )}
           {driveEnabled() && documents.every((d) => d.finalFileId) && documents.some((d) => !d.driveUrl) && <FinalizeButton requestId={request.id} label="העלאה לארכיון ב-Drive" />}
         </section>
       )}

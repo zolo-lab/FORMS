@@ -27,6 +27,22 @@ function readAccount(): ServiceAccount | null {
 
 export const driveEnabled = () => !!readAccount() && !!process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
+/** Why the archive is off, for the admin screen. Names what is missing, never a value. */
+export function driveProblem(): string | null {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return "המשתנה GOOGLE_SERVICE_ACCOUNT_JSON לא מוגדר";
+  let j: Partial<ServiceAccount>;
+  try {
+    j = JSON.parse(raw) as Partial<ServiceAccount>;
+  } catch {
+    return "GOOGLE_SERVICE_ACCOUNT_JSON אינו JSON תקין (ייתכן שהודבק חלקית)";
+  }
+  if (!j.client_email) return "ב-JSON חסר client_email";
+  if (!j.private_key) return "ב-JSON חסר private_key";
+  if (!process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) return "המשתנה GOOGLE_DRIVE_ROOT_FOLDER_ID לא מוגדר";
+  return null;
+}
+
 const b64url = (v: string | Buffer) => Buffer.from(v).toString("base64url");
 
 let cached: { token: string; exp: number } | null = null;
