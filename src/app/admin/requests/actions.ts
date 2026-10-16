@@ -110,7 +110,7 @@ export async function finalizeRequestAction(requestId: string): Promise<{ ok: bo
     const { finalizeRequest } = await import("@/server/finalize");
     const r = await finalizeRequest(requestId);
     revalidatePath(`/admin/requests/${requestId}`);
-    return { ok: true, message: r.generated ? `נוצרו ${r.generated} קבצים` : "כל הקבצים כבר קיימים" };
+    return { ok: true, message: r.generated ? `נוצרו ${r.generated} קבצים` : "כל הקבצים כבר קיימים (קבצים שטרם בארכיון ב-Drive הועלו אליו)" };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "היצירה נכשלה" };
   }
