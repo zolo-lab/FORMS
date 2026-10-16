@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
+import { driveEnabled } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,13 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
                     <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/documents/${d.id}`} target="_blank" rel="noopener noreferrer">
                       פתיחת ה-PDF (כולל אסמכתא)
                     </a>
+                    {d.driveUrl ? (
+                      <a className="text-primary hover:underline" href={d.driveUrl} target="_blank" rel="noopener noreferrer">
+                        פתיחה בארכיון (Drive)
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">טרם בארכיון</span>
+                    )}
                     <span className="ms-auto text-xs text-muted-foreground" dir="ltr" title={`SHA-256 של הקובץ המלא: ${d.finalSha256 ?? ""}`}>
                       {d.finalSha256?.slice(0, 16)}…
                     </span>
@@ -120,6 +128,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             ))}
           </Card>
           {documents.some((d) => !d.finalFileId) && <FinalizeButton requestId={request.id} />}
+          {driveEnabled() && documents.every((d) => d.finalFileId) && documents.some((d) => !d.driveUrl) && <FinalizeButton requestId={request.id} label="העלאה לארכיון ב-Drive" />}
         </section>
       )}
 

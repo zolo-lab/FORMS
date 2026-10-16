@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { finalizeRequestAction } from "@/app/admin/requests/actions";
 import { Button } from "@/components/ui/button";
 
-export function FinalizeButton({ requestId }: { requestId: string }) {
+export function FinalizeButton({ requestId, label = "יצירת קבצי PDF סופיים" }: { requestId: string; label?: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -21,7 +21,7 @@ export function FinalizeButton({ requestId }: { requestId: string }) {
           })
         }
       >
-        {pending ? "מכין…" : "יצירת קבצי PDF סופיים"}
+        {pending ? "מכין…" : label}
       </Button>
       {message && <span role="status" className="text-sm text-muted-foreground">{message}</span>}
     </div>
