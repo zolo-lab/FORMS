@@ -201,7 +201,7 @@ The dev DB accumulates e2e packages/forms; keep list queries bulk (no per-row qu
 
 ## 17. Signer kinds, contacts and groups (15.10.2026, PR #106)
 
-- Tables `contacts`, `groups`, `group_members` (migration `0003_shiny_black_bolt`): **applied to dev**, **not yet to production** (Israel pastes the SQL in the Neon console, then `insert into schema_migrations(name) values ('0003_shiny_black_bolt')`). Until then the editor and package pages show empty contact/group lists (`people-store.ts` swallows 42P01).
+- Tables `contacts`, `groups`, `group_members` (migration `0003_shiny_black_bolt`): **applied to dev and production** (production since 16.10.2026, see §19 on `AUTO_MIGRATE`). Before that the editor and package pages show empty contact/group lists (`people-store.ts` swallows 42P01).
 - `WorkflowStep.assigneeKind`: `fixed | contact | from_field | group_all` (`src/lib/workflow/assignee.ts`). `group_all` fans out to one parallel step per member in `planSteps(workflow, answers, newId, people)`; `requests-store.sendRequest` builds `people` with `peopleForWorkflow`.
 - A dropdown with `optionsSource: "group:<id>"` lists the group's members (value = contact id); `lookupsFor(definitions)` builds the lists for `/s/[token]` and the request wizard. A step `from_field` on that field resolves the contact.
 - Admin: `/admin/settings/people` (contacts + groups), package step editor has "מי הנמען".
@@ -209,7 +209,15 @@ The dev DB accumulates e2e packages/forms; keep list queries bulk (no per-row qu
 
 ## 18. Export templates (15.10.2026, PR #108)
 
-- `export_templates` (migration `0004_worried_sumo`): **applied to dev**, **not to production** (the auto-mode classifier blocks production DDL from Claude even with Israel's approval; he pastes 0003 + 0004 in the Neon console).
+- `export_templates` (migration `0004_worried_sumo`): **applied to dev and production** (production since 16.10.2026 through `AUTO_MIGRATE=1`, see §19).
 - `src/lib/export/template.ts`: `guessColumns`, `cellValue`, `applyTemplate`, formats `text|code|digits|date_ddmmyyyy|date_iso|number`, composite parts (`bank.branch`).
 - `/admin/settings/exports` (create from XLSX/CSV header row or typed names), `/admin/settings/exports/[id]` (map + preview of the package's last 5 requests). Requests export takes `?template=<id>`.
 - Local git: the remote URL is `.../FORMS` (repo renamed); `git fetch origin` may leave `origin/main` stale – use `git fetch origin main` + `FETCH_HEAD`.
+
+## 19. Auto-migrate in production and the Drive archive (16.10.2026, PRs #110–#113)
+
+- **`AUTO_MIGRATE=1` is set in Vercel production.** Every deploy runs `scripts/migrate.ts`, which applies `drizzle/*.sql` files missing from `schema_migrations` (0003, 0004, 0005 were applied this way). The auto-mode classifier blocks production DDL from Claude, so this is how schema changes reach production: push to main → `db-bot` commits the generated migration → the deploy applies it. For a column added to an existing table, also run `ALTER TABLE … ADD COLUMN IF NOT EXISTS …` on the **dev** Neon branch before the PR, or CI e2e fails on missing columns.
+- **Drive archive.** When a request completes, `finalizeRequest` files each signed PDF in Google Drive as `<organization>/<form type>/<year>/<form – subject – date – request id>.pdf` (`src/lib/drive/archive-path.ts`, tested) and stores `package_documents.drive_file_id` / `drive_url`. Archiving is best effort: a failure is logged (`drive archive failed`) and never fails signing. The request page shows the Drive link, or a button "העלאה לארכיון ב-Drive" that files documents that are not archived yet (no PDF is regenerated). The system never depends on the folder layout, only on the stored id.
+- **Config (Vercel production):** `GOOGLE_SERVICE_ACCOUNT_JSON` (secret, the whole key file) and `GOOGLE_DRIVE_ROOT_FOLDER_ID` (the id of a **Shared Drive** or a folder inside one). Both unset = archive off. The request page says what is missing (`driveProblem()`, never a value). A service account has no storage quota, so a folder in "My Drive" does **not** work (403 "Service Accounts do not have storage quota"); the root must be in a Shared Drive where the service account is a member (writer or higher).
+- **Current setup:** Google Cloud project `gybs-forms` (org shivatzion.org.il), service account `drive-archive@gybs-forms.iam.gserviceaccount.com`, Shared Drive "טפסים" (root id `0AOkwPdafw1-PUk9PVA`). A duplicate service account `drive-archive-678@…` exists and is unused (delete it in the console). The key file must not be kept on disk or in the repo; rotate it by creating a new key and replacing the Vercel secret.
+- Not done: archive of the data itself (a table of all values per form type), and Google sign-in / permissions per form type.
