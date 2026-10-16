@@ -11,6 +11,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex min-w-0 gap-3 overflow-x-auto whitespace-nowrap text-sm text-muted-foreground">
           <Link href="/admin/requests" className="hover:text-foreground">בקשות</Link>
           <Link href="/admin/inbox" className="hover:text-foreground">ממתינים</Link>
+          <Link href="/admin/archive" className="hover:text-foreground">ארכיון נתונים</Link>
           <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>
           <Link href="/admin/packages" className="hover:text-foreground">ערכות</Link>
           <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>
