@@ -9,7 +9,7 @@ import { db, schema } from "@/db";
 import { stampPdf } from "@/lib/forms/pdf-mapping";
 import { appendCertificate } from "@/lib/pdf/certificate";
 import { summaryItems, summaryPdf } from "@/lib/pdf/summary";
-import { archivePdf } from "./drive";
+import { archivePdf, driveEnabled } from "./drive";
 import { collectedAnswers } from "./requests-store";
 import { getFile, putFile, sha256Hex } from "./storage";
 
@@ -29,14 +29,25 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
   let generated = 0;
   let skipped = 0;
   for (const d of docs) {
-    if (d.finalFileId && !opts.force) {
-      skipped++;
-      continue;
-    }
     const [version] = await db.select().from(formTemplateVersions).where(eq(formTemplateVersions.id, d.templateVersionId));
     if (!version) continue;
     const [template] = await db.select().from(formTemplates).where(eq(formTemplates.id, version.templateId));
     const title = template?.title ?? version.definition.title;
+
+    if (d.finalFileId && !opts.force) {
+      skipped++;
+      // Already generated: only file the existing PDF in Drive when that has not happened yet (backfill / retry).
+      if (!d.driveFileId && driveEnabled()) {
+        try {
+          const existing = await getFile(d.finalFileId);
+          const archived = existing && (await archivePdf({ organization: org?.name ?? "", formTitle: title, subject: req.subjectName, requestId, signedAt, bytes: existing.bytes }));
+          if (archived) await db.update(packageDocuments).set(archived).where(eq(packageDocuments.id, d.id));
+        } catch (err) {
+          console.error("drive archive failed", { requestId, doc: d.id, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      continue;
+    }
 
     let base: Uint8Array;
     const [pdf] = version.pdfFileId ? await db.select().from(pdfFiles).where(eq(pdfFiles.id, version.pdfFileId)) : [];
