@@ -4,9 +4,9 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { SESSION_COOKIE, sessionEmail } from "@/lib/auth/session";
-import { allowedOrgIds, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
+import { allowedOrgIds, resolveAccess, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 
-const { users, packagePermissions, userOrganizations } = schema;
+const { users, packagePermissions, userOrganizations, userProjects, projects } = schema;
 
 export type UserRow = typeof users.$inferSelect;
 
@@ -50,18 +50,25 @@ export const permissionsOf = cache(async (userId: string): Promise<PackagePermis
     .where(eq(packagePermissions.userId, userId));
 });
 
-/** Organization ids a manager is limited to (no rows = not limited). */
-export const orgAccessOf = cache(async (userId: string): Promise<string[]> => {
-  const rows = await db.select({ organizationId: userOrganizations.organizationId }).from(userOrganizations).where(eq(userOrganizations.userId, userId));
-  return rows.map((r) => r.organizationId);
+/** Where a manager is limited to (no rows = not limited): whole organizations and single projects. */
+export const orgAccessOf = cache(async (userId: string): Promise<OrgAccess> => {
+  const [orgRows, projectRows] = await Promise.all([
+    db.select({ organizationId: userOrganizations.organizationId }).from(userOrganizations).where(eq(userOrganizations.userId, userId)),
+    db
+      .select({ id: projects.id, organizationId: projects.organizationId })
+      .from(userProjects)
+      .innerJoin(projects, eq(projects.id, userProjects.projectId))
+      .where(eq(userProjects.userId, userId)),
+  ]);
+  return resolveAccess(orgRows.map((r) => r.organizationId), projectRows);
 });
 
-/** User + rows in one call, for pages and actions. `orgIds` is already resolved: `null` = every organization. */
-export async function viewer(): Promise<{ user: SessionUser | null; perms: PackagePermission[]; orgIds: OrgAccess }> {
+/** User + rows in one call, for pages and actions. `access` is already resolved: `null` = everywhere. */
+export async function viewer(): Promise<{ user: SessionUser | null; perms: PackagePermission[]; access: OrgAccess }> {
   const user = await currentUser();
-  if (!user) return { user, perms: [], orgIds: null };
-  const [perms, orgRows] = await Promise.all([permissionsOf(user.id), orgAccessOf(user.id)]);
-  return { user, perms, orgIds: allowedOrgIds(user, orgRows) };
+  if (!user) return { user, perms: [], access: null };
+  const [perms, rows] = await Promise.all([permissionsOf(user.id), orgAccessOf(user.id)]);
+  return { user, perms, access: allowedOrgIds(user, rows) };
 }
 
 export async function viewerOpenablePackages(): Promise<string[] | null> {
@@ -70,8 +77,8 @@ export async function viewerOpenablePackages(): Promise<string[] | null> {
 }
 
 export async function viewerScope() {
-  const { user, perms, orgIds } = await viewer();
-  return visibilityScope(user, perms, orgIds);
+  const { user, perms, access } = await viewer();
+  return visibilityScope(user, perms, access);
 }
 
 // ───────────────────────── Admin ─────────────────────────
@@ -102,6 +109,16 @@ export async function listAllOrgAccess(): Promise<{ userId: string; organization
 export async function setUserOrgAccess(userId: string, organizationIds: string[]) {
   await db.delete(userOrganizations).where(eq(userOrganizations.userId, userId));
   if (organizationIds.length) await db.insert(userOrganizations).values(organizationIds.map((organizationId) => ({ userId, organizationId })));
+}
+
+export async function listAllProjectAccess(): Promise<{ userId: string; projectId: string }[]> {
+  return db.select({ userId: userProjects.userId, projectId: userProjects.projectId }).from(userProjects);
+}
+
+/** Replace the single projects a user is limited to. */
+export async function setUserProjectAccess(userId: string, projectIds: string[]) {
+  await db.delete(userProjects).where(eq(userProjects.userId, userId));
+  if (projectIds.length) await db.insert(userProjects).values(projectIds.map((projectId) => ({ userId, projectId })));
 }
 
 /** Replace a user's rows for the given packages (a row with all three false is removed). */

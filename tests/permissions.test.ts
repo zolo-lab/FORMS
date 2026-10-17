@@ -48,30 +48,45 @@ describe("can", () => {
 describe("scopes", () => {
   it("lists openable packages and the dashboard scope", () => {
     expect(openablePackageIds(user, perms)).toEqual(["p1"]);
-    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"], allRequests: false, orgIds: null });
+    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"], allRequests: false, access: null });
   });
 });
 
-describe("organization access", () => {
+describe("organization and project access", () => {
+  const P1 = { id: "p1", organizationId: "o2" };
+  const P2 = { id: "p2", organizationId: "o2" };
+  it("no rows = everywhere; an organization with ticked projects counts only through them", () => {
+    expect(resolveAccess([], [])).toBeNull();
+    expect(resolveAccess(["o1", "o2"], [P1])).toEqual({ orgs: ["o1"], projects: [P1] });
+  });
   it("admin and open mode are never limited", () => {
-    expect(allowedOrgIds(admin, ["o1"])).toBeNull();
-    expect(allowedOrgIds(null, ["o1"])).toBeNull();
-    expect(orgAllowed(admin, ["o1"], "o9")).toBe(true);
+    const a = resolveAccess(["o1"], []);
+    expect(allowedOrgIds(admin, a)).toBeNull();
+    expect(allowedOrgIds(null, a)).toBeNull();
+    expect(orgAllowed(admin, a, "o9")).toBe(true);
   });
   it("a manager without rows may use every organization", () => {
     expect(allowedOrgIds(user, null)).toBeNull();
-    expect(allowedOrgIds(user, [])).toBeNull();
+    expect(allowedOrgIds(user, { orgs: [], projects: [] })).toBeNull();
     expect(orgAllowed(user, null, "o9")).toBe(true);
   });
-  it("a manager with rows is limited to them", () => {
-    expect(allowedOrgIds(user, ["o1", "o2"])).toEqual(["o1", "o2"]);
-    expect(orgAllowed(user, ["o1", "o2"], "o2")).toBe(true);
-    expect(orgAllowed(user, ["o1", "o2"], "o3")).toBe(false);
-    expect(visibilityScope(user, perms, ["o1"])?.orgIds).toEqual(["o1"]);
+  it("whole organizations and single projects", () => {
+    const a = resolveAccess(["o1"], [P1, P2]);
+    expect(orgAllowed(user, a, "o1")).toBe(true);
+    expect(orgAllowed(user, a, "o1", "anything")).toBe(true);
+    expect(orgAllowed(user, a, "o2")).toBe(false); // needs one of its projects
+    expect(orgAllowed(user, a, "o2", "p2")).toBe(true);
+    expect(orgAllowed(user, a, "o2", "p9")).toBe(false);
+    expect(orgAllowed(user, a, "o3", "p1")).toBe(false); // project of another organization
+    expect(usableOrgIds(a)).toEqual(["o1", "o2"]);
+    expect(projectLimit(a, "o1")).toBeNull();
+    expect(projectLimit(a, "o2")).toEqual(["p1", "p2"]);
+    expect(projectLimit(null, "o2")).toBeNull();
+    expect(visibilityScope(user, perms, a)?.access).toEqual(a);
   });
-  it("an inactive manager may use no organization", () => {
+  it("an inactive manager may use nothing", () => {
     const off = { ...user, active: false };
-    expect(allowedOrgIds(off, null)).toEqual([]);
+    expect(allowedOrgIds(off, null)).toEqual({ orgs: [], projects: [] });
     expect(orgAllowed(off, null, "o1")).toBe(false);
   });
 });
@@ -98,7 +113,7 @@ describe("grants (iForms-style extra permissions)", () => {
   it("viewAll shows every request (still within the organizations)", () => {
     const u = { ...user, grants: { viewAll: true } };
     expect(can(u, [], "p9", "view_all")).toBe(true);
-    expect(visibilityScope(u, perms, ["o1"])).toMatchObject({ allRequests: true, orgIds: ["o1"] });
+    expect(visibilityScope(u, perms, { orgs: ["o1"], projects: [] })).toMatchObject({ allRequests: true, access: { orgs: ["o1"], projects: [] } });
     expect(visibilityScope({ ...u, active: false }, perms)?.allRequests).toBe(false);
   });
 });

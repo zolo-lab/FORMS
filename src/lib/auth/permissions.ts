@@ -12,8 +12,36 @@ export type UserRole = "admin" | "manager";
 /** The database enum still holds the old roles (payroll / approver / org_office); every one of them is a manager now. */
 export const normalizeRole = (raw: string | null | undefined): UserRole => (raw === "admin" ? "admin" : "manager");
 
-/** `null` = every organization; otherwise the ids a manager may work with (never empty). */
-export type OrgAccess = string[] | null;
+/**
+ * Where a manager may work. `null` = everywhere. Otherwise: whole organizations (`orgs`) plus single projects
+ * (`projects`); an organization reached only through projects is limited to those projects.
+ */
+export interface Access {
+  orgs: string[];
+  projects: { id: string; organizationId: string }[];
+}
+export type OrgAccess = Access | null;
+
+const NOWHERE: Access = { orgs: [], projects: [] };
+
+/** Stored rows to an access: no rows = everywhere; an organization with ticked projects counts only through them. */
+export function resolveAccess(orgRows: string[], projectRows: { id: string; organizationId: string }[]): OrgAccess {
+  if (orgRows.length === 0 && projectRows.length === 0) return null;
+  const viaProjects = new Set(projectRows.map((p) => p.organizationId));
+  return { orgs: orgRows.filter((o) => !viaProjects.has(o)), projects: projectRows };
+}
+
+/** Organization ids that appear in pickers (whole ones and those reached through a project); `null` = all. */
+export function usableOrgIds(access: OrgAccess): string[] | null {
+  if (!access) return null;
+  return [...new Set([...access.orgs, ...access.projects.map((p) => p.organizationId)])];
+}
+
+/** For one organization: `null` = any project (or none); a list = only these projects, and one of them is required. */
+export function projectLimit(access: OrgAccess, organizationId: string): string[] | null {
+  if (!access || access.orgs.includes(organizationId)) return null;
+  return access.projects.filter((p) => p.organizationId === organizationId).map((p) => p.id);
+}
 
 /** Extra permissions an admin can tick for a manager (like iForms). Admins have all of them. */
 export interface UserGrants {
@@ -104,36 +132,38 @@ export function openablePackageIds(u: SessionUser | null | undefined, perms: Pac
   return perms.filter((p) => p.canOpen).map((p) => p.packageTemplateId);
 }
 
-/** Organization ids a user may work with; `null` = all (admins, and managers without a limit). */
-export function allowedOrgIds(u: SessionUser | null | undefined, orgIds: OrgAccess): OrgAccess {
+/** The access that applies to a user: `null` = everywhere (admins, and managers without a limit); inactive = nowhere. */
+export function allowedOrgIds(u: SessionUser | null | undefined, access: OrgAccess): OrgAccess {
   if (isAdmin(u)) return null;
-  if (!u!.active) return [];
-  return orgIds && orgIds.length ? orgIds : null;
+  if (!u!.active) return NOWHERE;
+  return access && (access.orgs.length || access.projects.length) ? access : null;
 }
 
-export function orgAllowed(u: SessionUser | null | undefined, orgIds: OrgAccess, organizationId: string): boolean {
-  const ids = allowedOrgIds(u, orgIds);
-  return ids === null || ids.includes(organizationId);
+/** May the user work in this organization (and project)? */
+export function orgAllowed(u: SessionUser | null | undefined, access: OrgAccess, organizationId: string, projectId?: string | null): boolean {
+  const a = allowedOrgIds(u, access);
+  if (a === null || a.orgs.includes(organizationId)) return true;
+  return !!projectId && a.projects.some((p) => p.id === projectId && p.organizationId === organizationId);
 }
 
 export interface VisibilityScope {
   userId: string;
   email: string;
   viewAllPackageIds: string[];
-  /** The "sees every request" grant: all requests (still within `orgIds`). */
+  /** The "sees every request" grant: all requests (still within `access`). */
   allRequests: boolean;
   /** Limits the requests they opened and the packages they may view fully; a step addressed to them is always visible. `null` = no limit. */
-  orgIds: OrgAccess;
+  access: OrgAccess;
 }
 
 /** What the dashboard shows a user: everything (null), or their own requests + packages they may view fully + steps addressed to them. */
-export function visibilityScope(u: SessionUser | null | undefined, perms: PackagePermission[], orgIds: OrgAccess = null): VisibilityScope | null {
+export function visibilityScope(u: SessionUser | null | undefined, perms: PackagePermission[], access: OrgAccess = null): VisibilityScope | null {
   if (isAdmin(u)) return null;
   return {
     userId: u!.id,
     email: u!.email.toLowerCase(),
     viewAllPackageIds: u!.active ? perms.filter((p) => p.canViewAll).map((p) => p.packageTemplateId) : [],
     allRequests: u!.active && u!.grants?.viewAll === true,
-    orgIds: allowedOrgIds(u, orgIds),
+    access: allowedOrgIds(u, access),
   };
 }

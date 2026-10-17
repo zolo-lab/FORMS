@@ -6,12 +6,21 @@ import { MAX_ROWS, parseSheet } from "@/lib/import/sheet";
 import { getWizardPackage } from "@/server/packages-store";
 import { createRequest, sendRequest } from "@/server/requests-store";
 import { viewer } from "@/server/users-store";
+import { listProjects } from "@/server/orgs-store";
 import { can, orgAllowed } from "@/lib/auth/permissions";
 
 /** Same rule as the single-request wizard: the package must be openable and the organization allowed. */
-async function mayCreate(packageId: string, organizationId: string): Promise<boolean> {
-  const { user, perms, orgIds } = await viewer();
-  return can(user, perms, packageId, "open") && orgAllowed(user, orgIds, organizationId);
+async function mayCreate(packageId: string, organizationId: string, projectId?: string): Promise<boolean> {
+  const { user, perms, access } = await viewer();
+  return can(user, perms, packageId, "open") && orgAllowed(user, access, organizationId, projectId);
+}
+
+/** The project must exist, belong to the organization and be active. */
+async function projectOk(organizationId: string, projectId?: string): Promise<boolean> {
+  if (!projectId) return true;
+  if (!UUID.test(projectId)) return false;
+  const p = (await listProjects()).find((x) => x.id === projectId);
+  return !!p && p.organizationId === organizationId && p.active;
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -67,9 +76,10 @@ export async function checkImportAction(input: { packageId: string; rows: string
   return { ok: true, total: records.length, valid: good.length, errors: errors.slice(0, MAX_ERRORS_SHOWN), truncated: errors.length > MAX_ERRORS_SHOWN, records: good };
 }
 
-export async function startImportJobAction(input: { packageId: string; organizationId: string; rowCount: number }): Promise<{ jobId: string } | { error: string }> {
+export async function startImportJobAction(input: { packageId: string; organizationId: string; projectId?: string; rowCount: number }): Promise<{ jobId: string } | { error: string }> {
   if (!UUID.test(input.packageId) || !UUID.test(input.organizationId)) return { error: "נתונים לא תקינים" };
-  if (!(await mayCreate(input.packageId, input.organizationId))) return { error: "אין לך הרשאה לערכה או לארגון האלה" };
+  if (!(await projectOk(input.organizationId, input.projectId))) return { error: "הפרויקט לא נמצא בעמותה הזו" };
+  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { error: "אין לך הרשאה לערכה, לארגון או לפרויקט האלה" };
   const [job] = await db.insert(schema.bulkJobs).values({ organizationId: input.organizationId, packageTemplateId: input.packageId, rowCount: input.rowCount, status: "running" }).returning({ id: schema.bulkJobs.id });
   return { jobId: job!.id };
 }
@@ -80,12 +90,13 @@ export interface ChunkResult {
 }
 
 /** Step 3 (called repeatedly with small chunks so no single call times out). Everything is validated again here. */
-export async function createImportChunkAction(input: { jobId: string; packageId: string; organizationId: string; records: ImportRecord[]; send: boolean; final: boolean }): Promise<ChunkResult> {
+export async function createImportChunkAction(input: { jobId: string; packageId: string; organizationId: string; projectId?: string; records: ImportRecord[]; send: boolean; final: boolean }): Promise<ChunkResult> {
   const out: ChunkResult = { created: 0, errors: [] };
   if (!UUID.test(input.jobId) || !UUID.test(input.packageId) || !UUID.test(input.organizationId) || input.records.length > 25) {
     return { created: 0, errors: [{ row: 0, message: "בקשה לא תקינה" }] };
   }
-  if (!(await mayCreate(input.packageId, input.organizationId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לערכה או לארגון האלה" }] };
+  if (!(await projectOk(input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "הפרויקט לא נמצא בעמותה הזו" }] };
+  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לערכה, לארגון או לפרויקט האלה" }] };
   const pkg = await getWizardPackage(input.packageId);
   if (!pkg) return { created: 0, errors: [{ row: 0, message: "הערכה לא נמצאה" }] };
   for (const rec of input.records) {
@@ -95,7 +106,7 @@ export async function createImportChunkAction(input: { jobId: string; packageId:
       continue;
     }
     try {
-      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, subject: rec.subject, requesterAnswers: rec.answers });
+      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, projectId: input.projectId, subject: rec.subject, requesterAnswers: rec.answers });
       if (input.send) await sendRequest(id);
       out.created++;
     } catch (e) {

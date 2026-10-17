@@ -114,6 +114,20 @@ export const userOrganizations = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.organizationId] })],
 );
 
+/** Limits a manager to single projects (an organization reached only through projects is limited to those). */
+export const userProjects = pgTable(
+  "user_projects",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.projectId] })],
+);
+
 /**
  * People who can be the next signer of a step: staff (secretariats, managers, payroll) and outside contacts
  * (suppliers, advisers). A contact never logs in; a `users` row is for login, a contact is for routing.

@@ -21,6 +21,8 @@ interface Org {
   name: string;
   /** Active projects of the organization (may be empty). */
   projects?: { id: string; name: string }[];
+  /** The manager is limited to some projects of this organization, so one must be chosen. */
+  projectRequired?: boolean;
 }
 
 const STEPS = ["ערכה וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
@@ -29,7 +31,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
   const [step, setStep] = useState(0);
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(orgs[0]?.projectRequired ? (orgs[0].projects?.[0]?.id ?? "") : "");
   const [subject, setSubject] = useState({ name: "", idNumber: "", email: "", phone: "" });
   const [answers, setAnswers] = useState<Answers>({});
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -105,7 +107,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
           </div>
           <div className="space-y-1">
             <Label htmlFor="org">ארגון</Label>
-            <Select id="org" value={organizationId} onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}>
+            <Select id="org" value={organizationId} onChange={(e) => { setOrganizationId(e.target.value); const o = orgs.find((x) => x.id === e.target.value); setProjectId(o?.projectRequired ? (o.projects?.[0]?.id ?? "") : ""); }}>
               {availableOrgs.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
@@ -118,7 +120,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
             <div className="space-y-1">
               <Label htmlFor="project">פרויקט</Label>
               <Select id="project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                <option value="">ללא פרויקט</option>
+                {!orgs.find((o) => o.id === organizationId)?.projectRequired && <option value="">ללא פרויקט</option>}
                 {orgProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}

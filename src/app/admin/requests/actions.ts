@@ -59,16 +59,18 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations({ activeOnly: true })]);
   const org = orgs.find((o) => o.id === input.organizationId);
   if (!pkg) errors["packageId"] = "ערכה לא נמצאה";
-  const { user, perms, orgIds } = await viewer();
+  const { user, perms, access } = await viewer();
   if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהערכה הזו";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
-  else if (!orgAllowed(user, orgIds, org.id)) errors["organizationId"] = "אין לך הרשאה לעמותה / לעסק הזה";
+  else if (!orgAllowed(user, access, org.id)) errors["organizationId"] = "אין לך הרשאה לעמותה / לעסק הזה";
   let projectId: string | undefined;
   if (input.projectId && org) {
     const project = UUID.test(input.projectId) ? (await listProjects()).find((p) => p.id === input.projectId) : undefined;
     if (!project || project.organizationId !== org.id || !project.active) errors["projectId"] = "הפרויקט לא נמצא בעמותה הזו";
     else projectId = project.id;
   }
+  // A manager limited to some projects of this organization must pick one of them.
+  if (org && !errors["organizationId"] && !orgAllowed(user, access, org.id, projectId)) errors["projectId"] = "יש לבחור פרויקט שמותר לך לעבוד איתו";
 
   // Server-side validation; only the cleaned answers are stored.
   let cleaned: Answers = {};
