@@ -1,4 +1,5 @@
 "use server";
+import { requireAdmin } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseSheet } from "@/lib/import/sheet";
@@ -12,6 +13,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 
 /** Upload the file the other system imports: its first non-empty row becomes the template's columns. */
 export async function createExportTemplateAction(fd: FormData) {
+  await requireAdmin();
   const name = str(fd, "name");
   if (!name) redirect(`${LIST}?error=name`);
   const pkg = str(fd, "packageTemplateId");
@@ -52,6 +54,7 @@ function parseSource(raw: string, constValue: string): ColumnSource {
 }
 
 export async function saveExportTemplateAction(fd: FormData) {
+  await requireAdmin();
   const id = str(fd, "id");
   if (!UUID.test(id)) redirect(LIST);
   if (str(fd, "intent") === "delete") {

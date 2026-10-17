@@ -7,7 +7,7 @@ import type { visibilityScope } from "@/lib/auth/permissions";
 /** `null` = everything (admin / no sign-in); otherwise what `visibilityScope` allows. */
 export type Scope = ReturnType<typeof visibilityScope>;
 
-const { requests, signingSteps, organizations, packageTemplates } = schema;
+const { requests, signingSteps, organizations, packageTemplates, projects } = schema;
 
 const IN_PROGRESS = ["in_progress", "returned"] as const;
 const OPEN_STEP = ["active", "in_progress"] as const;
@@ -24,14 +24,17 @@ export function scopeCondition(scope: Scope): SQL | undefined {
   // A manager limited to some organizations: their own requests and the packages they view fully only count there.
   // A step addressed to them stays visible anywhere, so they can always do what they were asked to.
   const orgOk: SQL | undefined = scope.orgIds ? (scope.orgIds.length ? inArray(requests.organizationId, scope.orgIds) : sql`false`) : undefined;
+  const assigned = exists(
+    db
+      .select({ one: sql`1` })
+      .from(signingSteps)
+      .where(and(eq(signingSteps.requestId, requests.id), sql`lower(${signingSteps.assigneeEmail}) = ${scope.email}`)),
+  );
+  // "Sees every request": everything in their organizations (or everything at all), plus what is addressed to them.
+  if (scope.allRequests) return orgOk ? or(orgOk, assigned)! : sql`true`;
   const parts: SQL[] = [
     and(eq(requests.createdBy, scope.userId), orgOk)!,
-    exists(
-      db
-        .select({ one: sql`1` })
-        .from(signingSteps)
-        .where(and(eq(signingSteps.requestId, requests.id), sql`lower(${signingSteps.assigneeEmail}) = ${scope.email}`)),
-    ),
+    assigned,
   ];
   if (scope.viewAllPackageIds.length) parts.push(and(inArray(requests.packageTemplateId, scope.viewAllPackageIds), orgOk)!);
   return or(...parts)!;
@@ -103,12 +106,13 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       createdAt: requests.createdAt,
       expiresAt: requests.expiresAt,
       dueAt: requests.dueAt,
-      organizationName: sql<string>`${organizations.name} || coalesce(' – ' || ${organizations.projectName}, '')`,
+      organizationName: sql<string>`${organizations.name} || coalesce(' – ' || ${projects.name}, '')`,
       packageName: packageTemplates.name,
     })
     .from(requests)
     .innerJoin(organizations, eq(requests.organizationId, organizations.id))
     .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
+    .leftJoin(projects, eq(requests.projectId, projects.id))
     .where(where)
     .orderBy(desc(requests.createdAt))
     .limit(pageSize)

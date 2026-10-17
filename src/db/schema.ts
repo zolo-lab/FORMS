@@ -24,6 +24,7 @@ import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import type { Condition } from "@/lib/forms/schema";
 import type { ReminderPolicy, Workflow } from "@/lib/workflow/types";
 import type { ExportTemplate } from "@/lib/export/template";
+import type { UserGrants } from "@/lib/auth/permissions";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -52,7 +53,7 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   /** מספר עמותה, e.g. 580556306 */
   registrationNumber: text("registration_number").notNull().unique(),
-  /** שם הפרויקט בעמותה / בעסק (optional). */
+  /** Legacy single project name (6.17); moved into `projects` on first read and not used otherwise. */
   projectName: text("project_name"),
   active: boolean("active").notNull().default(true),
   /** Short URL-safe key, e.g. "shivat-zion" (used in /preview/sample?org=...). */
@@ -78,9 +79,26 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   /** Unused since `user_organizations`: the organizations a manager may work with live there. */
   organizationId: uuid("organization_id").references(() => organizations.id),
+  /** Extra permissions given to a manager (see `UserGrants` in permissions.ts); admins have all of them. */
+  grants: jsonb("grants").$type<Partial<UserGrants>>().notNull().default({}),
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });
+
+/** A project inside a nonprofit / business: its own name, under the organization's name and registration number. */
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("projects_org_name_idx").on(t.organizationId, t.name)],
+);
 
 /** Limits a manager to some organizations. A user with no rows here may work with all of them. */
 export const userOrganizations = pgTable(
@@ -264,6 +282,8 @@ export const requests = pgTable(
     packageTemplateId: uuid("package_template_id")
       .notNull()
       .references(() => packageTemplates.id),
+    /** Optional project of the organization the request belongs to. */
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
     /** 'onboarding' | 'termination' | 'custom' */
     kind: text("kind").notNull().default("onboarding"),
     subjectName: text("subject_name").notNull(),

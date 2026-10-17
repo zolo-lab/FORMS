@@ -1,8 +1,10 @@
-/** Adding / editing a nonprofit or business: name, registration number (ח"פ / ח"צ) and an optional project name. Pure, so it is unit tested. */
+/**
+ * Adding / editing a nonprofit or business (name + registration number ח"פ) and its projects
+ * (each project has its own name under the organization). Pure, so it is unit tested.
+ */
 export interface OrgInput {
   name: string;
   registrationNumber: string;
-  projectName: string | null;
 }
 
 export type OrgInputError = "name" | "regnum" | "project";
@@ -10,23 +12,28 @@ export type OrgInputResult = { ok: true; value: OrgInput } | { ok: false; error:
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-export function parseOrgInput(raw: { name?: unknown; registrationNumber?: unknown; projectName?: unknown }): OrgInputResult {
+export function parseOrgInput(raw: { name?: unknown; registrationNumber?: unknown }): OrgInputResult {
   const name = str(raw.name);
   if (!name || name.length > 120) return { ok: false, error: "name" };
   // Spaces and dashes are typed by people; the number itself is 9 digits.
   const registrationNumber = str(raw.registrationNumber).replace(/[\s-]/g, "");
   if (!/^\d{9}$/.test(registrationNumber)) return { ok: false, error: "regnum" };
-  const project = str(raw.projectName);
-  if (project.length > 120) return { ok: false, error: "project" };
-  return { ok: true, value: { name, registrationNumber, projectName: project || null } };
+  return { ok: true, value: { name, registrationNumber } };
 }
 
-/** "שם העמותה – שם הפרויקט", or just the name when there is no project. */
-export const orgLabel = (o: { name: string; projectName?: string | null }): string => (o.projectName ? `${o.name} – ${o.projectName}` : o.name);
+/** A project name: required, up to 120 characters. */
+export function parseProjectName(raw: unknown): string | null {
+  const name = str(raw);
+  return name && name.length <= 120 ? name : null;
+}
 
-export const ORG_ERRORS: Record<OrgInputError | "exists", string> = {
+/** "שם העמותה – שם הפרויקט", or just the organization's name when there is no project. */
+export const orgLabel = (orgName: string, projectName?: string | null): string => (projectName ? `${orgName} – ${projectName}` : orgName);
+
+export const ORG_ERRORS: Record<OrgInputError | "exists" | "projectExists", string> = {
   name: "יש להזין שם (עד 120 תווים)",
   regnum: 'מספר ח"פ / עמותה חייב להכיל 9 ספרות',
-  project: "שם הפרויקט ארוך מדי (עד 120 תווים)",
+  project: "יש להזין שם פרויקט (עד 120 תווים)",
   exists: 'כבר קיים ארגון עם מספר ח"פ הזה',
+  projectExists: "כבר יש פרויקט בשם הזה בעמותה",
 };

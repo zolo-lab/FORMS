@@ -1,4 +1,5 @@
 "use server";
+import { requireAdmin } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { WEBHOOK_EVENTS, isSafeWebhookUrl, parseEvents } from "@/lib/webhooks/events";
@@ -8,6 +9,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 const BASE = "/admin/settings/webhooks";
 
 export async function createWebhookAction(fd: FormData) {
+  await requireAdmin();
   const organizationId = String(fd.get("organizationId") ?? "");
   const templateId = String(fd.get("templateId") ?? "");
   const url = String(fd.get("url") ?? "").trim();
@@ -21,6 +23,7 @@ export async function createWebhookAction(fd: FormData) {
 }
 
 export async function toggleWebhookAction(fd: FormData) {
+  await requireAdmin();
   const id = String(fd.get("id") ?? "");
   if (UUID.test(id)) await setWebhookActive(id, fd.get("active") === "1");
   revalidatePath(BASE);
@@ -28,6 +31,7 @@ export async function toggleWebhookAction(fd: FormData) {
 }
 
 export async function deleteWebhookAction(fd: FormData) {
+  await requireAdmin();
   const id = String(fd.get("id") ?? "");
   if (UUID.test(id)) await deleteWebhook(id);
   revalidatePath(BASE);
@@ -36,6 +40,7 @@ export async function deleteWebhookAction(fd: FormData) {
 
 /** Sends a `ping` event to the receiver so the URL and the signature check can be tried without a real request. */
 export async function testWebhookAction(fd: FormData) {
+  await requireAdmin();
   const id = String(fd.get("id") ?? "");
   const hook = (await listWebhooks()).find((h) => h.id === id);
   if (!hook) redirect(BASE);

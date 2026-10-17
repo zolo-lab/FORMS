@@ -51,6 +51,8 @@ export interface Subject {
 export interface CreateRequestInput {
   packageTemplateId: string;
   organizationId: string;
+  /** Optional project (checked against the organization by the caller). */
+  projectId?: string;
   subject: Subject;
   requesterAnswers?: Answers;
   createdBy?: string;
@@ -111,6 +113,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
   await db.insert(requests).values({
     id,
     organizationId: input.organizationId,
+    projectId: input.projectId,
     packageTemplateId: pkg.id,
     kind: input.kind ?? "onboarding",
     subjectName: input.subject.name,

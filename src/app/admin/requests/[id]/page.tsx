@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canSeeRequest } from "@/server/users-store";
+import { canSeeRequest, currentUser } from "@/server/users-store";
+import { hasGrant } from "@/lib/auth/permissions";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
@@ -25,6 +26,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const data = /^[0-9a-f-]{36}$/i.test(id) ? await getRequest(id) : null;
   if (!data) notFound();
   if (!(await canSeeRequest(id))) notFound();
+  const me = await currentUser();
   const { request, steps, events, documents } = data;
   const answers = await requestAnswerItems(id);
   const files = await uploadedFiles(id);
@@ -94,7 +96,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
           <RequestActions
             requestId={request.id}
             canExtend
-            canCancel={live}
+            canCancel={live && hasGrant(me, "cancel")}
             openSteps={openSteps.map((s) => ({ id: s.id, label: roleOf(s.role), name: s.assigneeName ?? "", email: s.assigneeEmail ?? "", phone: s.assigneePhone ?? "" }))}
           />
         </section>

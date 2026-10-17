@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedOrgIds, can, isAdmin, normalizeRole, openablePackageIds, orgAllowed, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
+import { allowedOrgIds, can, hasGrant, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
 
 const admin: SessionUser = { id: "a", email: "a@x.org", name: "A", role: "admin", active: true };
 const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "manager", active: true };
@@ -48,7 +48,7 @@ describe("can", () => {
 describe("scopes", () => {
   it("lists openable packages and the dashboard scope", () => {
     expect(openablePackageIds(user, perms)).toEqual(["p1"]);
-    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"], orgIds: null });
+    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"], allRequests: false, orgIds: null });
   });
 });
 
@@ -73,5 +73,32 @@ describe("organization access", () => {
     const off = { ...user, active: false };
     expect(allowedOrgIds(off, null)).toEqual([]);
     expect(orgAllowed(off, null, "o1")).toBe(false);
+  });
+});
+
+describe("grants (iForms-style extra permissions)", () => {
+  it("normalizes stored JSON", () => {
+    expect(normalizeGrants(null)).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: false });
+    expect(normalizeGrants({ export: true, cancel: "yes", junk: 1 })).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: true });
+  });
+  it("admin and open mode have every grant; a manager only what was ticked", () => {
+    expect(hasGrant(admin, "export")).toBe(true);
+    expect(hasGrant(null, "manageForms")).toBe(true);
+    expect(hasGrant(user, "export")).toBe(false);
+    expect(hasGrant({ ...user, grants: { export: true } }, "export")).toBe(true);
+    expect(hasGrant({ ...user, active: false, grants: { export: true } }, "export")).toBe(false);
+  });
+  it("openAll opens every package, but editing the chain still needs the package row", () => {
+    const u = { ...user, grants: { openAll: true } };
+    expect(can(u, [], "p9", "open")).toBe(true);
+    expect(can(u, [], "p9", "edit_chain")).toBe(false);
+    expect(can(u, perms, "p2", "edit_chain")).toBe(true);
+    expect(openablePackageIds(u, perms)).toBeNull();
+  });
+  it("viewAll shows every request (still within the organizations)", () => {
+    const u = { ...user, grants: { viewAll: true } };
+    expect(can(u, [], "p9", "view_all")).toBe(true);
+    expect(visibilityScope(u, perms, ["o1"])).toMatchObject({ allRequests: true, orgIds: ["o1"] });
+    expect(visibilityScope({ ...u, active: false }, perms)?.allRequests).toBe(false);
   });
 });

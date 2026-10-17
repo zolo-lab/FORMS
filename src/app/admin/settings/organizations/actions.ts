@@ -3,9 +3,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
 import { parseReminderPolicy } from "@/lib/workflow/reminder-policy";
-import { createOrg, setOrgActive, updateOrg, updateOrgBasics } from "@/server/orgs-store";
+import { createOrg, createProject, setOrgActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
-import { parseOrgInput } from "@/lib/orgs/input";
+import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
 
 const PATH = "/admin/settings/organizations";
@@ -26,7 +26,28 @@ export async function createOrgAction(formData: FormData) {
   redirect(`${PATH}?saved=1`);
 }
 
-/** Inline edit of one row: name, ח"פ, project, active. */
+/** A new project under an organization. */
+export async function createProjectAction(formData: FormData) {
+  await requireAdmin();
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const name = parseProjectName(formData.get("name"));
+  if (!UUID.test(organizationId) || !name) redirect(`${PATH}?error=project`);
+  if (!(await createProject(organizationId, name))) redirect(`${PATH}?error=projectExists`);
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=1`);
+}
+
+export async function updateProjectAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const name = parseProjectName(formData.get("name"));
+  if (!UUID.test(id) || !name) redirect(`${PATH}?error=project`);
+  if (!(await updateProject(id, { name, active: !!formData.get("active") }))) redirect(`${PATH}?error=projectExists`);
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=1`);
+}
+
+/** Inline edit of one row: name, ח"פ, active. */
 export async function updateOrgBasicsAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");

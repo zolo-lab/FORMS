@@ -1,4 +1,5 @@
 "use server";
+import { requireAdmin } from "@/server/guards";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -12,6 +13,7 @@ export type CreateKeyState = { key?: string; error?: string } | null;
 
 /** Creates a key and returns it once; only its hash is stored, so it can't be shown again. */
 export async function createApiKeyAction(_prev: CreateKeyState, fd: FormData): Promise<CreateKeyState> {
+  await requireAdmin();
   const organizationId = String(fd.get("organizationId") ?? "");
   const name = String(fd.get("name") ?? "").trim();
   if (!UUID.test(organizationId)) return { error: "יש לבחור ארגון" };
@@ -23,6 +25,7 @@ export async function createApiKeyAction(_prev: CreateKeyState, fd: FormData): P
 }
 
 export async function revokeApiKeyAction(fd: FormData) {
+  await requireAdmin();
   const id = String(fd.get("id") ?? "");
   if (UUID.test(id)) await db.update(schema.apiKeys).set({ revokedAt: new Date() }).where(eq(schema.apiKeys.id, id));
   revalidatePath(BASE);

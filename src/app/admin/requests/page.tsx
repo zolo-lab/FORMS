@@ -7,8 +7,8 @@ import { PAGE_SIZE, filtersToQuery, parseFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
-import { viewerScope } from "@/server/users-store";
-import { orgLabel } from "@/lib/orgs/input";
+import { currentUser, viewerScope } from "@/server/users-store";
+import { hasGrant } from "@/lib/auth/permissions";
 import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
@@ -42,6 +42,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
   const skipped = typeof sp.skipped === "string" ? Number(sp.skipped) : 0;
   const scope = await viewerScope();
+  const me = await currentUser();
+  const canExport = hasGrant(me, "export");
+  const canCancel = hasGrant(me, "cancel");
   const [orgs, packages, kpis, result, exportTemplates] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org, new Date(), scope), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined, scope), listExportTemplates()]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
@@ -104,7 +107,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
             <option value="">הכול</option>
             {(scope?.orgIds ? orgs.filter((o) => scope.orgIds!.includes(o.id)) : orgs).map((o) => (
               <option key={o.id} value={o.id}>
-                {orgLabel(o)}
+                {o.name}
               </option>
             ))}
           </Select>
@@ -175,10 +178,12 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         ))}
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 text-sm" role="toolbar" aria-label="פעולות על בקשות">
           <span className="text-muted-foreground">סמנו שורות, או השאירו ריק לכל התוצאות ({result.total}):</span>
+          {canExport && <>
           <Button type="submit" name="format" value="csv" variant="outline" size="sm">ייצוא CSV</Button>
           <Button type="submit" name="format" value="xlsx" variant="outline" size="sm">ייצוא Excel</Button>
           <Button type="submit" name="format" value="zip" variant="outline" size="sm">PDF חתומים (ZIP)</Button>
-          {exportTemplates.length > 0 && (
+          </>}
+          {canExport && exportTemplates.length > 0 && (
             <span className="flex items-center gap-1">
               <Select name="template" defaultValue="" aria-label="תבנית ייצוא" className="h-8 w-48">
                 <option value="">ללא תבנית (כל השדות)</option>
@@ -186,10 +191,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
               </Select>
             </span>
           )}
-          <span className="ms-auto flex items-center gap-2">
+          {canCancel && <span className="ms-auto flex items-center gap-2">
             <Input name="reason" placeholder="סיבת ביטול" className="h-8 w-40" aria-label="סיבת ביטול" />
             <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
-          </span>
+          </span>}
         </div>
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[56rem] text-sm">

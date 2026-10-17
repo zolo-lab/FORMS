@@ -1,4 +1,5 @@
 "use server";
+import { requireGrant } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseStepForm } from "@/lib/workflow/step-form";
@@ -15,6 +16,7 @@ function pkgId(fd: FormData): string {
 }
 
 export async function createPackageAction(fd: FormData) {
+  await requireGrant("manageForms");
   const name = String(fd.get("name") ?? "").trim();
   if (!name) redirect("/admin/packages?error=name");
   const id = await createPackage(name);
@@ -23,6 +25,7 @@ export async function createPackageAction(fd: FormData) {
 }
 
 export async function savePackageAction(fd: FormData) {
+  await requireGrant("manageForms");
   const id = pkgId(fd);
   const name = String(fd.get("name") ?? "").trim();
   if (!name) back(id, "?error=name");
@@ -33,6 +36,7 @@ export async function savePackageAction(fd: FormData) {
 }
 
 export async function archivePackageAction(fd: FormData) {
+  await requireGrant("manageForms");
   const id = pkgId(fd);
   await setArchived(id, fd.get("archive") === "1");
   revalidatePath("/admin/packages");
@@ -40,6 +44,7 @@ export async function archivePackageAction(fd: FormData) {
 }
 
 export async function documentAction(fd: FormData) {
+  await requireGrant("manageForms");
   const id = pkgId(fd);
   const intent = String(fd.get("intent") ?? "");
   const item = String(fd.get("itemId") ?? "");
@@ -58,6 +63,7 @@ export async function documentAction(fd: FormData) {
 }
 
 export async function stepAction(fd: FormData) {
+  await requireGrant("manageForms");
   const id = pkgId(fd);
   const data = await getPackage(id);
   if (!data) redirect("/admin/packages");

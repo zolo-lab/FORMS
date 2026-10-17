@@ -10,6 +10,8 @@ import { listPackages } from "@/server/dashboard-store";
 import { listExportTemplates } from "@/server/export-templates-store";
 import { loadExport } from "@/server/export-store";
 import { listOrganizations } from "@/server/requests-store";
+import { hasGrant } from "@/lib/auth/permissions";
+import { currentUser, viewerScope } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +22,11 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
   const sp = await searchParams;
   const parsed = parseFilters(sp);
   const filters = { ...parsed, status: "completed" as const };
-  const [orgs, packages, templates] = await Promise.all([listOrganizations(), listPackages(), listExportTemplates()]);
+  const [orgs, packages, templates, scope, me] = await Promise.all([listOrganizations(), listPackages(), listExportTemplates(), viewerScope(), currentUser()]);
+  const canExport = hasGrant(me, "export");
   const pkg = packages.find((p) => p.id === filters.pkg);
-  const view = pkg ? archiveView(buildExportTable(await loadExport({ filters }))) : null;
+  // Only the requests the viewer may see (their own, packages they view fully, the "sees all" grant, their organizations).
+  const view = pkg ? archiveView(buildExportTable(await loadExport({ filters, scope }))) : null;
   const qs = filtersToQuery(filters);
   const exportHref = (format: string, template?: string) => `/api/admin/requests/export?${qs}&format=${format}${template ? `&template=${template}` : ""}`;
 
@@ -90,16 +94,16 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
             <p className="text-sm text-muted-foreground" role="status">
               {view.total === 0 ? "אין בקשות מתאימות" : view.truncated ? `מוצגות ${view.rows.length} מתוך ${view.total} בקשות (הייצוא כולל את כולן)` : `${view.total} בקשות`}
             </p>
-            <span className="ms-auto flex flex-wrap gap-2">
+            {canExport && <span className="ms-auto flex flex-wrap gap-2">
               <a className={buttonVariants({ variant: "outline" })} href={exportHref("xlsx")}>
                 ייצוא Excel
               </a>
               <a className={buttonVariants({ variant: "outline" })} href={exportHref("csv")}>
                 ייצוא CSV
               </a>
-            </span>
+            </span>}
           </div>
-          {templates.length > 0 && (
+          {canExport && templates.length > 0 && (
             <p className="text-xs text-muted-foreground">
               בתבנית ייצוא:{" "}
               {templates.map((t) => (

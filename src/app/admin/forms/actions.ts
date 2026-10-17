@@ -1,4 +1,5 @@
 "use server";
+import { requireGrant } from "@/server/guards";
 import { redirect } from "next/navigation";
 import { createTemplate, duplicateTemplate, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
 import { parseFormDefinition } from "@/lib/forms/schema";
@@ -6,6 +7,7 @@ import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { findTemplate } from "@/lib/forms/templates";
 
 export async function createFormAction(formData: FormData) {
+  await requireGrant("manageForms");
   const title = String(formData.get("title") ?? "").trim() || "טופס חדש";
   const id = await createTemplate(title);
   redirect(`/admin/forms/${id}`);
@@ -13,6 +15,7 @@ export async function createFormAction(formData: FormData) {
 
 /** A form that starts from one of the built-in templates (docs/builder-plan.md §2.1). */
 export async function createFromTemplateAction(formData: FormData) {
+  await requireGrant("manageForms");
   const t = findTemplate(String(formData.get("template") ?? ""));
   if (!t) redirect("/admin/forms?error=template");
   const title = String(formData.get("title") ?? "").trim() || t.definition.title;
@@ -22,12 +25,14 @@ export async function createFromTemplateAction(formData: FormData) {
 
 /** A form that starts from an uploaded PDF: opens straight on the PDF tab. */
 export async function createPdfFormAction(formData: FormData) {
+  await requireGrant("manageForms");
   const title = String(formData.get("title") ?? "").trim() || "טופס מ-PDF";
   const id = await createTemplate(title, undefined, "pdf");
   redirect(`/admin/forms/${id}?tab=pdf`);
 }
 
 export async function importFormAction(formData: FormData) {
+  await requireGrant("manageForms");
   const raw = String(formData.get("json") ?? "");
   let parsed;
   try {
@@ -41,16 +46,19 @@ export async function importFormAction(formData: FormData) {
 }
 
 export async function duplicateFormAction(formData: FormData) {
+  await requireGrant("manageForms");
   const id = await duplicateTemplate(String(formData.get("id")));
   redirect(id ? `/admin/forms/${id}` : "/admin/forms");
 }
 
 export async function archiveFormAction(formData: FormData) {
+  await requireGrant("manageForms");
   await setArchived(String(formData.get("id")), formData.get("archive") === "1");
   redirect("/admin/forms");
 }
 
 export async function saveDraftAction(templateId: string, definition: unknown, pdf?: { pdfFileId: string | null; pdfMapping: unknown }) {
+  await requireGrant("manageForms");
   let pdfArg;
   if (pdf) {
     const mapping = pdf.pdfMapping === null ? null : pdfMappingSchema.safeParse(pdf.pdfMapping);
@@ -61,5 +69,6 @@ export async function saveDraftAction(templateId: string, definition: unknown, p
 }
 
 export async function publishAction(templateId: string) {
+  await requireGrant("manageForms");
   return publishTemplate(templateId);
 }

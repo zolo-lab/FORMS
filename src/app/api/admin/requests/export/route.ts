@@ -6,6 +6,8 @@ import { getExportTemplate } from "@/server/export-templates-store";
 import { zipStream } from "@/lib/export/zip";
 import { parseFilters } from "@/lib/requests/list";
 import { finalPdfEntries, listFinalPdfs, loadExport } from "@/server/export-store";
+import { hasGrant } from "@/lib/auth/permissions";
+import { currentUser, viewerScope } from "@/server/users-store";
 
 export const maxDuration = 60;
 
@@ -16,10 +18,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * GET ?format=csv|xlsx|zip  - selected requests (`id` repeated) or, without ids, everything matching the dashboard filters.
  */
 export async function GET(req: Request) {
+  if (!hasGrant(await currentUser(), "export")) return Response.json({ error: "אין לך הרשאה לייצא" }, { status: 403 });
+  const scope = await viewerScope();
   const url = new URL(req.url);
   const format = url.searchParams.get("format") ?? "csv";
   const ids = url.searchParams.getAll("id").filter((i) => UUID.test(i));
-  const sel = ids.length ? { ids } : { filters: parseFilters(Object.fromEntries(url.searchParams)) };
+  const sel = ids.length ? { ids, scope } : { filters: parseFilters(Object.fromEntries(url.searchParams)), scope };
   const stamp = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(new Date());
 
   if (format === "zip") {
