@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDrawnElement, cloneField, PDF_PALETTE, uniqueFieldId } from "@/lib/forms/pdf-draw";
+import { addDrawnElement, cloneField, insertFieldByPosition, PDF_PALETTE, readingOrder, uniqueFieldId } from "@/lib/forms/pdf-draw";
 import { allFields, parseFormDefinition, stripLegacyPdfOnly } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { importAcroForm, mergeAcroImport } from "@/lib/pdf/acroform";
@@ -22,7 +22,7 @@ describe("elements drawn on the PDF are ordinary form fields", () => {
     expect(pdfMappingSchema.safeParse({ schemaVersion: 1, pages: [{ width: 1, height: 1 }], stamps: [stamp] }).success).toBe(true);
   });
 
-  it("adds no special page: the field goes to the last page, or to the page asked for", () => {
+  it("with no placed fields the new field goes to the end of the last page", () => {
     const base = def([
       { id: "p1", fields: [{ id: "a", type: "short_text", label: "שם" }] },
       { id: "p2", fields: [{ id: "b", type: "short_text", label: "עיר" }] },
@@ -31,10 +31,42 @@ describe("elements drawn on the PDF are ordinary form fields", () => {
     expect(r.definition.pages).toHaveLength(2);
     expect(r.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["a"]);
     expect(r.definition.pages[1]!.fields.map((f) => f.id)).toEqual(["b", r.stamp.fieldId]);
-    const first = addDrawnElement(base, entry("text"), 0, { x: 0, y: 0 }, () => "s", 0);
-    expect(first.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["a", first.stamp.fieldId]);
-    const outOfRange = addDrawnElement(base, entry("text"), 0, { x: 0, y: 0 }, () => "s", 9);
-    expect(outOfRange.definition.pages[1]!.fields).toHaveLength(2);
+  });
+
+  it("drawing a field inserts it in the form where its position suggests", () => {
+    const base = def([{ id: "p1", fields: [
+      { id: "a", type: "short_text", label: "א" },
+      { id: "b", type: "short_text", label: "ב" },
+      { id: "c", type: "short_text", label: "ג" },
+    ] }]);
+    const st = (fieldId: string, page: number, x: number, y: number) => ({ id: fieldId, fieldId, kind: "text" as const, page, x, y, width: 100, height: 16 });
+    const stamps = [st("a", 0, 400, 700), st("b", 0, 400, 500), st("c", 1, 400, 600)];
+    const mid = addDrawnElement(base, entry("text"), 0, { x: 400, y: 600 }, () => "n", stamps);
+    expect(mid.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["a", mid.stamp.fieldId, "b", "c"]);
+    const top = addDrawnElement(base, entry("text"), 0, { x: 400, y: 790 }, () => "n", stamps);
+    expect(top.definition.pages[0]!.fields.map((f) => f.id)).toEqual([top.stamp.fieldId, "a", "b", "c"]);
+    const lastPage = addDrawnElement(base, entry("text"), 1, { x: 400, y: 100 }, () => "n", stamps);
+    expect(lastPage.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["a", "b", "c", lastPage.stamp.fieldId]);
+  });
+
+  it("insertFieldByPosition: three fields drawn bottom to top end up top to bottom", () => {
+    let d = def([{ id: "p1", fields: [] }]);
+    const stamps: { id: string; fieldId: string; kind: "text"; page: number; x: number; y: number; width: number; height: number }[] = [];
+    for (const [i, y] of [100, 300, 500].entries()) {
+      const f = { id: `f${i}`, type: "short_text" as const, label: `ש${i}` };
+      const st = { id: `s${i}`, fieldId: f.id, kind: "text" as const, page: 0, x: 300, y, width: 100, height: 16 };
+      d = insertFieldByPosition(d, f, st, stamps);
+      stamps.push(st);
+    }
+    expect(d.pages[0]!.fields.map((f) => f.id)).toEqual(["f2", "f1", "f0"]);
+  });
+
+  it("readingOrder: page, then top to bottom, then right to left", () => {
+    const b = (page: number, x: number, y: number) => ({ page, x, y, width: 50, height: 10 });
+    expect(readingOrder(b(0, 0, 0), b(1, 0, 900))).toBeLessThan(0);
+    expect(readingOrder(b(0, 0, 700), b(0, 0, 100))).toBeLessThan(0);
+    expect(readingOrder(b(0, 400, 700), b(0, 100, 702))).toBeLessThan(0); // same row: right first
+    expect(readingOrder(b(0, 100, 700), b(0, 400, 700))).toBeGreaterThan(0);
   });
 
   it("keeps ids unique across repeated adds", () => {
@@ -133,8 +165,20 @@ describe("AcroForm import", () => {
       { id: "p2", fields: [] },
     ]);
     const merged = mergeAcroImport(base, imp);
-    expect(merged.definition.pages[0]!.fields).toHaveLength(1);
     expect(allFields(merged.definition).map((f) => f.label)).toEqual(["א", "fullname"]);
+    expect(merged.definition.pages[0]!.fields).toHaveLength(1);
     expect(merged.definition.pages[1]!.fields).toHaveLength(1);
+  });
+
+  it("imported fields are ordered by their position among the fields already placed", async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([300, 300]);
+    doc.getForm().createTextField("low").addToPage(page, { x: 10, y: 20, width: 100, height: 20 });
+    doc.getForm().createTextField("high").addToPage(page, { x: 10, y: 250, width: 100, height: 20 });
+    const imp = await importAcroForm(await doc.save());
+    const base = def([{ id: "p1", fields: [{ id: "mid", type: "short_text", label: "אמצע" }] }]);
+    const existing = [{ id: "m", fieldId: "mid", kind: "text" as const, page: 0, x: 10, y: 130, width: 100, height: 20 }];
+    const merged = mergeAcroImport(base, imp, existing);
+    expect(allFields(merged.definition).map((f) => f.label)).toEqual(["high", "אמצע", "low"]);
   });
 });

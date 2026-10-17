@@ -98,7 +98,7 @@ export function PdfTab({
           <Button
             size="sm"
             onClick={() => {
-              const merged = mergeAcroImport(definition, acro);
+              const merged = mergeAcroImport(definition, acro, pdf.mapping.stamps);
               onDefinitionChange(merged.definition);
               onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...merged.stamps], acroImported: true } });
               setAcro(null);
@@ -134,7 +134,7 @@ export function PdfTab({
             return r.fieldId;
           }}
           onDrawElement={(entry, page, at) => {
-            const { definition: next, stamp } = addDrawnElement(defRef.current, entry, page, at, () => nanoid(8));
+            const { definition: next, stamp } = addDrawnElement(defRef.current, entry, page, at, () => nanoid(8), pdf.mapping.stamps);
             if (next !== defRef.current) changeDefinition(next);
             onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, stamp] } });
             return stamp.id;

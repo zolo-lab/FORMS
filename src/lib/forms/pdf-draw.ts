@@ -38,10 +38,58 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "stamp", label: "חותמת (תמונה)", fieldType: null, stamp: { kind: "stamp_image" }, size: { width: 90, height: 90 } },
 ];
 
-/** Pages with `field` appended to the page at `pageIndex` (default: the last page). */
-function pagesWithField(def: FormDefinition, field: FormField, pageIndex?: number) {
-  const at = pageIndex !== undefined && pageIndex >= 0 && pageIndex < def.pages.length ? pageIndex : def.pages.length - 1;
-  return def.pages.map((p, i) => (i === at ? { ...p, fields: [...p.fields, field] } : p));
+type Box = { page: number; x: number; y: number; width: number; height: number };
+
+/**
+ * Reading order of two boxes on the document: page, then top to bottom (PDF y grows upward, so the top edge is
+ * y + height; boxes whose tops are within 6pt share a row), then right to left (the form is Hebrew).
+ * Negative when `a` comes first.
+ */
+export function readingOrder(a: Box, b: Box): number {
+  if (a.page !== b.page) return a.page - b.page;
+  const ta = a.y + a.height;
+  const tb = b.y + b.height;
+  if (Math.abs(ta - tb) > 6) return tb - ta;
+  return b.x + b.width - (a.x + a.width);
+}
+
+/**
+ * Insert `field` where its stamp sits among the fields that already have stamps: right after the last field whose
+ * first stamp comes before it, or (when it comes first) right before the earliest one. Without any placed field it
+ * goes to the end of the last page. Only top-level fields count; a field never moves between pages by accident
+ * (it lands on the page of its neighbour).
+ */
+export function insertFieldByPosition(def: FormDefinition, field: FormField, stamp: Box, stamps: (Box & { fieldId: string })[]): FormDefinition {
+  const first = new Map<string, Box>();
+  for (const s of stamps) {
+    const cur = first.get(s.fieldId);
+    if (!cur || readingOrder(s, cur) < 0) first.set(s.fieldId, s);
+  }
+  let before: { pi: number; fi: number; box: Box } | undefined;
+  let after: { pi: number; fi: number; box: Box } | undefined;
+  for (let pi = 0; pi < def.pages.length; pi++) {
+    const fields = def.pages[pi]!.fields;
+    for (let fi = 0; fi < fields.length; fi++) {
+      const box = first.get(fields[fi]!.id);
+      if (!box) continue;
+      if (readingOrder(box, stamp) <= 0) {
+        if (!before || readingOrder(box, before.box) >= 0) before = { pi, fi, box };
+      } else if (!after || readingOrder(box, after.box) < 0) {
+        after = { pi, fi, box };
+      }
+    }
+  }
+  const target: { pi: number; fi: number } | undefined = before ? { pi: before.pi, fi: before.fi + 1 } : after ? { pi: after.pi, fi: after.fi } : undefined;
+  const pi = target ? target.pi : def.pages.length - 1;
+  return {
+    ...def,
+    pages: def.pages.map((p, i) => {
+      if (i !== pi) return p;
+      const fields = [...p.fields];
+      fields.splice(target ? target.fi : fields.length, 0, field);
+      return { ...p, fields };
+    }),
+  };
 }
 
 /** Smallest `<base>N` not used by any field in the form. */
@@ -59,7 +107,8 @@ export interface DrawResult {
 
 /**
  * Add the field (if the element has one) to the form and build the stamp at `box`.
- * `formPage` is the form page (not PDF page) that receives the field; default is the last one.
+ * `existing` are the stamps already on the document: the new field is inserted in the form where its position
+ * suggests (see `insertFieldByPosition`); with none, it goes to the end of the last page.
  */
 export function addDrawnElement(
   def: FormDefinition,
@@ -67,11 +116,12 @@ export function addDrawnElement(
   page: number,
   box: { x: number; y: number },
   newId: () => string,
-  formPage?: number,
+  existing: PdfStamp[] = [],
 ): DrawResult {
   const size = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
   let definition = def;
   let fieldId: string;
+  const at = { page, x: box.x, y: box.y, ...size };
   if (entry.fieldType) {
     fieldId = uniqueFieldId(def, `pdf_${entry.id}_`);
     const field: FormField = {
@@ -83,7 +133,7 @@ export function addDrawnElement(
     if (entry.fieldType === "radio" || entry.fieldType === "dropdown" || entry.fieldType === "checkboxes") {
       field.options = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
     }
-    definition = { ...def, pages: pagesWithField(def, field, formPage) };
+    definition = insertFieldByPosition(def, field, at, existing);
   } else {
     // Stamp-only elements point at a fixed id that stampPdf never resolves.
     fieldId = `_${entry.id}`;
