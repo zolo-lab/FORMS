@@ -57,6 +57,13 @@
       "when": 1792255907242,
       "tag": "0007_sturdy_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792261288390,
+      "tag": "0008_closed_guardian",
+      "breakpoints": true
     }
   ]
 }
