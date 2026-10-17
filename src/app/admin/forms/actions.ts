@@ -1,16 +1,19 @@
 "use server";
 import { requireGrant } from "@/server/guards";
 import { redirect } from "next/navigation";
-import { createTemplate, duplicateTemplate, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
+import { createTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { findTemplate } from "@/lib/forms/templates";
 
-export async function createFormAction(formData: FormData) {
+/** A new form always starts from a PDF that was just uploaded (`/api/admin/pdf`): the form opens on the PDF tab, where its fields are proposed. */
+export async function createFormFromPdfAction(title: string, pdfFileId: string) {
   await requireGrant("manageForms");
-  const title = String(formData.get("title") ?? "").trim() || "טופס חדש";
-  const id = await createTemplate(title);
-  redirect(`/admin/forms/${id}`);
+  const pdf = await getPdfFile(pdfFileId);
+  if (!pdf) return { error: "קובץ ה-PDF לא נמצא, נסו להעלות שוב" };
+  const name = title.trim() || pdf.name.replace(/\.pdf$/i, "") || "טופס חדש";
+  const id = await createTemplate(name, undefined, "pdf", { pdfFileId: pdf.id, pdfMapping: { schemaVersion: 1, pages: pdf.pages, stamps: [] } });
+  return { id };
 }
 
 /** A form that starts from one of the built-in templates (docs/builder-plan.md §2.1). */
@@ -20,14 +23,6 @@ export async function createFromTemplateAction(formData: FormData) {
   if (!t) redirect("/admin/forms?error=template");
   const title = String(formData.get("title") ?? "").trim() || t.definition.title;
   const id = await createTemplate(title, { ...t.definition, title });
-  redirect(`/admin/forms/${id}`);
-}
-
-/** A form that starts from an uploaded PDF: opens straight on the PDF tab. */
-export async function createPdfFormAction(formData: FormData) {
-  await requireGrant("manageForms");
-  const title = String(formData.get("title") ?? "").trim() || "טופס מ-PDF";
-  const id = await createTemplate(title, undefined, "pdf");
   redirect(`/admin/forms/${id}?tab=pdf`);
 }
 

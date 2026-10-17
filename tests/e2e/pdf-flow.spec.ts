@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { login } from "./helpers";
+import { login, newFormFromPdf } from "./helpers";
 
 // builder-plan.md §1.7 (route B): a form built from an existing PDF, iForms-style.
 // Needs the dev database; skipped when DATABASE_URL is not provided.
@@ -20,13 +20,9 @@ async function samplePdf(): Promise<Buffer> {
 test("PDF form: upload, draw, publish, package, request, fill on the document, final PDF", async ({ page, browser, baseURL }) => {
   await login(page, "/admin/forms");
   const title = `PDF e2e ${Date.now()}`;
-  await page.getByPlaceholder("שם הטופס החדש").fill(title);
-  await page.getByRole("button", { name: "להתחיל מ-PDF קיים" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+\?tab=pdf/);
-
-  // Upload a one-page PDF generated on the fly.
-  await page.locator('input[type="file"][accept="application/pdf"]').setInputFiles({ name: "sample.pdf", mimeType: "application/pdf", buffer: await samplePdf() });
-  await expect(page.getByText(/sample\.pdf · 1 עמודים/)).toBeVisible({ timeout: 30_000 });
+  // A one-page PDF generated on the fly starts the form.
+  await newFormFromPdf(page, title, await samplePdf());
+  await expect(page.getByText(/source\.pdf · 1 עמודים/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
 
   // Five elements from the palette; each lands on its own spot.
@@ -123,4 +119,19 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   expect(body.subarray(0, 5).toString()).toBe("%PDF-");
   const finalDoc = await PDFDocument.load(body, { ignoreEncryption: true });
   expect(finalDoc.getPageCount()).toBeGreaterThanOrEqual(1);
+});
+
+test("a new form cannot be published without a PDF, and a form is created only from one", async ({ page }) => {
+  await login(page, "/admin/forms");
+  // The old "blank form" entry is gone; the one card asks for a PDF.
+  await expect(page.getByRole("button", { name: "להתחיל מטופס ריק" })).toHaveCount(0);
+  await page.getByRole("button", { name: "יצירת הטופס" }).click();
+  await expect(page.getByRole("alert")).toContainText("בחרו קובץ PDF");
+
+  // From a template the form has fields but no document yet: publishing says why it is blocked.
+  await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(`ללא PDF ${Date.now()}`);
+  await page.locator("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
+  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}\?tab=pdf/);
+  await page.getByRole("button", { name: "פרסום" }).click();
+  await expect(page.getByText("העלו PDF לפני הפרסום")).toBeVisible({ timeout: 20_000 });
 });

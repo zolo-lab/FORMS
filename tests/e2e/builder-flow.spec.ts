@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { login, newFormFromPdf } from "./helpers";
 
 // builder-plan.md §2.7 (route A): a form built from scratch, Google-Forms style, then filled and published.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -9,10 +9,8 @@ test.setTimeout(180_000);
 test("from scratch: eight field types, labels, a condition, a second page, preview fill+submit, publish, package", async ({ page }) => {
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
-  await page.getByPlaceholder("שם הטופס החדש").fill(title);
-  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
-  const id = page.url().split("/").pop()!;
+  const id = await newFormFromPdf(page, title);
+  await page.getByRole("tab", { name: "עריכה" }).click();
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });
 
   // Eight field types from the palette; the last one added is selected in the settings panel.
