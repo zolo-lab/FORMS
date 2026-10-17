@@ -11,11 +11,19 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; part?: string; x: number; y: number; width: number; height: number; page: number }[];
   expect(await mapping()).toEqual([]);
 
+  // Every form field starts as pending; placing one moves it to "placed".
+  const pendingCount = async () => Number(/\((\d+)\)/.exec((await page.getByRole("heading", { name: /^ממתינים לשיבוץ/ }).textContent())!)![1]);
+  const before0 = await pendingCount();
+  expect(before0).toBeGreaterThan(3);
+  await expect(page.getByRole("heading", { name: "שובצו (0)" })).toBeVisible();
+
   // Click-to-place puts a stamp in the middle of the page (A4: 595.28 x 841.89 pt).
   await page.getByRole("button", { name: "מיקום שם פרטי טקסט" }).click();
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
   expect(stamps[0]!.fieldId).toBe("firstName");
+  expect(await pendingCount()).toBe(before0 - 1);
+  await expect(page.getByRole("heading", { name: "שובצו (1)" })).toBeVisible();
   expect(stamps[0]!.x).toBeCloseTo((595.28 - 120) / 2, 0);
   expect(stamps[0]!.y).toBeCloseTo(841.89 / 2, 0);
 
