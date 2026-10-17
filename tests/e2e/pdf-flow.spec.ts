@@ -21,7 +21,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await login(page, "/admin/forms");
   const title = `PDF e2e ${Date.now()}`;
   await page.getByPlaceholder("שם הטופס החדש").fill(title);
-  await page.getByRole("button", { name: "טופס מ-PDF" }).click();
+  await page.getByRole("button", { name: "להתחיל מ-PDF קיים" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+\?tab=pdf/);
 
   // Upload a one-page PDF generated on the fly.

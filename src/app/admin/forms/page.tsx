@@ -17,7 +17,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <h1 className="text-2xl font-bold">טפסים</h1>
-      {/* Every new form starts with a choice of kind: a PDF to place fields on, or a form built from questions. */}
+      {/* One kind of form, two starting points: from scratch, or from an existing PDF. Either way the same fields serve the responsive form and the PDF. */}
       <Card className="p-4">
         <form action={createFormAction} className="space-y-3">
           <h2 className="font-semibold">יצירת טופס חדש</h2>
@@ -25,22 +25,22 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
             <label htmlFor="new-form-title" className="text-sm text-muted-foreground">שם הטופס</label>
             <Input id="new-form-title" name="title" placeholder="שם הטופס החדש" className="sm:w-80" />
           </div>
-          <p className="text-sm text-muted-foreground">איזה סוג טופס?</p>
+          <p className="text-sm text-muted-foreground">מאיפה מתחילים? בשני המקרים זה אותו טופס: אותם שדות משמשים גם לטופס הרספונסיבי וגם ל-PDF, ואפשר להוסיף PDF גם אחר כך.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="submit"
               className="flex flex-col items-start gap-1 rounded-lg border-2 border-primary/30 bg-card p-4 text-start transition hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <span className="text-base font-semibold">טופס חדש – בנייה משאלות</span>
-              <span className="text-sm text-muted-foreground">בונים טופס משאלות, עמודים ותנאים, כמו JotForm או Google Forms. בסוף נוצר PDF מסכם.</span>
+              <span className="text-base font-semibold">להתחיל מטופס ריק</span>
+              <span className="text-sm text-muted-foreground">בונים את השדות, המקטעים והתנאים מאפס. העובד ממלא טופס רספונסיבי, ובסיום נוצר PDF מסכם; אפשר גם להעלות PDF קיים ולשבץ עליו את אותם שדות.</span>
             </button>
             <button
               type="submit"
               formAction={createPdfFormAction}
               className="flex flex-col items-start gap-1 rounded-lg border-2 border-primary/30 bg-card p-4 text-start transition hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <span className="text-base font-semibold">טופס מ-PDF</span>
-              <span className="text-sm text-muted-foreground">מעלים PDF קיים (למשל טופס 101), מניחים עליו שדות, והעובד ממלא וחותם ישירות על המסמך.</span>
+              <span className="text-base font-semibold">להתחיל מ-PDF קיים</span>
+              <span className="text-sm text-muted-foreground">מעלים PDF (למשל טופס 101) ומשבצים עליו את השדות. אותם שדות מרכיבים גם את הטופס הרספונסיבי, והתשובות מוטבעות על המסמך המקורי.</span>
             </button>
           </div>
         </form>
