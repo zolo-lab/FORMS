@@ -4,12 +4,24 @@ import { Card } from "@/components/ui/card";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { queryRequests, requestKpis } from "@/server/dashboard-store";
+import { currentUser } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
 
-/** "Waiting for me": until users sign in with Google, the viewer picks the role they act as. */
+/** "Waiting for me": steps addressed to the signed-in user; without a signed-in user (open mode / password) the viewer picks a role. */
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
   const { role: raw } = await searchParams;
+  const me = await currentUser();
+  if (me) {
+    const result = await queryRequests({ assigneeEmail: me.email, page: 1 }, new Date(), 200);
+    return (
+      <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
+        <h1 className="text-2xl font-bold">ממתינים לי</h1>
+        <p className="text-sm text-muted-foreground">בקשות שבהן שלב פתוח ממוען אליך ({me.email}).</p>
+        {result.rows.length === 0 ? <Card className="p-6 text-center text-muted-foreground">אין בקשות שממתינות לך.</Card> : <Board rows={result.rows} />}
+      </main>
+    );
+  }
   const role = raw && raw in ROLE_LABELS ? (raw as StepRole) : undefined;
   const [kpis, result] = await Promise.all([requestKpis(), role ? queryRequests({ role, page: 1 }, new Date(), 200) : Promise.resolve(null)]);
   const counts = new Map(kpis.waitingByRole.map((w) => [w.role, w.count]));

@@ -64,10 +64,10 @@ describe("allowlist", () => {
 describe("safeNext / googleConfigured", () => {
   it("only follows same-site paths", () => {
     expect(safeNext("/admin/x")).toBe("/admin/x");
-    expect(safeNext("//evil.test")).toBe("/admin/forms");
-    expect(safeNext("https://evil.test")).toBe("/admin/forms");
-    expect(safeNext("/\\evil")).toBe("/admin/forms");
-    expect(safeNext(null)).toBe("/admin/forms");
+    expect(safeNext("//evil.test")).toBe("/admin/requests");
+    expect(safeNext("https://evil.test")).toBe("/admin/requests");
+    expect(safeNext("/\\evil")).toBe("/admin/requests");
+    expect(safeNext(null)).toBe("/admin/requests");
   });
   it("needs id and secret", () => {
     expect(googleConfigured({ GOOGLE_CLIENT_ID: "a" })).toBe(false);

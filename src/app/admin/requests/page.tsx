@@ -7,6 +7,7 @@ import { PAGE_SIZE, filtersToQuery, parseFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
+import { viewerScope } from "@/server/users-store";
 import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
@@ -39,7 +40,8 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   const filters = parseFilters(sp);
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
   const skipped = typeof sp.skipped === "string" ? Number(sp.skipped) : 0;
-  const [orgs, packages, kpis, result, exportTemplates] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined), listExportTemplates()]);
+  const scope = await viewerScope();
+  const [orgs, packages, kpis, result, exportTemplates] = await Promise.all([listOrganizations(), listPackages(), requestKpis(filters.org, new Date(), scope), queryRequests(filters, new Date(), filters.view === "board" ? 200 : undefined, scope), listExportTemplates()]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const page = Math.min(filters.page, result.pageCount);
   const link = (over: Parameters<typeof filtersToQuery>[1]) => {

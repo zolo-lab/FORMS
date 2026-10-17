@@ -65,7 +65,7 @@ export function checkIdTokenClaims(claims: unknown, o: { clientId: string; nonce
 
 /** Only same-site paths are followed after login. */
 export function safeNext(next: string | null | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/admin/forms";
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/admin/requests";
 }
 
 export const LOGIN_ERRORS: Record<string, string> = {

@@ -8,6 +8,8 @@ import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { getWizardPackage } from "@/server/packages-store";
+import { can } from "@/lib/auth/permissions";
+import { viewer } from "@/server/users-store";
 import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
 export interface ShareLink {
@@ -49,6 +51,8 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations()]);
   const org = orgs.find((o) => o.id === input.organizationId);
   if (!pkg) errors["packageId"] = "ערכה לא נמצאה";
+  const { user, perms } = await viewer();
+  if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהערכה הזו";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
 
   // Server-side validation; only the cleaned answers are stored.
@@ -65,6 +69,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
     organizationId: org.id,
     subject: { name, idNumber: input.subject.idNumber?.trim() || undefined, email, phone },
     requesterAnswers: cleaned,
+    createdBy: user?.id,
   });
   if (!input.send) return { ok: true, requestId, sent: false, links: [] };
   const sent = await sendRequest(requestId);

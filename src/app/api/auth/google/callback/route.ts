@@ -10,6 +10,7 @@ import {
   safeNext,
 } from "@/lib/auth/google";
 import { SESSION_COOKIE, SESSION_TTL_MS, createUserSessionToken } from "@/lib/auth/session";
+import { upsertUserFromLogin } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,8 @@ export async function GET(req: Request) {
     const claims = checkIdTokenClaims(decodeJwtPayload(id_token), { clientId: process.env.GOOGLE_CLIENT_ID!, nonce: saved.nonce });
     if (!claims.ok) return fail("failed");
     if (!isAllowedEmail(claims.email, parseEmailList(process.env.ADMIN_EMAILS))) return fail("not_allowed");
+    const user = await upsertUserFromLogin(claims.email, claims.name);
+    if (!user.active) return fail("not_allowed");
 
     const res = NextResponse.redirect(new URL(safeNext(saved.next), url));
     res.cookies.set(SESSION_COOKIE, await createUserSessionToken(secret, claims.email), {

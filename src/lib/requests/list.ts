@@ -16,6 +16,8 @@ export interface RequestFilters {
   q?: string;
   /** Table (default) or kanban board. */
   view?: "board";
+  /** Requests with an open step addressed to this e-mail (the signed-in user's inbox; never read from the URL). */
+  assigneeEmail?: string;
   page: number;
 }
 
