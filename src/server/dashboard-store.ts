@@ -2,6 +2,10 @@
 import { and, asc, desc, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { PAGE_SIZE, daysSince, median, progress, type RequestFilters } from "@/lib/requests/list";
+import type { visibilityScope } from "@/lib/auth/permissions";
+
+/** `null` = everything (admin / no sign-in); otherwise what `visibilityScope` allows. */
+export type Scope = ReturnType<typeof visibilityScope>;
 
 const { requests, signingSteps, organizations, packageTemplates } = schema;
 
@@ -14,8 +18,26 @@ export function overdueCondition(now: Date): SQL {
   return and(inArray(requests.status, [...IN_PROGRESS]), or(lt(requests.dueAt, now), lt(requests.expiresAt, now)))!;
 }
 
-export function conditions(f: RequestFilters, now: Date): SQL[] {
+/** Requests a non-admin sees: ones they created, packages they may view fully, and requests with a step addressed to them. */
+export function scopeCondition(scope: Scope): SQL | undefined {
+  if (!scope) return undefined;
+  const parts: SQL[] = [
+    eq(requests.createdBy, scope.userId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(signingSteps)
+        .where(and(eq(signingSteps.requestId, requests.id), sql`lower(${signingSteps.assigneeEmail}) = ${scope.email}`)),
+    ),
+  ];
+  if (scope.viewAllPackageIds.length) parts.push(inArray(requests.packageTemplateId, scope.viewAllPackageIds));
+  return or(...parts)!;
+}
+
+export function conditions(f: RequestFilters, now: Date, scope: Scope = null): SQL[] {
   const c: SQL[] = [];
+  const sc = scopeCondition(scope);
+  if (sc) c.push(sc);
   if (f.org) c.push(eq(requests.organizationId, f.org));
   if (f.pkg) c.push(eq(requests.packageTemplateId, f.pkg));
   if (f.status) c.push(eq(requests.status, f.status));
@@ -30,6 +52,16 @@ export function conditions(f: RequestFilters, now: Date): SQL[] {
           .select({ one: sql`1` })
           .from(signingSteps)
           .where(and(eq(signingSteps.requestId, requests.id), eq(signingSteps.role, f.role), inArray(signingSteps.status, [...OPEN_STEP]))),
+      ),
+    );
+  }
+  if (f.assigneeEmail) {
+    c.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(signingSteps)
+          .where(and(eq(signingSteps.requestId, requests.id), sql`lower(${signingSteps.assigneeEmail}) = ${f.assigneeEmail.toLowerCase()}`, inArray(signingSteps.status, [...OPEN_STEP]))),
       ),
     );
   }
@@ -55,8 +87,8 @@ export interface RequestRow {
   overdue: boolean;
 }
 
-export async function queryRequests(f: RequestFilters, now = new Date(), pageSize = PAGE_SIZE): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
-  const where = and(...conditions(f, now));
+export async function queryRequests(f: RequestFilters, now = new Date(), pageSize = PAGE_SIZE, scope: Scope = null): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
+  const where = and(...conditions(f, now, scope));
   const [{ n } = { n: 0 }] = await db.select({ n: sql<number>`count(*)::int` }).from(requests).where(where);
   const pageCount = Math.max(1, Math.ceil(n / pageSize));
   const page = Math.min(f.page, pageCount);
@@ -111,8 +143,8 @@ export interface Kpis {
   medianDaysToComplete: number | null;
 }
 
-export async function requestKpis(orgId?: string, now = new Date()): Promise<Kpis> {
-  const org = orgId ? eq(requests.organizationId, orgId) : undefined;
+export async function requestKpis(orgId?: string, now = new Date(), scope: Scope = null): Promise<Kpis> {
+  const org = and(orgId ? eq(requests.organizationId, orgId) : undefined, scopeCondition(scope));
   const since = new Date(now.getTime() - 30 * 86_400_000);
   const [[active], [overdue], waiting, completed] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(org, inArray(requests.status, [...IN_PROGRESS]))),

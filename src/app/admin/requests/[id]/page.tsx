@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { canSeeRequest } from "@/server/users-store";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
@@ -23,6 +24,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const { error } = await searchParams;
   const data = /^[0-9a-f-]{36}$/i.test(id) ? await getRequest(id) : null;
   if (!data) notFound();
+  if (!(await canSeeRequest(id))) notFound();
   const { request, steps, events, documents } = data;
   const answers = await requestAnswerItems(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });

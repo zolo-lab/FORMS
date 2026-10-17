@@ -198,6 +198,26 @@ export const packageTemplates = pgTable("package_templates", {
   ...timestamps,
 });
 
+/**
+ * Who may do what with one package (form type). Admins need no rows. A user without a row for a package
+ * cannot open requests of it and sees only requests they created or are a step in.
+ */
+export const packagePermissions = pgTable(
+  "package_permissions",
+  {
+    packageTemplateId: uuid("package_template_id").notNull().references(() => packageTemplates.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    /** May start a new request of this package. */
+    canOpen: boolean("can_open").notNull().default(true),
+    /** Sees every request of this package on the dashboard, not only their own. */
+    canViewAll: boolean("can_view_all").notNull().default(false),
+    /** May change the approval chain of a request they open (6.15b). */
+    canEditChain: boolean("can_edit_chain").notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.packageTemplateId, t.userId] })],
+);
+
 export const packageTemplateItems = pgTable(
   "package_template_items",
   {
