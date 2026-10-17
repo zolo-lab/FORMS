@@ -3,7 +3,41 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
 import { parseReminderPolicy } from "@/lib/workflow/reminder-policy";
-import { updateOrg } from "@/server/orgs-store";
+import { createOrg, setOrgActive, updateOrg, updateOrgBasics } from "@/server/orgs-store";
+import { isAdmin } from "@/lib/auth/permissions";
+import { parseOrgInput } from "@/lib/orgs/input";
+import { currentUser } from "@/server/users-store";
+
+const PATH = "/admin/settings/organizations";
+const UUID = /^[0-9a-f-]{36}$/i;
+
+async function requireAdmin() {
+  if (!isAdmin(await currentUser())) redirect("/admin/forms");
+}
+
+/** New row in the nonprofits / businesses table. */
+export async function createOrgAction(formData: FormData) {
+  await requireAdmin();
+  const parsed = parseOrgInput(Object.fromEntries(formData));
+  if (!parsed.ok) redirect(`${PATH}?error=${parsed.error}`);
+  const row = await createOrg(parsed.value);
+  if (!row) redirect(`${PATH}?error=exists`);
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=1`);
+}
+
+/** Inline edit of one row: name, ח"פ, project, active. */
+export async function updateOrgBasicsAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!UUID.test(id)) redirect(`${PATH}?error=name`);
+  const parsed = parseOrgInput(Object.fromEntries(formData));
+  if (!parsed.ok) redirect(`${PATH}?error=${parsed.error}`);
+  if (!(await updateOrgBasics(id, parsed.value))) redirect(`${PATH}?error=exists`);
+  await setOrgActive(id, !!formData.get("active"));
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=1`);
+}
 import { putFile } from "@/server/storage";
 
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -14,10 +48,10 @@ const clean = (v: FormDataEntryValue | null) => {
   return s === "" ? null : s;
 };
 
+/** Branding, sender and reminders of one organization (the name is edited in the table). */
 export async function updateOrgAction(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id"));
-  const name = clean(formData.get("name"));
-  if (!name) redirect("/admin/settings/organizations?error=name");
 
   const colorRaw = clean(formData.get("primaryColor"));
   const primaryColor = colorRaw ? normalizeHex(colorRaw) : null;
@@ -35,7 +69,6 @@ export async function updateOrgAction(formData: FormData) {
   }
 
   await updateOrg(id, {
-    name,
     primaryColor,
     senderName: clean(formData.get("senderName")),
     senderEmail: email,

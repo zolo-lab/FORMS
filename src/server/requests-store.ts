@@ -469,8 +469,9 @@ export async function expireOverdue(now = new Date()) {
   return n;
 }
 
-export async function listOrganizations() {
-  return db.select().from(organizations).orderBy(asc(organizations.name));
+export async function listOrganizations(opts: { activeOnly?: boolean } = {}) {
+  const rows = await db.select().from(organizations).orderBy(asc(organizations.name));
+  return opts.activeOnly ? rows.filter((o) => o.active) : rows;
 }
 
 /**

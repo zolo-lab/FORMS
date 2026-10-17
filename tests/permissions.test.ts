@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { can, isAdmin, openablePackageIds, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
+import { allowedOrgIds, can, isAdmin, normalizeRole, openablePackageIds, orgAllowed, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
 
 const admin: SessionUser = { id: "a", email: "a@x.org", name: "A", role: "admin", active: true };
-const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "org_office", active: true };
+const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "manager", active: true };
 const perms: PackagePermission[] = [
   { packageTemplateId: "p1", canOpen: true, canViewAll: false, canEditChain: true },
   { packageTemplateId: "p2", canOpen: false, canViewAll: true, canEditChain: true },
@@ -11,7 +11,11 @@ const perms: PackagePermission[] = [
 describe("roles", () => {
   it("first user is admin, the rest ordinary users", () => {
     expect(roleForNewUser(0)).toBe("admin");
-    expect(roleForNewUser(1)).toBe("org_office");
+    expect(roleForNewUser(1)).toBe("manager");
+  });
+  it("only admin and manager exist; the old stored roles all read as manager", () => {
+    expect(normalizeRole("admin")).toBe("admin");
+    for (const old of ["payroll", "approver", "org_office", "manager", "", null, undefined]) expect(normalizeRole(old)).toBe("manager");
   });
   it("no session (open mode / password) behaves like admin", () => {
     expect(isAdmin(null)).toBe(true);
@@ -44,6 +48,30 @@ describe("can", () => {
 describe("scopes", () => {
   it("lists openable packages and the dashboard scope", () => {
     expect(openablePackageIds(user, perms)).toEqual(["p1"]);
-    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"] });
+    expect(visibilityScope(user, perms)).toEqual({ userId: "u", email: "u@x.org", viewAllPackageIds: ["p2"], orgIds: null });
+  });
+});
+
+describe("organization access", () => {
+  it("admin and open mode are never limited", () => {
+    expect(allowedOrgIds(admin, ["o1"])).toBeNull();
+    expect(allowedOrgIds(null, ["o1"])).toBeNull();
+    expect(orgAllowed(admin, ["o1"], "o9")).toBe(true);
+  });
+  it("a manager without rows may use every organization", () => {
+    expect(allowedOrgIds(user, null)).toBeNull();
+    expect(allowedOrgIds(user, [])).toBeNull();
+    expect(orgAllowed(user, null, "o9")).toBe(true);
+  });
+  it("a manager with rows is limited to them", () => {
+    expect(allowedOrgIds(user, ["o1", "o2"])).toEqual(["o1", "o2"]);
+    expect(orgAllowed(user, ["o1", "o2"], "o2")).toBe(true);
+    expect(orgAllowed(user, ["o1", "o2"], "o3")).toBe(false);
+    expect(visibilityScope(user, perms, ["o1"])?.orgIds).toEqual(["o1"]);
+  });
+  it("an inactive manager may use no organization", () => {
+    const off = { ...user, active: false };
+    expect(allowedOrgIds(off, null)).toEqual([]);
+    expect(orgAllowed(off, null, "o1")).toBe(false);
   });
 });

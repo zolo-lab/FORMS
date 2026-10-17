@@ -21,8 +21,11 @@ export function overdueCondition(now: Date): SQL {
 /** Requests a non-admin sees: ones they created, packages they may view fully, and requests with a step addressed to them. */
 export function scopeCondition(scope: Scope): SQL | undefined {
   if (!scope) return undefined;
+  // A manager limited to some organizations: their own requests and the packages they view fully only count there.
+  // A step addressed to them stays visible anywhere, so they can always do what they were asked to.
+  const orgOk: SQL | undefined = scope.orgIds ? (scope.orgIds.length ? inArray(requests.organizationId, scope.orgIds) : sql`false`) : undefined;
   const parts: SQL[] = [
-    eq(requests.createdBy, scope.userId),
+    and(eq(requests.createdBy, scope.userId), orgOk)!,
     exists(
       db
         .select({ one: sql`1` })
@@ -30,7 +33,7 @@ export function scopeCondition(scope: Scope): SQL | undefined {
         .where(and(eq(signingSteps.requestId, requests.id), sql`lower(${signingSteps.assigneeEmail}) = ${scope.email}`)),
     ),
   ];
-  if (scope.viewAllPackageIds.length) parts.push(inArray(requests.packageTemplateId, scope.viewAllPackageIds));
+  if (scope.viewAllPackageIds.length) parts.push(and(inArray(requests.packageTemplateId, scope.viewAllPackageIds), orgOk)!);
   return or(...parts)!;
 }
 
@@ -100,7 +103,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       createdAt: requests.createdAt,
       expiresAt: requests.expiresAt,
       dueAt: requests.dueAt,
-      organizationName: organizations.name,
+      organizationName: sql<string>`${organizations.name} || coalesce(' – ' || ${organizations.projectName}, '')`,
       packageName: packageTemplates.name,
     })
     .from(requests)

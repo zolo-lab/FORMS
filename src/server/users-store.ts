@@ -4,13 +4,13 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { SESSION_COOKIE, sessionEmail } from "@/lib/auth/session";
-import { openablePackageIds, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser, type UserRole } from "@/lib/auth/permissions";
+import { allowedOrgIds, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserRole } from "@/lib/auth/permissions";
 
-const { users, packagePermissions } = schema;
+const { users, packagePermissions, userOrganizations } = schema;
 
 export type UserRow = typeof users.$inferSelect;
 
-const toSession = (u: UserRow): SessionUser => ({ id: u.id, email: u.email, name: u.name, role: u.role, active: u.active });
+const toSession = (u: UserRow): SessionUser => ({ id: u.id, email: u.email, name: u.name, role: normalizeRole(u.role), active: u.active });
 
 /** Create the user on first sign-in (first ever = admin), or refresh the name. Returns the row. */
 export async function upsertUserFromLogin(email: string, name: string): Promise<UserRow> {
@@ -50,10 +50,18 @@ export const permissionsOf = cache(async (userId: string): Promise<PackagePermis
     .where(eq(packagePermissions.userId, userId));
 });
 
-/** User + rows in one call, for pages and actions. */
-export async function viewer(): Promise<{ user: SessionUser | null; perms: PackagePermission[] }> {
+/** Organization ids a manager is limited to (no rows = not limited). */
+export const orgAccessOf = cache(async (userId: string): Promise<string[]> => {
+  const rows = await db.select({ organizationId: userOrganizations.organizationId }).from(userOrganizations).where(eq(userOrganizations.userId, userId));
+  return rows.map((r) => r.organizationId);
+});
+
+/** User + rows in one call, for pages and actions. `orgIds` is already resolved: `null` = every organization. */
+export async function viewer(): Promise<{ user: SessionUser | null; perms: PackagePermission[]; orgIds: OrgAccess }> {
   const user = await currentUser();
-  return { user, perms: user ? await permissionsOf(user.id) : [] };
+  if (!user) return { user, perms: [], orgIds: null };
+  const [perms, orgRows] = await Promise.all([permissionsOf(user.id), orgAccessOf(user.id)]);
+  return { user, perms, orgIds: allowedOrgIds(user, orgRows) };
 }
 
 export async function viewerOpenablePackages(): Promise<string[] | null> {
@@ -62,8 +70,8 @@ export async function viewerOpenablePackages(): Promise<string[] | null> {
 }
 
 export async function viewerScope() {
-  const { user, perms } = await viewer();
-  return visibilityScope(user, perms);
+  const { user, perms, orgIds } = await viewer();
+  return visibilityScope(user, perms, orgIds);
 }
 
 // ───────────────────────── Admin ─────────────────────────
@@ -80,6 +88,16 @@ export async function listAllPermissions(): Promise<(PackagePermission & { userI
   return db
     .select({ userId: packagePermissions.userId, packageTemplateId: packagePermissions.packageTemplateId, canOpen: packagePermissions.canOpen, canViewAll: packagePermissions.canViewAll, canEditChain: packagePermissions.canEditChain })
     .from(packagePermissions);
+}
+
+export async function listAllOrgAccess(): Promise<{ userId: string; organizationId: string }[]> {
+  return db.select({ userId: userOrganizations.userId, organizationId: userOrganizations.organizationId }).from(userOrganizations);
+}
+
+/** Replace the organizations a user is limited to; an empty list removes the limit (all organizations). */
+export async function setUserOrgAccess(userId: string, organizationIds: string[]) {
+  await db.delete(userOrganizations).where(eq(userOrganizations.userId, userId));
+  if (organizationIds.length) await db.insert(userOrganizations).values(organizationIds.map((organizationId) => ({ userId, organizationId })));
 }
 
 /** Replace a user's rows for the given packages (a row with all three false is removed). */

@@ -5,6 +5,14 @@ import { autoMap, buildRecords, findDuplicates, targetsFor, validateRecord, type
 import { MAX_ROWS, parseSheet } from "@/lib/import/sheet";
 import { getWizardPackage } from "@/server/packages-store";
 import { createRequest, sendRequest } from "@/server/requests-store";
+import { viewer } from "@/server/users-store";
+import { can, orgAllowed } from "@/lib/auth/permissions";
+
+/** Same rule as the single-request wizard: the package must be openable and the organization allowed. */
+async function mayCreate(packageId: string, organizationId: string): Promise<boolean> {
+  const { user, perms, orgIds } = await viewer();
+  return can(user, perms, packageId, "open") && orgAllowed(user, orgIds, organizationId);
+}
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_FILE = 2 * 1024 * 1024;
@@ -61,6 +69,7 @@ export async function checkImportAction(input: { packageId: string; rows: string
 
 export async function startImportJobAction(input: { packageId: string; organizationId: string; rowCount: number }): Promise<{ jobId: string } | { error: string }> {
   if (!UUID.test(input.packageId) || !UUID.test(input.organizationId)) return { error: "נתונים לא תקינים" };
+  if (!(await mayCreate(input.packageId, input.organizationId))) return { error: "אין לך הרשאה לערכה או לארגון האלה" };
   const [job] = await db.insert(schema.bulkJobs).values({ organizationId: input.organizationId, packageTemplateId: input.packageId, rowCount: input.rowCount, status: "running" }).returning({ id: schema.bulkJobs.id });
   return { jobId: job!.id };
 }
@@ -76,6 +85,7 @@ export async function createImportChunkAction(input: { jobId: string; packageId:
   if (!UUID.test(input.jobId) || !UUID.test(input.packageId) || !UUID.test(input.organizationId) || input.records.length > 25) {
     return { created: 0, errors: [{ row: 0, message: "בקשה לא תקינה" }] };
   }
+  if (!(await mayCreate(input.packageId, input.organizationId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לערכה או לארגון האלה" }] };
   const pkg = await getWizardPackage(input.packageId);
   if (!pkg) return { created: 0, errors: [{ row: 0, message: "הערכה לא נמצאה" }] };
   for (const rec of input.records) {
