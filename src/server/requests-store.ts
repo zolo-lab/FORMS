@@ -32,7 +32,7 @@ import { peopleForWorkflow } from "./people-store";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
-import type { StepRole } from "@/lib/workflow/types";
+import type { StepRole, Workflow } from "@/lib/workflow/types";
 
 const { requests, signingSteps, stepTokens, submissions, events, notifications, packageTemplates, packageTemplateItems, packageDocuments, formTemplates, formTemplateVersions, organizations } = schema;
 
@@ -60,6 +60,8 @@ export interface CreateRequestInput {
   expiresAt?: Date;
   /** Extra things the API caller wants kept with the request (stored next to the requester answers). */
   extra?: { redirectUrl?: string; custom?: Record<string, unknown> };
+  /** An edited copy of the package chain for this request only (6.15b); null/undefined = the package's own. */
+  workflowOverride?: Workflow | null;
 }
 
 function toEngine(r: StepRow): EngineStep {
@@ -117,7 +119,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     subjectPhone: input.subject.phone,
     createdBy: input.createdBy,
     expiresAt,
-    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}) },
+    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}), ...(input.workflowOverride ? { workflowOverride: input.workflowOverride } : {}) },
   });
   if (docs.length) await db.insert(packageDocuments).values(docs.map((d) => ({ ...d, requestId: id })));
   await db.insert(events).values({ requestId: id, actorType: input.createdBy ? "user" : "system", actorId: input.createdBy, type: "request_created" });
@@ -294,10 +296,16 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   // Saved contacts and group members the steps may be routed to (a "group" dropdown stores the contact id).
   const docRows = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
   const versions = docRows.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.templateVersionId))) : [];
-  const people = await peopleForWorkflow(pkg!.workflow, versions.map((v) => v.definition));
+  const people = await peopleForWorkflow(((req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride) ?? pkg!.workflow, versions.map((v) => v.definition));
+  // Whoever opened the request (for steps that come back to them).
+  if (req.createdBy) {
+    const [creator] = await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy));
+    if (creator) people.requester = { id: creator.id, name: creator.name, email: creator.email };
+  }
 
   // The employee step goes to the person the request is about.
-  const planned = planSteps(pkg!.workflow, answers, undefined, people).map((st) =>
+  const override = (req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride;
+  const planned = planSteps(override ?? pkg!.workflow, answers, undefined, people).map((st) =>
     st.role === "employee" && !st.assigneeEmail && !st.assigneePhone
       ? { ...st, assigneeName: req.subjectName, assigneeEmail: req.subjectEmail ?? undefined, assigneePhone: req.subjectPhone ?? undefined }
       : st,

@@ -41,9 +41,10 @@ export type RequestStatus = (typeof REQUEST_STATUSES)[number];
  *  - from_field: the answer of `assigneeFromFieldId` – free text (email/phone) or, when the field lists a group
  *    (`optionsSource: "group:<id>"`), the contact chosen there
  *  - group_all: every member of `groupId`, as parallel steps
+ *  - requester: whoever opened the request (e.g. the final approval comes back to them)
  *  - implicit (requester/employee): the person is known from the request itself
  */
-export const ASSIGNEE_KINDS = ["fixed", "contact", "from_field", "group_all"] as const;
+export const ASSIGNEE_KINDS = ["fixed", "contact", "from_field", "group_all", "requester"] as const;
 export type AssigneeKind = (typeof ASSIGNEE_KINDS)[number];
 
 /** A person a step can go to (a contact row, or someone typed by hand). */
@@ -56,6 +57,8 @@ export interface Person {
 
 /** Saved people the engine needs to plan a workflow (looked up by the server before planning). */
 export interface PeopleDirectory {
+  /** The signed-in user who opened the request (for `assigneeKind: "requester"`). */
+  requester?: Person;
   contacts?: Record<string, Person>;
   groups?: Record<string, Person[]>;
 }

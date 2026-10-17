@@ -9,6 +9,8 @@ import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { getWizardPackage } from "@/server/packages-store";
 import { can } from "@/lib/auth/permissions";
+import { checkChain } from "@/lib/workflow/chain";
+import type { Workflow } from "@/lib/workflow/types";
 import { viewer } from "@/server/users-store";
 import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
@@ -31,6 +33,8 @@ export interface CreateInput {
   organizationId: string;
   subject: { name: string; idNumber?: string; email?: string; phone?: string };
   requesterAnswers: Answers;
+  /** An edited approval chain for this request only (needs the "edit chain" permission). */
+  workflow?: Workflow;
   send: boolean;
 }
 
@@ -62,6 +66,16 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
     if (!v.ok) Object.assign(errors, v.errors);
     cleaned = v.cleaned;
   }
+  // An edited chain: only with the permission, and only a valid one.
+  let workflowOverride: Workflow | null = null;
+  if (pkg && input.workflow) {
+    if (!can(user, perms, pkg.id, "edit_chain")) errors["workflow"] = "אין לך הרשאה לשנות את שרשרת האישורים";
+    else {
+      const chain = checkChain(pkg.workflow, input.workflow);
+      if (!chain.ok) errors["workflow"] = chain.errors[0] ?? "שרשרת לא תקינה";
+      else workflowOverride = chain.workflow;
+    }
+  }
   if (Object.keys(errors).length || !pkg || !org) return { ok: false, errors };
 
   const requestId = await createRequest({
@@ -70,6 +84,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
     subject: { name, idNumber: input.subject.idNumber?.trim() || undefined, email, phone },
     requesterAnswers: cleaned,
     createdBy: user?.id,
+    workflowOverride,
   });
   if (!input.send) return { ok: true, requestId, sent: false, links: [] };
   const sent = await sendRequest(requestId);

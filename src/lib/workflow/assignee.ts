@@ -12,6 +12,7 @@ export const ASSIGNEE_KIND_LABELS: Record<AssigneeKind, string> = {
   contact: "איש קשר שמור",
   from_field: "לפי שדה בטופס (בחירה מקבוצה, או מייל/טלפון שהוקלד)",
   group_all: "כל חברי קבוצה, במקביל",
+  requester: "מי שפתח את הבקשה",
 };
 
 /** The `optionsSource` key that lists a group's members in a dropdown. */
