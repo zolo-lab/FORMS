@@ -10,7 +10,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
   await page.getByPlaceholder("שם הטופס החדש").fill(title);
-  await page.getByRole("button", { name: "טופס חדש" }).click();
+  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });

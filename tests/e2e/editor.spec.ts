@@ -7,7 +7,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   await page.getByPlaceholder("שם הטופס החדש").fill(`טופס e2e ${Date.now()}`);
-  await page.getByRole("button", { name: "טופס חדש" }).click();
+  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
 
@@ -42,7 +42,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 test("form settings: layout, description and thank-you message", async ({ page }) => {
   await login(page, "/admin/forms");
   await page.getByPlaceholder("שם הטופס החדש").fill(`הגדרות ${Date.now()}`);
-  await page.getByRole("button", { name: "טופס חדש" }).click();
+  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}/);
   await page.getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
