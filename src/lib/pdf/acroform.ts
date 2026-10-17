@@ -14,6 +14,7 @@ import {
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { allFields } from "@/lib/forms/schema";
+import { insertFieldByPosition, readingOrder } from "@/lib/forms/pdf-draw";
 
 export interface AcroImport {
   fields: FormField[];
@@ -97,10 +98,10 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
 }
 
 /**
- * Rename imported ids so they cannot clash with the fields already in `def`,
- * and return the merged definition (fields appended to the last page).
+ * Rename imported ids so they cannot clash with the fields already in `def`, and return the merged definition.
+ * Each imported field is inserted where its first stamp sits among the already placed fields (`existing`).
  */
-export function mergeAcroImport(def: FormDefinition, imp: AcroImport): { definition: FormDefinition; stamps: PdfStamp[] } {
+export function mergeAcroImport(def: FormDefinition, imp: AcroImport, existing: PdfStamp[] = []): { definition: FormDefinition; stamps: PdfStamp[] } {
   const used = new Set(allFields(def).map((f) => f.id));
   const rename = new Map<string, string>();
   let n = 0;
@@ -112,7 +113,19 @@ export function mergeAcroImport(def: FormDefinition, imp: AcroImport): { definit
   }
   const fields = imp.fields.map((f) => ({ ...f, id: rename.get(f.id)! }));
   const stamps = imp.stamps.map((s) => ({ ...s, fieldId: rename.get(s.fieldId) ?? s.fieldId, id: `${rename.get(s.fieldId) ?? s.fieldId}_${s.id}` }));
-  // Imported fields are ordinary form fields; they go to the last page.
-  const pages = def.pages.map((p, i) => (i === def.pages.length - 1 ? { ...p, fields: [...p.fields, ...fields] } : p));
-  return { definition: { ...def, pages }, stamps };
+  const firstOf = (fieldId: string) => stamps.filter((s) => s.fieldId === fieldId).sort(readingOrder)[0];
+  // Reading order, so each field lands after the ones placed before it.
+  const ordered = [...fields].sort((a, b) => {
+    const sa = firstOf(a.id);
+    const sb = firstOf(b.id);
+    return sa && sb ? readingOrder(sa, sb) : 0;
+  });
+  let definition = def;
+  const placed: PdfStamp[] = [...existing];
+  for (const f of ordered) {
+    const s = firstOf(f.id);
+    definition = s ? insertFieldByPosition(definition, f, s, placed) : { ...definition, pages: definition.pages.map((p, i) => (i === definition.pages.length - 1 ? { ...p, fields: [...p.fields, f] } : p)) };
+    placed.push(...stamps.filter((x) => x.fieldId === f.id));
+  }
+  return { definition, stamps };
 }
