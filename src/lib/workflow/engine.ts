@@ -90,6 +90,8 @@ export function planSteps(workflow: Workflow, answers: Answers, newId: () => str
           const members = (w.groupId ? people.groups?.[w.groupId] : undefined) ?? [];
           return members.length ? members.map((m) => base(w, fromPerson(m))) : [base(w, {})];
         }
+        case "requester":
+          return [base(w, people.requester ? fromPerson(people.requester) : {})];
         case "from_field":
           return [base(w, { assigneeName: w.assignee?.name, assigneeEmail: w.assignee?.email, assigneePhone: w.assignee?.phone, ...assigneeFrom(answers[w.assigneeFromFieldId!], people.contacts) })];
         default:

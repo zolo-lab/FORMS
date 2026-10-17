@@ -11,6 +11,8 @@ import type { Answers } from "@/lib/forms/conditions";
 import type { Lookups } from "@/lib/forms/lookups";
 import type { FieldErrors } from "@/lib/forms/validate";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
+import type { WorkflowStep } from "@/lib/workflow/types";
+import { ChainEditor } from "./ChainEditor";
 import type { WizardPackage } from "@/server/packages-store";
 import { ShareLinks } from "./ShareLinks";
 
@@ -21,7 +23,7 @@ interface Org {
 
 const STEPS = ["ערכה וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
 
-export function NewRequestWizard({ packages, orgs, lookups }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups }) {
+export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chainEditable = [] }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups; contacts?: { id: string; name: string }[]; chainEditable?: string[] }) {
   const [step, setStep] = useState(0);
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
@@ -29,6 +31,7 @@ export function NewRequestWizard({ packages, orgs, lookups }: { packages: Wizard
   const [answers, setAnswers] = useState<Answers>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [done, setDone] = useState<{ requestId: string; sent: boolean; links: ShareLink[] } | null>(null);
+  const [chain, setChain] = useState<{ pkgId: string; steps: WorkflowStep[] } | null>(null);
   const [pending, start] = useTransition();
 
   const pkg = packages.find((p) => p.id === packageId);
@@ -37,7 +40,7 @@ export function NewRequestWizard({ packages, orgs, lookups }: { packages: Wizard
 
   function submit(send: boolean) {
     start(async () => {
-      const res: CreateResult = await createRequestAction({ packageId, organizationId, subject, requesterAnswers: answers, send });
+      const res: CreateResult = await createRequestAction({ packageId, organizationId, subject, requesterAnswers: answers, send, ...(chain && chain.pkgId === packageId ? { workflow: { ...pkg!.workflow, steps: chain.steps } } : {}) });
       if (res.ok) {
         setErrors({});
         setDone({ requestId: res.requestId, sent: res.sent, links: res.links });
@@ -187,16 +190,20 @@ export function NewRequestWizard({ packages, orgs, lookups }: { packages: Wizard
           </dl>
           <div>
             <p className="mb-1 text-sm font-medium">מסלול החתימות</p>
-            <ol className="list-decimal space-y-1 ps-5 text-sm">
-              {[...pkg.workflow.steps]
-                .sort((a, b) => a.order - b.order)
-                .map((s, i) => (
-                  <li key={i}>
-                    {ROLE_LABELS[s.role]}
-                    {s.assignee?.name ? ` (${s.assignee.name})` : ""}
-                  </li>
-                ))}
-            </ol>
+            {chainEditable.includes(pkg.id) ? (
+              <ChainEditor key={pkg.id} initial={chain?.pkgId === pkg.id ? chain.steps : pkg.workflow.steps} contacts={contacts} onChange={(steps) => setChain({ pkgId: pkg.id, steps })} />
+            ) : (
+              <ol className="list-decimal space-y-1 ps-5 text-sm">
+                {[...pkg.workflow.steps]
+                  .sort((a, b) => a.order - b.order)
+                  .map((s, i) => (
+                    <li key={i}>
+                      {ROLE_LABELS[s.role]}
+                      {s.assignee?.name ? ` (${s.assignee.name})` : ""}
+                    </li>
+                  ))}
+              </ol>
+            )}
           </div>
           {Object.values(errors).length > 0 && <p role="alert" className="text-sm text-destructive">{Object.values(errors)[0]}</p>}
           <div className="flex flex-wrap gap-2">

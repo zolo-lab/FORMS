@@ -204,3 +204,27 @@ describe("requestStatus", () => {
     expect(requestStatus(started(serial).steps)).toBe("in_progress");
   });
 });
+
+describe("requester as assignee (6.15a)", () => {
+  const w: Workflow = {
+    steps: [
+      { order: 1, role: "requester", action: "fill" },
+      { order: 2, role: "approver", action: "approve", assigneeKind: "requester" },
+      { order: 3, role: "employee", action: "fill_and_sign" },
+      { order: 4, role: "approver", action: "approve", assigneeKind: "requester" },
+      { order: 5, role: "payroll", action: "approve", assignee: { name: "שכר", email: "p@x.il" } },
+    ],
+  };
+  it("routes the step to the person who opened the request, wherever it sits in the chain", () => {
+    const steps = planSteps(w, {}, id, { requester: { name: "רות", email: "r@x.il", phone: "0501234567" } });
+    const mine = steps.filter((s) => s.order === 2 || s.order === 4);
+    expect(mine.map((s) => [s.assigneeName, s.assigneeEmail, s.assigneePhone])).toEqual([
+      ["רות", "r@x.il", "0501234567"],
+      ["רות", "r@x.il", "0501234567"],
+    ]);
+  });
+  it("without a known opener the step is created without a person (admin can delegate)", () => {
+    const steps = planSteps(w, {}, id, {});
+    expect(steps.find((s) => s.order === 2)).toMatchObject({ assigneeName: undefined, assigneeEmail: undefined });
+  });
+});
