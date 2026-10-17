@@ -15,6 +15,8 @@ let sharedWorker: PDFWorker | null = null;
 export function usePdfDocument(source: PdfSource | null) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The source key `doc` was opened from (while a replacement loads, `doc` is still the previous one). */
+  const [docKey, setDocKey] = useState("");
   const key = source ? ("url" in source ? source.url : `data:${source.data.byteLength}`) : "";
   useEffect(() => {
     if (!source) return;
@@ -30,6 +32,7 @@ export function usePdfDocument(source: PdfSource | null) {
         const loaded = await loading.promise;
         if (cancelled) { void loading.destroy(); return; }
         setDoc(loaded);
+        setDocKey(key);
         setError(null);
       } catch {
         if (!cancelled) setError("לא ניתן להציג את ה-PDF");
@@ -38,5 +41,5 @@ export function usePdfDocument(source: PdfSource | null) {
     return () => { cancelled = true; void task?.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` identifies the source
   }, [key]);
-  return { doc, error };
+  return { doc, error, docKey };
 }

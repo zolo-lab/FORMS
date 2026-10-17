@@ -58,6 +58,8 @@ export const stampSchema = z.object({
   /** stamp_image: data URL (png/jpg) of the fixed image. */
   image: z.string().optional(),
   tabIndex: z.number().int().optional(),
+  /** Suggested by the automatic placement and not confirmed yet; the editor draws it dashed. */
+  guessed: z.boolean().optional(),
 });
 export type PdfStamp = z.infer<typeof stampSchema>;
 
