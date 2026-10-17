@@ -63,6 +63,17 @@ function itemsForField(f: FormField, idPrefix: string, labelPrefix: string): Pla
   return [make({ kind: "text", label: "טקסט" })];
 }
 
+/**
+ * The list groups (one per form field) split by whether everything in them has a stamp yet.
+ * A field with several things to place (parts, options) stays pending until all of them are placed.
+ */
+export function splitPlacement(groups: [string, PlaceableItem[]][], placedKeys: ReadonlySet<string>): { pending: [string, PlaceableItem[]][]; placed: [string, PlaceableItem[]][] } {
+  const pending: [string, PlaceableItem[]][] = [];
+  const placed: [string, PlaceableItem[]][] = [];
+  for (const g of groups) (g[1].every((it) => placedKeys.has(it.key)) ? placed : pending).push(g);
+  return { pending, placed };
+}
+
 /** `tableRows[tableId]` = how many rows to offer for a repeating table (UI controlled). */
 export function placeableItems(def: FormDefinition, tableRows: Record<string, number> = {}): PlaceableItem[] {
   const out: PlaceableItem[] = [];
