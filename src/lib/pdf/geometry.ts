@@ -65,27 +65,33 @@ interface SubPath { pts: [number, number][]; closed: boolean; curved: boolean }
 
 function subPaths(data: number[]): SubPath[] {
   const out: SubPath[] = [];
-  let cur: SubPath | null = null;
-  const start = () => { cur = { pts: [], closed: false, curved: false }; out.push(cur); return cur; };
+  /** The path being built (created on demand). */
+  const current = (): SubPath => {
+    let last = out[out.length - 1];
+    if (!last) { last = { pts: [], closed: false, curved: false }; out.push(last); }
+    return last;
+  };
   for (let i = 0; i < data.length; ) {
     const code = data[i++]!;
     if (code === 0) {
       // A moveTo straight after another one replaces it (pdf.js repeats the start point of a line).
-      if (cur && cur.pts.length === 1) cur.pts = [];
-      else start();
-      cur!.pts.push([data[i]!, data[i + 1]!]);
+      const last = out[out.length - 1];
+      if (last && last.pts.length === 1) last.pts = [];
+      else out.push({ pts: [], closed: false, curved: false });
+      current().pts.push([data[i]!, data[i + 1]!]);
       i += 2;
     } else if (code === 1) {
-      (cur ?? start()).pts.push([data[i]!, data[i + 1]!]);
+      current().pts.push([data[i]!, data[i + 1]!]);
       i += 2;
     } else if (code === 2) {
-      (cur ?? start()).curved = true;
+      current().curved = true;
       i += 6;
     } else if (code === 3) {
-      (cur ?? start()).curved = true;
+      current().curved = true;
       i += 4;
     } else if (code === 4) {
-      if (cur) cur.closed = true;
+      const last = out[out.length - 1];
+      if (last) last.closed = true;
     } else {
       break; // unknown code: the rest cannot be read reliably
     }
