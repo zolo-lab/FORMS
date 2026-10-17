@@ -71,6 +71,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   role: userRole("role").notNull(),
+  /** scrypt hash for demo/test users who sign in with a password (Google users have none). */
+  passwordHash: text("password_hash"),
   /** null = all organizations (admin/payroll). */
   organizationId: uuid("organization_id").references(() => organizations.id),
   active: boolean("active").notNull().default(true),

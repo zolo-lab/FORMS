@@ -5,6 +5,8 @@
  */
 export const SESSION_COOKIE = "gybs_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+/** Holds the admin's own session while they act as another user (demo / support). */
+export const RETURN_COOKIE = "gybs_return";
 
 const enc = new TextEncoder();
 
