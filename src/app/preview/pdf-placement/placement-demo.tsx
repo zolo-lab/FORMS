@@ -4,7 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { nanoid } from "nanoid";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
-import { addPdfOnlyElement } from "@/lib/forms/pdf-only";
+import { addDrawnElement } from "@/lib/forms/pdf-draw";
 import { sampleForm } from "../../../../tests/fixtures/sample-form";
 
 /** No-database demo: generates a blank A4 PDF in the browser and lets you place sample-form fields on it. */
@@ -32,7 +32,7 @@ export function PlacementDemo() {
           setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
         }
         onDrawElement={(entry, page, at) => {
-          const r = addPdfOnlyElement(definition, entry, page, at, () => nanoid(8));
+          const r = addDrawnElement(definition, entry, page, at, () => nanoid(8));
           setDefinition(r.definition);
           setMapping((m) => ({ ...m, stamps: [...m.stamps, r.stamp] }));
           return r.stamp.id;
