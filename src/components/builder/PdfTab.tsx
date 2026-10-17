@@ -7,18 +7,24 @@ import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { usePdfDocument } from "@/components/pdf/usePdfDocument";
 import { extractPageData } from "@/components/pdf/extract-page-data";
 import { guessOne, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
+import { detectFields, type DetectedField } from "@/lib/pdf/detect";
+import { applyRefinements, type Refinement } from "@/lib/pdf/refine";
+import { DetectDialog } from "@/components/pdf/DetectDialog";
 import type { Match } from "@/lib/pdf/match";
 import { nanoid } from "nanoid";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { tableCellOf } from "@/lib/forms/pdf-items";
-import { addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
-import type { FormDefinition, FormField } from "@/lib/forms/schema";
+import { addDetectedFields, addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
+import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
   file: { id: string; name: string; url: string; pages: { width: number; height: number }[] };
   mapping: PdfMapping;
 }
+
+const overlap = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
 
 export function PdfTab({
   definition,
@@ -50,7 +56,11 @@ export function PdfTab({
     return pageData.current.pages;
   };
   /** Set after an upload: ask about automatic placement as soon as the new document is open. */
-  const askAfterUpload = useRef(false);
+  const askAfterUpload = useRef(!!pdf && allFields(definition).length === 0 && pdf.mapping.stamps.length === 0);
+  /** Fields the PDF seems to ask for, waiting for the admin's choice. */
+  const [found, setFound] = useState<DetectedField[] | null>(null);
+  /** Places to write the existing fields did not claim (offered after the placement question). */
+  const [extra, setExtra] = useState<DetectedField[]>([]);
   const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
   const defRef = useRef(definition);
@@ -93,6 +103,24 @@ export function PdfTab({
     try {
       const pages = (await readPages()) ?? [];
       if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
+      // A form with no fields yet: propose them from the document.
+      if (allFields(defRef.current).length === 0) {
+        let detected = detectFields(pages);
+        if (detected.length === 0) { setGuessNote("לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך."); return; }
+        try {
+          const res = await fetch("/api/admin/pdf-detect", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ fields: detected.map((f) => ({ id: f.id, label: f.label, type: f.type, options: f.options?.map((o) => ({ label: o.label })) })) }),
+          });
+          if (res.ok) {
+            const refinements = ((await res.json()) as { refinements: Refinement[] | null }).refinements;
+            if (refinements) detected = applyRefinements(detected, refinements);
+          }
+        } catch { /* local detection stands */ }
+        setFound(detected);
+        return;
+      }
       const targets = unplacedSimpleFields(defRef.current, pdf.mapping.stamps);
       if (targets.length === 0) { setGuessNote("כל שדות הטופס כבר שובצו."); return; }
       // A language model may pair names with labels (names only, never coordinates); without it the local matcher does.
@@ -109,6 +137,9 @@ export function PdfTab({
         if (res.ok) claude = ((await res.json()) as { matches: Match[] | null }).matches;
       } catch { /* local matcher */ }
       const plan = planGuess(defRef.current, pdf.mapping.stamps, pages, () => nanoid(8), claude);
+      // Places to write that neither a placed stamp nor a suggestion covers: candidates for new fields.
+      const taken = [...pdf.mapping.stamps, ...plan.stamps];
+      setExtra(detectFields(pages).filter((d) => !taken.some((t) => t.page === d.page && overlap(t, d.box) > 0.5)));
       if (plan.stamps.length === 0) { setGuessNote("לא מצאנו ב-PDF תוויות שמתאימות לשדות הטופס, לכן השיבוץ ידני."); return; }
       setGuess({ total: plan.total, stamps: plan.stamps });
     } catch {
@@ -154,6 +185,11 @@ export function PdfTab({
         </Button>
         {pdf && <span className="text-sm text-muted-foreground"><bdi>{pdf.file.name}</bdi> · {pdf.file.pages.length} עמודים</span>}
         {pdf && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>הסרת ה-PDF מהטופס</Button>}
+        {pdf && pending === 0 && allFields(definition).length === 0 && (
+          <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
+            {guessBusy ? "מנתח את ה-PDF…" : "זיהוי שדות מה-PDF"}
+          </Button>
+        )}
         {pdf && pending > 0 && (
           <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
             {guessBusy ? "מנתח את ה-PDF…" : `שיבוץ אוטומטי של ${pending} שדות ממתינים`}
@@ -221,6 +257,20 @@ export function PdfTab({
           previewBusy={previewBusy}
         />
       )}
+      <DetectDialog
+        fields={found}
+        pageCount={pdf?.file.pages.length ?? 1}
+        canSplit={allFields(definition).length === 0 && (pdf?.file.pages.length ?? 1) > 1}
+        onClose={() => setFound(null)}
+        onConfirm={(chosen, opts) => {
+          if (!pdf) return;
+          const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), opts);
+          changeDefinition(added.definition);
+          onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...added.stamps] } });
+          setFound(null);
+          setExtra([]);
+        }}
+      />
       <Dialog open={!!guess} onClose={() => setGuess(null)} title="שיבוץ אוטומטי של השדות" className="w-[min(92vw,30rem)]">
         {guess && (
           <div className="space-y-4 text-sm">
@@ -237,6 +287,9 @@ export function PdfTab({
                 לשבץ אוטומטית
               </Button>
               <Button variant="outline" onClick={() => setGuess(null)}>אשבץ ידנית</Button>
+              {extra.length > 0 && (
+                <Button variant="ghost" onClick={() => { setFound(extra); setGuess(null); }}>נמצאו עוד {extra.length} מקומות למילוי ללא שדה, להוסיף?</Button>
+              )}
             </div>
           </div>
         )}

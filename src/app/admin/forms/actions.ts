@@ -5,14 +5,27 @@ import { createTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDra
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { findTemplate } from "@/lib/forms/templates";
+import { blankForm } from "@/lib/forms/builder";
+import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
+import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 
 /** A new form always starts from a PDF that was just uploaded (`/api/admin/pdf`): the form opens on the PDF tab, where its fields are proposed. */
-export async function createFormFromPdfAction(title: string, pdfFileId: string) {
+export async function createFormFromPdfAction(title: string, pdfFileId: string, acro?: unknown) {
   await requireGrant("manageForms");
   const pdf = await getPdfFile(pdfFileId);
   if (!pdf) return { error: "קובץ ה-PDF לא נמצא, נסו להעלות שוב" };
   const name = title.trim() || pdf.name.replace(/\.pdf$/i, "") || "טופס חדש";
-  const id = await createTemplate(name, undefined, "pdf", { pdfFileId: pdf.id, pdfMapping: { schemaVersion: 1, pages: pdf.pages, stamps: [] } });
+  let definition = blankForm(name);
+  let mapping: PdfMapping = { schemaVersion: 1, pages: pdf.pages, stamps: [] };
+  // A PDF with interactive fields brings them along (the admin is not asked: that is the document's own field list).
+  const imp = acro as AcroImport | null | undefined;
+  if (imp?.acroImported && Array.isArray(imp.fields) && Array.isArray(imp.stamps)) {
+    const merged = mergeAcroImport(definition, imp, []);
+    const parsedDef = parseFormDefinition(merged.definition);
+    const parsedMap = pdfMappingSchema.safeParse({ ...mapping, stamps: merged.stamps, acroImported: true });
+    if (parsedDef.success && parsedMap.success) { definition = parsedDef.data; mapping = parsedMap.data; }
+  }
+  const id = await createTemplate(name, definition, "pdf", { pdfFileId: pdf.id, pdfMapping: mapping });
   return { id };
 }
 

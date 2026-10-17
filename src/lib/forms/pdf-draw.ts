@@ -8,6 +8,8 @@ import type { PdfStamp } from "./pdf-mapping";
 import { DEFAULT_SIZE } from "./pdf-items";
 import type { FieldType } from "./field-types";
 import { allFields, type FormDefinition, type FormField } from "./schema";
+import type { DetectedField } from "@/lib/pdf/detect";
+import { normalizeText } from "@/lib/pdf/match";
 
 export interface PaletteEntry {
   id: string;
@@ -159,4 +161,73 @@ export function cloneField(def: FormDefinition, fieldId: string): { definition: 
     return { ...p, fields };
   });
   return { definition: { ...def, pages }, fieldId: id };
+}
+
+export interface AddDetectedOptions {
+  /** One form step per PDF page (only when the form has no fields yet). */
+  stepPerPage?: boolean;
+}
+
+const YES_NO_VALUE: Record<string, string> = { [normalizeText("כן")]: "yes", [normalizeText("לא")]: "no" };
+
+/**
+ * Turn detected fields (see `pdf/detect.ts`, after the admin's edits) into ordinary form fields plus the stamps that
+ * place them on the document, marked `guessed`. Each field lands in the form where its place on the page suggests
+ * (`insertFieldByPosition`), so a form with nothing in it comes out in the PDF's reading order. With `stepPerPage`
+ * and an empty form, the fields are split into one step per PDF page.
+ */
+export function addDetectedFields(
+  def: FormDefinition,
+  detected: DetectedField[],
+  existing: PdfStamp[],
+  newId: () => string,
+  opts: AddDetectedOptions = {},
+): { definition: FormDefinition; stamps: PdfStamp[] } {
+  const wasEmpty = allFields(def).length === 0;
+  let definition = def;
+  const all = [...existing];
+  const added: PdfStamp[] = [];
+  const pageOf = new Map<string, number>();
+  const ordered = [...detected].sort((a, b) => readingOrder({ page: a.page, ...a.box }, { page: b.page, ...b.box }));
+  for (const d of ordered) {
+    const fieldId = uniqueFieldId(definition, `pdf_${d.type}_`);
+    const field: FormField = { id: fieldId, type: d.type, label: d.label };
+    const base = PDF_PALETTE.find((e) => e.fieldType === d.type)?.stamp;
+    const stamps: PdfStamp[] = [];
+    const put = (partial: Partial<PdfStamp> & { kind: PdfStamp["kind"] }, box: { x: number; y: number; width: number; height: number }) =>
+      stamps.push({ id: newId(), fieldId, page: d.page, ...box, ...partial, guessed: true } as PdfStamp);
+    if (d.options && (d.type === "radio" || d.type === "checkboxes")) {
+      field.options = d.options.map((o, i) => ({ value: `o${i + 1}`, label: o.label }));
+      d.options.forEach((o, i) => put({ kind: "check", whenValue: `o${i + 1}` }, o.box));
+    } else if (d.options && d.type === "yes_no") {
+      for (const o of d.options) put({ kind: "check", whenValue: YES_NO_VALUE[normalizeText(o.label)] ?? "yes" }, o.box);
+    } else if (d.type === "consent") {
+      put({ kind: "check" }, d.box);
+    } else if (d.type === "signature") {
+      put({ kind: "signature" }, d.box);
+    } else if (d.comb) {
+      put({ kind: "comb", comb: { cells: d.comb } }, d.box);
+    } else {
+      const text = base && base.kind === "text" ? base : { kind: "text" as const };
+      put({ ...text, kind: "text" }, d.box);
+    }
+    definition = insertFieldByPosition(definition, field, { page: d.page, ...d.box }, all);
+    all.push(...stamps);
+    added.push(...stamps);
+    pageOf.set(fieldId, d.page);
+  }
+  if (wasEmpty && opts.stepPerPage && pageOf.size > 0) {
+    const fields = definition.pages.flatMap((p) => p.fields);
+    const first = definition.pages[0]!;
+    const pdfPages = [...new Set(pageOf.values())].sort((a, b) => a - b);
+    definition = {
+      ...definition,
+      pages: pdfPages.map((pg, i) => ({
+        ...(i === 0 ? first : { id: `step_${i + 1}` }),
+        title: `שלב ${i + 1}`,
+        fields: fields.filter((f) => pageOf.get(f.id) === pg),
+      })),
+    };
+  }
+  return { definition, stamps: added };
 }
