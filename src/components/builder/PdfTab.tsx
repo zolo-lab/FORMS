@@ -8,7 +8,7 @@ import { nanoid } from "nanoid";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { tableCellOf } from "@/lib/forms/pdf-items";
-import { addPdfOnlyElement, clonePdfOnlyField, dropPdfOnlyField, pdfOnlyFieldOf, restorePdfOnlyField } from "@/lib/forms/pdf-only";
+import { addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
@@ -28,8 +28,6 @@ export function PdfTab({
   onDefinitionChange: (d: FormDefinition) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  /** Pdf-only fields removed with their stamp, kept so undo can restore them. */
-  const dropped = useRef<Map<string, FormField>>(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filled, setFilled] = useState<{ url: string; data: Uint8Array } | null>(null);
@@ -118,23 +116,7 @@ export function PdfTab({
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}
-          onMappingChange={(mapping) => {
-            // Deleting a stamp of a drawn-on-PDF field also removes the field it created; undo brings it back.
-            const kept = new Set(mapping.stamps.map((st) => st.fieldId));
-            let def = defRef.current;
-            for (const st of pdf.mapping.stamps) {
-              if (kept.has(st.fieldId)) continue;
-              const f = pdfOnlyFieldOf(def, st.fieldId);
-              if (f) dropped.current.set(f.id, f);
-              def = dropPdfOnlyField(def, st.fieldId);
-            }
-            for (const st of mapping.stamps) {
-              const f = dropped.current.get(st.fieldId);
-              if (f) def = restorePdfOnlyField(def, f);
-            }
-            if (def !== defRef.current) changeDefinition(def);
-            onChange({ ...pdf, mapping });
-          }}
+          onMappingChange={(mapping) => onChange({ ...pdf, mapping })}
           onFieldPatch={(fieldId, patch) => {
             const d = defRef.current;
             // A table cell ("children[0].birth") edits its column.
@@ -146,13 +128,13 @@ export function PdfTab({
             changeDefinition({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map(apply) })) });
           }}
           onCloneField={(fieldId) => {
-            const r = clonePdfOnlyField(defRef.current, fieldId);
+            const r = cloneField(defRef.current, fieldId);
             if (!r) return null;
             changeDefinition(r.definition);
             return r.fieldId;
           }}
           onDrawElement={(entry, page, at) => {
-            const { definition: next, stamp } = addPdfOnlyElement(defRef.current, entry, page, at, () => nanoid(8));
+            const { definition: next, stamp } = addDrawnElement(defRef.current, entry, page, at, () => nanoid(8));
             if (next !== defRef.current) changeDefinition(next);
             onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, stamp] } });
             return stamp.id;

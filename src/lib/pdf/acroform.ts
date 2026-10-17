@@ -59,7 +59,7 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
     if (pdfField instanceof PDFTextField) {
       const combed = pdfField.isCombed() && (pdfField.getMaxLength() ?? 0) > 0;
       const multiline = pdfField.isMultiline();
-      fields.push({ id, type: multiline ? "long_text" : "short_text", label, settings: { pdfOnly: true, acroName: label } });
+      fields.push({ id, type: multiline ? "long_text" : "short_text", label, settings: { acroName: label } });
       ws.forEach((w, i) =>
         stamps.push({
           ...base,
@@ -72,11 +72,11 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
         }),
       );
     } else if (pdfField instanceof PDFCheckBox) {
-      fields.push({ id, type: "consent", label, settings: { pdfOnly: true, acroName: label } });
+      fields.push({ id, type: "consent", label, settings: { acroName: label } });
       ws.forEach((w, i) => stamps.push({ ...base, id: `${id}_s${i}`, kind: "check", page: w.page, ...w.rect }));
     } else if (pdfField instanceof PDFRadioGroup) {
       const options = pdfField.getOptions().map((o) => ({ value: o, label: o }));
-      fields.push({ id, type: "radio", label, options, settings: { pdfOnly: true, acroName: label } });
+      fields.push({ id, type: "radio", label, options, settings: { acroName: label } });
       ws.forEach((w, i) => {
         // Prefer the widget's own export value when it names an option; otherwise assume widgets follow option order.
         const raw = w.widget.getOnValue()?.decodeText();
@@ -85,10 +85,10 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
       });
     } else if (pdfField instanceof PDFDropdown) {
       const options = pdfField.getOptions().map((o) => ({ value: o, label: o }));
-      fields.push({ id, type: "dropdown", label, options, settings: { pdfOnly: true, acroName: label } });
+      fields.push({ id, type: "dropdown", label, options, settings: { acroName: label } });
       ws.forEach((w, i) => stamps.push({ ...base, id: `${id}_s${i}`, kind: "text", page: w.page, ...w.rect }));
     } else if (pdfField instanceof PDFSignature) {
-      fields.push({ id, type: "signature", label, settings: { pdfOnly: true, acroName: label } });
+      fields.push({ id, type: "signature", label, settings: { acroName: label } });
       ws.forEach((w, i) => stamps.push({ ...base, id: `${id}_s${i}`, kind: "signature", page: w.page, ...w.rect }));
     }
   }
@@ -98,7 +98,7 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
 
 /**
  * Rename imported ids so they cannot clash with the fields already in `def`,
- * and return the merged definition (fields appended to the first page).
+ * and return the merged definition (fields appended to the last page).
  */
 export function mergeAcroImport(def: FormDefinition, imp: AcroImport): { definition: FormDefinition; stamps: PdfStamp[] } {
   const used = new Set(allFields(def).map((f) => f.id));
@@ -112,6 +112,7 @@ export function mergeAcroImport(def: FormDefinition, imp: AcroImport): { definit
   }
   const fields = imp.fields.map((f) => ({ ...f, id: rename.get(f.id)! }));
   const stamps = imp.stamps.map((s) => ({ ...s, fieldId: rename.get(s.fieldId) ?? s.fieldId, id: `${rename.get(s.fieldId) ?? s.fieldId}_${s.id}` }));
-  const [first, ...rest] = def.pages;
-  return { definition: { ...def, pages: [{ ...first!, fields: [...first!.fields, ...fields] }, ...rest] }, stamps };
+  // Imported fields are ordinary form fields; they go to the last page.
+  const pages = def.pages.map((p, i) => (i === def.pages.length - 1 ? { ...p, fields: [...p.fields, ...fields] } : p));
+  return { definition: { ...def, pages }, stamps };
 }

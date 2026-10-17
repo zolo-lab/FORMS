@@ -210,7 +210,27 @@ export function findField(form: FormDefinition, id: string): FormField | undefin
   return allFields(form).find((f) => f.id === id);
 }
 
+/** Old forms marked drawn fields with `settings.pdfOnly`; that flag means nothing now, so it is dropped on load. */
+export function stripLegacyPdfOnly(def: FormDefinition): FormDefinition {
+  let changed = false;
+  const strip = (f: FormField): FormField => {
+    const fields = f.fields?.map(strip);
+    const hasFlag = !!f.settings && "pdfOnly" in f.settings;
+    if (!hasFlag && (!fields || fields.every((c, i) => c === f.fields![i]))) return f;
+    changed = true;
+    const { pdfOnly: _flag, ...rest } = f.settings ?? {};
+    void _flag;
+    return { ...f, ...(fields ? { fields } : {}), ...(hasFlag ? (Object.keys(rest).length ? { settings: rest } : { settings: undefined }) : {}) };
+  };
+  const pages = def.pages.map((p) => {
+    const fields = p.fields.map(strip);
+    return fields.every((f, i) => f === p.fields[i]) ? p : { ...p, fields };
+  });
+  return changed ? { ...def, pages } : def;
+}
+
 /** Parse + validate an unknown JSON blob as a form definition. */
 export function parseFormDefinition(input: unknown) {
-  return formDefinitionSchema.safeParse(input);
+  const r = formDefinitionSchema.safeParse(input);
+  return r.success ? { ...r, data: stripLegacyPdfOnly(r.data) } : r;
 }

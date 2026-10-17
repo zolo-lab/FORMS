@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
-import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-only";
+import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-draw";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
 import { StampFieldControls } from "./StampFieldControls";
@@ -50,7 +50,7 @@ export interface PdfPlacementProps {
   /** Change a field of the form from the stamp panel (e.g. who fills it). */
   onFieldPatch?: (fieldId: string, patch: Partial<FormField>) => void;
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
-  /** Copy/paste of a drawn element: make a copy of its field and return the new field id (null = keep the same field). */
+  /** Copy/paste of an element: make a copy of its field and return the new field id (null = keep the same field). */
   onCloneField?: (fieldId: string) => string | null;
 }
 
@@ -285,7 +285,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const copies = clipboard.current.map((s) => {
       const pg = pages[s.page]!;
       const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
-      // A drawn element gets its own new field; a regular field's stamp is just drawn again.
+      // A pasted element gets its own new field (copy of the original); null = the same field is drawn again.
       const fieldId = onCloneField?.(s.fieldId) ?? s.fieldId;
       return { ...s, id: nanoid(8), fieldId, x: round1(c.x), y: round1(c.y) };
     });
