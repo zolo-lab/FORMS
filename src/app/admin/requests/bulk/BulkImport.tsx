@@ -11,9 +11,11 @@ const CHUNK = 10;
 
 type Phase = "upload" | "map" | "checked" | "running" | "done";
 
-export function BulkImport({ packages, orgs }: { packages: { id: string; name: string }[]; orgs: { id: string; name: string }[] }) {
+export function BulkImport({ packages, orgs }: { packages: { id: string; name: string }[]; orgs: { id: string; name: string; projects: { id: string; name: string }[]; projectRequired: boolean }[] }) {
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(orgs[0]?.projectRequired ? (orgs[0].projects[0]?.id ?? "") : "");
+  const currentOrg = orgs.find((o) => o.id === organizationId);
   const [send, setSend] = useState(false);
   const [phase, setPhase] = useState<Phase>("upload");
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
     setPhase("running");
     setError(null);
     start(async () => {
-      const job = await startImportJobAction({ packageId, organizationId, rowCount: records.length });
+      const job = await startImportJobAction({ packageId, organizationId, projectId: projectId || undefined, rowCount: records.length });
       if ("error" in job) {
         setError(job.error);
         return setPhase("checked");
@@ -65,7 +67,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
       const failed: RowError[] = [...errors];
       for (let i = 0; i < records.length; i += CHUNK) {
         const chunk = records.slice(i, i + CHUNK);
-        const res = await createImportChunkAction({ jobId: job.jobId, packageId, organizationId, records: chunk, send, final: i + CHUNK >= records.length });
+        const res = await createImportChunkAction({ jobId: job.jobId, packageId, organizationId, projectId: projectId || undefined, records: chunk, send, final: i + CHUNK >= records.length });
         ok += res.created;
         failed.push(...res.errors);
         setCreated(ok);
@@ -101,12 +103,27 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
           </div>
           <div className="space-y-1">
             <Label htmlFor="bulk-org">ארגון</Label>
-            <Select id="bulk-org" value={organizationId} disabled={phase === "running" || phase === "done"} onChange={(e) => setOrganizationId(e.target.value)}>
+            <Select id="bulk-org" value={organizationId} disabled={phase === "running" || phase === "done"} onChange={(e) => {
+              setOrganizationId(e.target.value);
+              const o = orgs.find((x) => x.id === e.target.value);
+              setProjectId(o?.projectRequired ? (o.projects[0]?.id ?? "") : "");
+            }}>
               {orgs.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
             </Select>
           </div>
+          {currentOrg && currentOrg.projects.length > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="bulk-project">פרויקט</Label>
+              <Select id="bulk-project" value={projectId} disabled={phase === "running" || phase === "done"} onChange={(e) => setProjectId(e.target.value)}>
+                {!currentOrg.projectRequired && <option value="">ללא פרויקט</option>}
+                {currentOrg.projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={send} disabled={phase === "running" || phase === "done"} onChange={(e) => setSend(e.target.checked)} />

@@ -6,8 +6,9 @@ import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GRANT_KEYS, GRANT_LABELS, ROLE_LABELS, isAdmin, normalizeGrants, normalizeRole, type UserRole } from "@/lib/auth/permissions";
 import { listOrganizations } from "@/server/requests-store";
+import { listProjects } from "@/server/orgs-store";
 import { listPackages } from "@/server/dashboard-store";
-import { currentUser, listAllOrgAccess, listAllPermissions, listUsers } from "@/server/users-store";
+import { currentUser, listAllOrgAccess, listAllPermissions, listAllProjectAccess, listUsers } from "@/server/users-store";
 import { isDemoAddress } from "@/lib/auth/password";
 import { Input } from "@/components/ui/input";
 import { createDemoUserAction, impersonateAction, savePermissionsAction, setPasswordAction, updateUserAction } from "./actions";
@@ -20,7 +21,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const { error, saved, u } = await searchParams;
   const me = await currentUser();
   if (!isAdmin(me)) redirect("/admin/forms");
-  const [users, perms, packages, orgs, orgAccess] = await Promise.all([listUsers(), listAllPermissions(), listPackages(), listOrganizations(), listAllOrgAccess()]);
+  const [users, perms, packages, orgs, orgAccess, projectAccess, projects] = await Promise.all([listUsers(), listAllPermissions(), listPackages(), listOrganizations(), listAllOrgAccess(), listAllProjectAccess(), listProjects()]);
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
@@ -56,7 +57,10 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       {users.map((user) => {
         const mine = perms.filter((p) => p.userId === user.id);
         const myOrgs = orgAccess.filter((a) => a.userId === user.id).map((a) => a.organizationId);
-        const limited = myOrgs.length > 0;
+        const myProjects = projectAccess.filter((a) => a.userId === user.id).map((a) => a.projectId);
+        // An organization reached through single projects is ticked too; its projects show which ones.
+        const tickedOrgs = new Set([...myOrgs, ...projects.filter((p) => myProjects.includes(p.id)).map((p) => p.organizationId)]);
+        const limited = tickedOrgs.size > 0;
         const grants = normalizeGrants(user.grants);
         return (
           <Card key={user.id} className="space-y-4 p-4" id={`u-${user.id}`}>
@@ -155,10 +159,23 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   </div>
                   <div className="grid gap-1.5 text-sm sm:grid-cols-2">
                     {orgs.map((o) => (
-                      <label key={o.id} className="flex items-center gap-2">
-                        <Checkbox name="orgs" value={o.id} defaultChecked={myOrgs.includes(o.id)} aria-label={`עמותה / עסק – ${o.name}`} />
+                      <div key={o.id} className="space-y-1">
+                      <label className="flex items-center gap-2">
+                        <Checkbox name="orgs" value={o.id} defaultChecked={tickedOrgs.has(o.id)} aria-label={`עמותה / עסק – ${o.name}`} />
                         {o.name}{!o.active && <span className="text-muted-foreground"> (לא פעיל)</span>}
                       </label>
+                      {projects.filter((p) => p.organizationId === o.id).length > 0 && (
+                        <div className="ms-6 space-y-1 text-muted-foreground">
+                          <p className="text-xs">פרויקטים (ללא סימון = כל הפרויקטים של העמותה)</p>
+                          {projects.filter((p) => p.organizationId === o.id).map((p) => (
+                            <label key={p.id} className="flex items-center gap-2">
+                              <Checkbox name="projects" value={p.id} defaultChecked={myProjects.includes(p.id)} aria-label={`פרויקט – ${o.name} – ${p.name}`} />
+                              {p.name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      </div>
                     ))}
                   </div>
                 </fieldset>

@@ -23,7 +23,12 @@ export function scopeCondition(scope: Scope): SQL | undefined {
   if (!scope) return undefined;
   // A manager limited to some organizations: their own requests and the packages they view fully only count there.
   // A step addressed to them stays visible anywhere, so they can always do what they were asked to.
-  const orgOk: SQL | undefined = scope.orgIds ? (scope.orgIds.length ? inArray(requests.organizationId, scope.orgIds) : sql`false`) : undefined;
+  const orgOk: SQL | undefined = scope.access
+    ? or(
+        scope.access.orgs.length ? inArray(requests.organizationId, scope.access.orgs) : undefined,
+        scope.access.projects.length ? inArray(requests.projectId, scope.access.projects.map((p) => p.id)) : undefined,
+      ) ?? sql`false`
+    : undefined;
   const assigned = exists(
     db
       .select({ one: sql`1` })

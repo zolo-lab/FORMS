@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { GRANT_KEYS, isAdmin, type PackagePermission, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 import { db, schema } from "@/db";
+import { listProjects } from "@/server/orgs-store";
 import { hashPassword, isDemoAddress, validDemoPassword } from "@/lib/auth/password";
 import { RETURN_COOKIE, SESSION_COOKIE, SESSION_TTL_MS, createUserSessionToken, sessionEmail } from "@/lib/auth/session";
-import { currentUser, setUserGrants, setUserOrgAccess, setUserPermissions, updateUser } from "@/server/users-store";
+import { currentUser, setUserGrants, setUserOrgAccess, setUserProjectAccess, setUserPermissions, updateUser } from "@/server/users-store";
 
 const cookieOpts = (maxAge: number) => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge });
 
@@ -44,7 +45,14 @@ export async function savePermissionsAction(fd: FormData) {
   const orgIds = fd.getAll("orgs").map(String).filter((o) => UUID.test(o));
   // "Only some" with nothing ticked would silently mean "all": refuse it instead.
   if (fd.get("orgScope") === "some" && orgIds.length === 0) redirect(`${PATH}?error=orgs&u=${userId}`);
-  await setUserOrgAccess(userId, fd.get("orgScope") === "some" ? orgIds : []);
+  // Single projects ticked under an organization limit the manager to those projects (an organization that is
+  // ticked with none of its projects ticked means the whole organization).
+  const limited = fd.get("orgScope") === "some";
+  const ticked = new Set(fd.getAll("projects").map(String));
+  const chosen = (await listProjects()).filter((p) => ticked.has(p.id) && orgIds.includes(p.organizationId));
+  const projectOrgs = new Set(chosen.map((p) => p.organizationId));
+  await setUserOrgAccess(userId, limited ? orgIds.filter((o) => !projectOrgs.has(o)) : []);
+  await setUserProjectAccess(userId, limited ? chosen.map((p) => p.id) : []);
   const grants = Object.fromEntries(GRANT_KEYS.map((k) => [k, fd.get(`grant.${k}`) === "on"])) as unknown as UserGrants;
   await setUserGrants(userId, grants);
   const rows: PackagePermission[] = packageIds.map((p) => ({
