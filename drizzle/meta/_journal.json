@@ -43,6 +43,13 @@
       "when": 1792141326785,
       "tag": "0005_shiny_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792253801923,
+      "tag": "0006_absent_thunderbolts",
+      "breakpoints": true
     }
   ]
 }
