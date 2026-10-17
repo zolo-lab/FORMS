@@ -8,6 +8,7 @@ import type { PdfStamp } from "./pdf-mapping";
 import { DEFAULT_SIZE } from "./pdf-items";
 import type { FieldType } from "./field-types";
 import { allFields, type FormDefinition, type FormField } from "./schema";
+import { uniqueId } from "./builder";
 import type { DetectedField } from "@/lib/pdf/detect";
 import { normalizeText } from "@/lib/pdf/match";
 
@@ -230,4 +231,53 @@ export function addDetectedFields(
     };
   }
   return { definition, stamps: added };
+}
+
+/**
+ * Put the fields of every step in the order of the document: page, top to bottom, right to left, by where each
+ * field's first stamp sits. A field with no stamp (or a layout block) stays right after the field it followed.
+ * Nothing moves between steps and no id changes.
+ */
+export function orderByPdf(def: FormDefinition, stamps: PdfStamp[]): FormDefinition {
+  const first = new Map<string, PdfStamp>();
+  for (const s of stamps) {
+    const base = s.fieldId.replace(/\[\d+\]\..*$/, "");
+    const cur = first.get(base);
+    if (!cur || readingOrder(s, cur) < 0) first.set(base, s);
+  }
+  return {
+    ...def,
+    pages: def.pages.map((p) => {
+      const groups: { lead: FormField; stamp?: PdfStamp; rest: FormField[] }[] = [];
+      for (const f of p.fields) {
+        const stamp = first.get(f.id);
+        const last = groups[groups.length - 1];
+        if (stamp || !last) groups.push({ lead: f, stamp, rest: [] });
+        else last.rest.push(f);
+      }
+      // Groups without a stamp at the very start stay put; the others are sorted among themselves.
+      const head = groups.length > 0 && !groups[0]!.stamp ? [groups.shift()!] : [];
+      groups.sort((a, b) => readingOrder(a.stamp!, b.stamp!));
+      return { ...p, fields: [...head, ...groups].flatMap((g) => [g.lead, ...g.rest]) };
+    }),
+  };
+}
+
+/**
+ * Cut a step in two: `fieldId` and everything after it on that step move to a new step right after it. Cutting at
+ * the first field of a step does nothing (no empty steps). The skip rules of the original step move to the new
+ * last half, where the step now ends; the visibility condition is kept on both.
+ */
+export function splitStepAt(def: FormDefinition, fieldId: string): { definition: FormDefinition; step: number } | null {
+  const pi = def.pages.findIndex((p) => p.fields.some((f) => f.id === fieldId));
+  if (pi < 0) return null;
+  const page = def.pages[pi]!;
+  const at = page.fields.findIndex((f) => f.id === fieldId);
+  if (at <= 0) return null;
+  const taken = new Set(def.pages.map((p) => p.id));
+  const { nextPage, ...bare } = page;
+  const head = { ...bare, fields: page.fields.slice(0, at) };
+  const tail = { ...bare, ...(nextPage ? { nextPage } : {}), id: uniqueId("step", taken), title: `שלב ${def.pages.length + 1}`, fields: page.fields.slice(at) };
+  const pages = [...def.pages.slice(0, pi), head, tail, ...def.pages.slice(pi + 1)];
+  return { definition: { ...def, pages }, step: pi + 1 };
 }

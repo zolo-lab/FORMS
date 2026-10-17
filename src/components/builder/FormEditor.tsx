@@ -12,6 +12,7 @@ import {
   addField, addPage, duplicateField, findLocation, moveField, movePage, publishIssues, removeField, removePage,
   renameFieldId, updateField, updatePage,
 } from "@/lib/forms/builder";
+import { orderByPdf } from "@/lib/forms/pdf-draw";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FieldType } from "@/lib/forms/field-types";
 import { parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
@@ -152,6 +153,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           צפייה בטופס (בחלון חדש)
         </a>
         <div className="ms-auto flex items-center gap-1">
+          {pdf && pdf.mapping.stamps.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => commit(orderByPdf(def, pdf.mapping.stamps))} title="מסדר את השדות בכל שלב לפי המקום שלהם במסמך">סידור לפי ה-PDF</Button>
+          )}
           <Button variant="ghost" size="icon" aria-label="ביטול" disabled={!past.length} onClick={undo}><Undo2 className="size-4" /></Button>
           <Button variant="ghost" size="icon" aria-label="שחזור" disabled={!future.length} onClick={redo}><Redo2 className="size-4" /></Button>
           <Button onClick={onPublish} disabled={published || save === "saving"}>{published ? "פורסם" : "פרסום"}</Button>
