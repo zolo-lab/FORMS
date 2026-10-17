@@ -29,9 +29,9 @@ export function NewFormFromPdf() {
       const body = new FormData();
       body.set("file", file);
       const up = await fetch("/api/admin/pdf", { method: "POST", body });
-      const uploaded = (await up.json()) as { id?: string; name?: string; error?: string };
+      const uploaded = (await up.json()) as { id?: string; name?: string; error?: string; acro?: unknown };
       if (!up.ok || !uploaded.id) { setError(uploaded.error ?? "ההעלאה נכשלה"); return; }
-      const made = await createFormFromPdfAction(title || uploaded.name?.replace(/\.pdf$/i, "") || "", uploaded.id);
+      const made = await createFormFromPdfAction(title || uploaded.name?.replace(/\.pdf$/i, "") || "", uploaded.id, uploaded.acro);
       if (!("id" in made) || !made.id) { setError("error" in made && made.error ? made.error : "יצירת הטופס נכשלה"); return; }
       router.push(`/admin/forms/${made.id}?tab=pdf`);
     } catch {

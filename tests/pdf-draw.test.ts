@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDrawnElement, cloneField, insertFieldByPosition, PDF_PALETTE, readingOrder, uniqueFieldId } from "@/lib/forms/pdf-draw";
+import { addDetectedFields, addDrawnElement, cloneField, insertFieldByPosition, PDF_PALETTE, readingOrder, uniqueFieldId } from "@/lib/forms/pdf-draw";
 import { allFields, parseFormDefinition, stripLegacyPdfOnly } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { importAcroForm, mergeAcroImport } from "@/lib/pdf/acroform";
@@ -180,5 +180,54 @@ describe("AcroForm import", () => {
     const existing = [{ id: "m", fieldId: "mid", kind: "text" as const, page: 0, x: 10, y: 130, width: 100, height: 20 }];
     const merged = mergeAcroImport(base, imp, existing);
     expect(allFields(merged.definition).map((f) => f.label)).toEqual(["high", "אמצע", "low"]);
+  });
+});
+
+describe("addDetectedFields", () => {
+  const box = (x: number, y: number, width = 120, height = 16) => ({ x, y, width, height });
+  const detected = [
+    { id: "d2", label: "מין", type: "radio" as const, page: 0, box: box(400, 500, 80, 10), options: [{ label: "זכר", box: box(480, 500, 10, 10) }, { label: "נקבה", box: box(420, 500, 10, 10) }] },
+    { id: "d0", label: "שם משפחה", type: "short_text" as const, page: 0, box: box(300, 758) },
+    { id: "d1", label: "תעודת זהות", type: "id_number" as const, page: 0, box: box(250, 716, 162, 18), comb: 9 },
+    { id: "d3", label: "חתימה", type: "signature" as const, page: 1, box: box(300, 100, 200, 40) },
+    { id: "d4", label: "האם עבדת בעבר", type: "yes_no" as const, page: 1, box: box(400, 300, 80, 10), options: [{ label: "כן", box: box(480, 300, 10, 10) }, { label: "לא", box: box(420, 300, 10, 10) }] },
+  ];
+  let n = 0;
+  const run = (opts = {}) => addDetectedFields(empty(), detected, [], () => `s${++n}`, opts);
+
+  it("adds ordinary fields in the PDF's reading order, with a dashed-suggestion stamp for each", () => {
+    const { definition, stamps } = run();
+    expect(allFields(definition).map((f) => f.label)).toEqual(["שם משפחה", "תעודת זהות", "מין", "האם עבדת בעבר", "חתימה"]);
+    expect(stamps.every((s) => s.guessed === true)).toBe(true);
+    expect(parseFormDefinition(definition).success).toBe(true);
+  });
+  it("builds the stamps by kind: comb, signature, one square per option", () => {
+    const { definition, stamps } = run();
+    const id = (label: string) => allFields(definition).find((f) => f.label === label)!.id;
+    expect(stamps.find((s) => s.fieldId === id("תעודת זהות"))).toMatchObject({ kind: "comb", comb: { cells: 9 } });
+    expect(stamps.find((s) => s.fieldId === id("חתימה"))).toMatchObject({ kind: "signature", page: 1 });
+    const radio = allFields(definition).find((f) => f.label === "מין")!;
+    expect(radio.options!.map((o) => o.label)).toEqual(["זכר", "נקבה"]);
+    expect(stamps.filter((s) => s.fieldId === radio.id).map((s) => [s.kind, s.whenValue])).toEqual([["check", "o1"], ["check", "o2"]]);
+    expect(stamps.filter((s) => s.fieldId === id("האם עבדת בעבר")).map((s) => s.whenValue).sort()).toEqual(["no", "yes"]);
+    expect(pdfMappingSchema.safeParse({ schemaVersion: 1, pages: [{ width: 595, height: 842 }, { width: 595, height: 842 }], stamps }).success).toBe(true);
+  });
+  it("splits an empty form into one step per PDF page when asked", () => {
+    const { definition } = run({ stepPerPage: true });
+    expect(definition.pages.map((p) => [p.title, p.fields.map((f) => f.label)])).toEqual([
+      ["שלב 1", ["שם משפחה", "תעודת זהות", "מין"]],
+      ["שלב 2", ["האם עבדת בעבר", "חתימה"]],
+    ]);
+    expect(new Set(definition.pages.map((p) => p.id)).size).toBe(2);
+  });
+  it("keeps a form that already has fields in one piece and slots the new ones by position", () => {
+    const base = def([{ id: "p1", fields: [{ id: "a", type: "short_text", label: "ראשון" }, { id: "b", type: "short_text", label: "אחרון" }] }]);
+    const stamps = [
+      { id: "x1", fieldId: "a", kind: "text" as const, page: 0, x: 300, y: 800, width: 100, height: 16 },
+      { id: "x2", fieldId: "b", kind: "text" as const, page: 0, x: 300, y: 100, width: 100, height: 16 },
+    ];
+    const { definition } = addDetectedFields(base, [detected[1]!], stamps, () => "n", { stepPerPage: true });
+    expect(definition.pages).toHaveLength(1);
+    expect(allFields(definition).map((f) => f.label)).toEqual(["ראשון", "שם משפחה", "אחרון"]);
   });
 });
