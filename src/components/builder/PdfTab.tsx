@@ -6,7 +6,7 @@ import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { usePdfDocument } from "@/components/pdf/usePdfDocument";
 import { extractPageData } from "@/components/pdf/extract-page-data";
-import { planGuess, unplacedSimpleFields } from "@/lib/pdf/guess";
+import { guessOne, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import type { Match } from "@/lib/pdf/match";
 import { nanoid } from "nanoid";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
@@ -42,6 +42,13 @@ export function PdfTab({
   const [guess, setGuess] = useState<{ total: number; stamps: PdfStamp[] } | null>(null);
   const [guessNote, setGuessNote] = useState<string | null>(null);
   const [guessBusy, setGuessBusy] = useState(false);
+  /** The page text and drawing, read once per document (a suggestion for a single field reuses it). */
+  const pageData = useRef<{ key: string; pages: Promise<GuessPage[]> } | null>(null);
+  const readPages = (): Promise<GuessPage[]> | null => {
+    if (!pdf || !doc || docKey !== pdf.file.url) return null;
+    if (pageData.current?.key !== pdf.file.url) pageData.current = { key: pdf.file.url, pages: extractPageData(doc, pdf.file.pages) };
+    return pageData.current.pages;
+  };
   /** Set after an upload: ask about automatic placement as soon as the new document is open. */
   const askAfterUpload = useRef(false);
   const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
@@ -84,7 +91,7 @@ export function PdfTab({
     setGuessBusy(true);
     setGuessNote(null);
     try {
-      const pages = await extractPageData(doc, pdf.file.pages);
+      const pages = (await readPages()) ?? [];
       if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
       const targets = unplacedSimpleFields(defRef.current, pdf.mapping.stamps);
       if (targets.length === 0) { setGuessNote("כל שדות הטופס כבר שובצו."); return; }
@@ -180,6 +187,14 @@ export function PdfTab({
           pages={pdf.file.pages}
           mapping={pdf.mapping}
           onMappingChange={(mapping) => onChange({ ...pdf, mapping })}
+          onSuggest={async (fieldId) => {
+            try {
+              const pages = await readPages();
+              return pages ? guessOne(defRef.current, fieldId, pdf.mapping.stamps, pages, () => nanoid(8)) : null;
+            } catch {
+              return null;
+            }
+          }}
           onFieldPatch={(fieldId, patch) => {
             const d = defRef.current;
             // A table cell ("children[0].birth") edits its column.

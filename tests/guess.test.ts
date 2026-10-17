@@ -3,7 +3,7 @@ import fixture from "./fixtures/guess-page.json";
 import { extractShapes, type OpCodes } from "@/lib/pdf/geometry";
 import { groupLabels, textItems } from "@/lib/pdf/labels";
 import { aliasesFor, matchLocal, matchPrompt, normalizeText, sanitizeMatches, scoreFieldLabel, similarity } from "@/lib/pdf/match";
-import { guessPlacements, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
+import { guessOne, guessPlacements, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 
@@ -195,5 +195,18 @@ describe("planGuess", () => {
     expect(r.matches.find((m) => m.labelId === dateLabel.id)!.fieldId).toBe("notes");
     expect(r.matches.some((m) => m.fieldId === "when")).toBe(false);
     expect(r.matches.find((m) => m.labelId === sigLabel.id)!.fieldId).toBe("sig");
+  });
+});
+
+describe("guessOne", () => {
+  it("suggests a spot for a single field from its printed label", () => {
+    const s = guessOne(def, "lname", [], [page], () => "one");
+    expect(s).toMatchObject({ id: "one", fieldId: "lname", kind: "text", x: 300, guessed: true });
+  });
+  it("returns nothing for a field without a label, an unknown field, or a spot that is already used", () => {
+    expect(guessOne(def, "notes", [], [page], () => "x")).toBeNull();
+    expect(guessOne(def, "nope", [], [page], () => "x")).toBeNull();
+    const used = [{ id: "u", fieldId: "other", kind: "text" as const, page: 0, x: 300, y: 755, width: 170, height: 16 }];
+    expect(guessOne(def, "lname", used, [page], () => "x")).toBeNull();
   });
 });

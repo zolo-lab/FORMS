@@ -144,3 +144,19 @@ export function planGuess(
   const matches = [...fromClaude, ...local];
   return { total: targets.length, stamps: guessPlacements(def, pages, matches, newId), matches };
 }
+
+/**
+ * A suggestion for one field the admin asked to place: the local matcher on that field alone, then the same
+ * placement rules. Returns null when no printed label fits or the spot is already taken by a placed box.
+ */
+export function guessOne(def: FormDefinition, fieldId: string, existing: PdfStamp[], pages: GuessPage[], newId: () => string): PdfStamp | null {
+  const field = allFields(def).find((f) => f.id === fieldId);
+  if (!field) return null;
+  const labels = pages.flatMap((p) => p.labels).map((l) => ({ id: l.id, text: l.str }));
+  const matches = matchLocal([field], labels);
+  for (const stamp of guessPlacements(def, pages, matches, newId)) {
+    const clash = existing.some((e) => e.page === stamp.page && overlapArea(e, stamp) > 0.5);
+    if (!clash) return stamp;
+  }
+  return null;
+}

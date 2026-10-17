@@ -52,9 +52,11 @@ export interface PdfPlacementProps {
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
   /** Copy/paste of an element: make a copy of its field and return the new field id (null = keep the same field). */
   onCloneField?: (fieldId: string) => string | null;
+  /** Pressing "place" on a waiting field: a suggested stamp from the PDF's own text (null = no idea, the field goes to the page centre). */
+  onSuggest?: (fieldId: string) => Promise<PdfStamp | null>;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -141,6 +143,26 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
 
   function place(item: PlaceableItem, page: number, at?: { x: number; y: number }) {
     const existing = stampByKey.get(item.key);
+    // A waiting field with a single thing to place: try the PDF's own text first, the page centre otherwise.
+    if (!at && !existing && onSuggest && !item.part && !item.whenValue && !/\[\d+\]\./.test(item.fieldId)) {
+      void onSuggest(item.fieldId).then((guess) => {
+        if (guess && !latest.current.stamps.some((s) => stampKey(s) === item.key)) {
+          pushHistory();
+          onMappingChange({ ...latest.current, stamps: [...latest.current.stamps, guess] });
+          setSelected(guess.id);
+          setExtra([]);
+          setActivePage(guess.page);
+          reveal(guess.id);
+        } else {
+          placeAt(item, page, existing);
+        }
+      });
+      return;
+    }
+    placeAt(item, page, existing, at);
+  }
+
+  function placeAt(item: PlaceableItem, page: number, existing: PdfStamp | undefined, at?: { x: number; y: number }) {
     const size = DEFAULT_SIZE[item.kind];
     const dims = item.multiline ? { width: 200, height: 50 } : size;
     const pg = pages[page]!;
