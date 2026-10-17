@@ -5,25 +5,33 @@ import type { ExportRequest } from "@/lib/export/rows";
 import type { RequestFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL } from "@/lib/workflow/labels";
 import type { Answers } from "@/lib/forms/conditions";
-import { conditions } from "./dashboard-store";
+import { conditions, scopeCondition, type Scope } from "./dashboard-store";
 import { getFile } from "./storage";
 
 const { requests, organizations, packageTemplates, packageDocuments, formTemplateVersions, formTemplates, submissions } = schema;
 
 export const EXPORT_LIMIT = 5000;
 
-async function requestIds(sel: { ids?: string[]; filters?: RequestFilters }): Promise<string[]> {
-  if (sel.ids) return sel.ids.slice(0, EXPORT_LIMIT);
+/** `scope` = what the viewer may see (null = everything, for admins); picked ids outside it are dropped. */
+export type ExportSelection = { ids?: string[]; filters?: RequestFilters; scope?: Scope };
+
+async function requestIds(sel: ExportSelection): Promise<string[]> {
+  if (sel.ids) {
+    const ids = sel.ids.slice(0, EXPORT_LIMIT);
+    if (!sel.scope || ids.length === 0) return ids;
+    const rows = await db.select({ id: requests.id }).from(requests).where(and(inArray(requests.id, ids), scopeCondition(sel.scope)));
+    return rows.map((r) => r.id);
+  }
   const rows = await db
     .select({ id: requests.id })
     .from(requests)
-    .where(and(...conditions(sel.filters ?? { page: 1 }, new Date())))
+    .where(and(...conditions(sel.filters ?? { page: 1 }, new Date(), sel.scope ?? null)))
     .orderBy(desc(requests.createdAt))
     .limit(EXPORT_LIMIT);
   return rows.map((r) => r.id);
 }
 
-export async function loadExport(sel: { ids?: string[]; filters?: RequestFilters }): Promise<ExportRequest[]> {
+export async function loadExport(sel: ExportSelection): Promise<ExportRequest[]> {
   const ids = await requestIds(sel);
   if (ids.length === 0) return [];
   const [reqs, docs, subs] = await Promise.all([
@@ -64,7 +72,7 @@ export async function loadExport(sel: { ids?: string[]; filters?: RequestFilters
 }
 
 /** Final signed PDFs of the selected requests: names first (cheap), file bytes fetched one at a time. */
-export async function listFinalPdfs(sel: { ids?: string[]; filters?: RequestFilters }): Promise<{ name: string; fileId: string }[]> {
+export async function listFinalPdfs(sel: ExportSelection): Promise<{ name: string; fileId: string }[]> {
   const ids = await requestIds(sel);
   if (ids.length === 0) return [];
   const rows = await db
@@ -100,7 +108,7 @@ export async function* finalPdfEntries(list: { name: string; fileId: string }[])
   }
 }
 
-export async function loadFinalPdfs(sel: { ids?: string[]; filters?: RequestFilters }): Promise<{ name: string; data: Uint8Array }[]> {
+export async function loadFinalPdfs(sel: ExportSelection): Promise<{ name: string; data: Uint8Array }[]> {
   const out: { name: string; data: Uint8Array }[] = [];
   for await (const e of finalPdfEntries(await listFinalPdfs(sel))) out.push(e);
   return out;

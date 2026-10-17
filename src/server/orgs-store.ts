@@ -1,9 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import type { OrgInput } from "@/lib/orgs/input";
 import { db, schema } from "@/db";
 import type { ReminderPolicy } from "@/lib/workflow/types";
 
-const { organizations } = schema;
+const { organizations, projects } = schema;
 
 export async function listOrgs() {
   return db.select().from(organizations).orderBy(asc(organizations.name));
@@ -45,4 +45,42 @@ export async function updateOrgBasics(id: string, input: OrgInput): Promise<bool
 
 export async function setOrgActive(id: string, active: boolean) {
   await db.update(organizations).set({ active }).where(eq(organizations.id, id));
+}
+
+// ───────────────────────── Projects ─────────────────────────
+
+export type ProjectRow = typeof projects.$inferSelect;
+
+/**
+ * 6.17 kept one project name on the organization row; projects now have their own table.
+ * Moves any such name into `projects` once (idempotent) and clears the old column.
+ */
+async function moveLegacyProjects() {
+  const legacy = await db.select({ id: organizations.id, projectName: organizations.projectName }).from(organizations).where(isNotNull(organizations.projectName));
+  for (const o of legacy) {
+    if (o.projectName?.trim()) await db.insert(projects).values({ organizationId: o.id, name: o.projectName.trim() }).onConflictDoNothing();
+    await db.update(organizations).set({ projectName: null }).where(eq(organizations.id, o.id));
+  }
+}
+
+export async function listProjects(): Promise<ProjectRow[]> {
+  await moveLegacyProjects();
+  return db.select().from(projects).orderBy(asc(projects.name));
+}
+
+/** Returns false when the organization already has a project with this name. */
+export async function createProject(organizationId: string, name: string): Promise<boolean> {
+  const [dup] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.organizationId, organizationId), eq(projects.name, name)));
+  if (dup) return false;
+  await db.insert(projects).values({ organizationId, name });
+  return true;
+}
+
+export async function updateProject(id: string, patch: { name: string; active: boolean }): Promise<boolean> {
+  const [row] = await db.select().from(projects).where(eq(projects.id, id));
+  if (!row) return false;
+  const [dup] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.organizationId, row.organizationId), eq(projects.name, patch.name)));
+  if (dup && dup.id !== id) return false;
+  await db.update(projects).set(patch).where(eq(projects.id, id));
+  return true;
 }

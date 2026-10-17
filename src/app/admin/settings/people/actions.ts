@@ -1,4 +1,5 @@
 "use server";
+import { requireAdmin } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isValidEmail, isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/validators/israeli";
@@ -21,12 +22,14 @@ function contactInput(fd: FormData) {
 }
 
 export async function createContactAction(fd: FormData) {
+  await requireAdmin();
   await createContact(contactInput(fd));
   revalidatePath(PATH);
   back("?saved=1");
 }
 
 export async function updateContactAction(fd: FormData) {
+  await requireAdmin();
   const id = str(fd, "id");
   if (!UUID.test(id)) back();
   const intent = str(fd, "intent");
@@ -40,6 +43,7 @@ export async function updateContactAction(fd: FormData) {
 }
 
 export async function createGroupAction(fd: FormData) {
+  await requireAdmin();
   const name = str(fd, "name");
   if (!name) back("?error=group");
   await createGroup(name);
@@ -48,6 +52,7 @@ export async function createGroupAction(fd: FormData) {
 }
 
 export async function updateGroupAction(fd: FormData) {
+  await requireAdmin();
   const id = str(fd, "id");
   if (!UUID.test(id)) back();
   const intent = str(fd, "intent");

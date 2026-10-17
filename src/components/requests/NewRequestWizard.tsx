@@ -19,6 +19,8 @@ import { ShareLinks } from "./ShareLinks";
 interface Org {
   id: string;
   name: string;
+  /** Active projects of the organization (may be empty). */
+  projects?: { id: string; name: string }[];
 }
 
 const STEPS = ["ערכה וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
@@ -27,6 +29,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
   const [step, setStep] = useState(0);
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
+  const [projectId, setProjectId] = useState("");
   const [subject, setSubject] = useState({ name: "", idNumber: "", email: "", phone: "" });
   const [answers, setAnswers] = useState<Answers>({});
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -36,11 +39,12 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
 
   const pkg = packages.find((p) => p.id === packageId);
   const availableOrgs = useMemo(() => orgs, [orgs]);
+  const orgProjects = orgs.find((o) => o.id === organizationId)?.projects ?? [];
   const hasRequesterFields = (pkg?.requesterDefinition.pages.length ?? 0) > 0;
 
   function submit(send: boolean) {
     start(async () => {
-      const res: CreateResult = await createRequestAction({ packageId, organizationId, subject, requesterAnswers: answers, send, ...(chain && chain.pkgId === packageId ? { workflow: { ...pkg!.workflow, steps: chain.steps } } : {}) });
+      const res: CreateResult = await createRequestAction({ packageId, organizationId, ...(projectId ? { projectId } : {}), subject, requesterAnswers: answers, send, ...(chain && chain.pkgId === packageId ? { workflow: { ...pkg!.workflow, steps: chain.steps } } : {}) });
       if (res.ok) {
         setErrors({});
         setDone({ requestId: res.requestId, sent: res.sent, links: res.links });
@@ -49,7 +53,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
       setErrors(res.errors);
       // Send the user back to the step that holds the first error.
       const keys = Object.keys(res.errors);
-      if (keys.some((k) => k === "packageId" || k === "organizationId")) setStep(0);
+      if (keys.some((k) => k === "packageId" || k === "organizationId" || k === "projectId")) setStep(0);
       else if (keys.some((k) => k.startsWith("subject."))) setStep(1);
       else setStep(2);
     });
@@ -101,7 +105,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
           </div>
           <div className="space-y-1">
             <Label htmlFor="org">ארגון</Label>
-            <Select id="org" value={organizationId} onChange={(e) => setOrganizationId(e.target.value)}>
+            <Select id="org" value={organizationId} onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}>
               {availableOrgs.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
@@ -110,6 +114,20 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
             </Select>
             {err("organizationId") && <p role="alert" className="text-sm text-destructive">{err("organizationId")}</p>}
           </div>
+          {(orgProjects.length > 0) && (
+            <div className="space-y-1">
+              <Label htmlFor="project">פרויקט</Label>
+              <Select id="project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                <option value="">ללא פרויקט</option>
+                {orgProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+              {err("projectId") && <p role="alert" className="text-sm text-destructive">{err("projectId")}</p>}
+            </div>
+          )}
           <Button onClick={() => setStep(1)} disabled={!packageId || !organizationId}>
             הבא
           </Button>
@@ -182,7 +200,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
             <dt className="text-muted-foreground">ערכה</dt>
             <dd>{pkg.name}</dd>
             <dt className="text-muted-foreground">ארגון</dt>
-            <dd>{orgs.find((o) => o.id === organizationId)?.name}</dd>
+            <dd>{[orgs.find((o) => o.id === organizationId)?.name, orgProjects.find((p) => p.id === projectId)?.name].filter(Boolean).join(" – ")}</dd>
             <dt className="text-muted-foreground">עובד</dt>
             <dd>{subject.name}</dd>
             <dt className="text-muted-foreground">מייל / טלפון</dt>

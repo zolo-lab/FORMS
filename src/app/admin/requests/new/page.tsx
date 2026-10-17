@@ -3,14 +3,14 @@ import { lookupsFor } from "@/server/people-store";
 import { listOrganizations } from "@/server/requests-store";
 import { listContacts } from "@/server/people-store";
 import { can } from "@/lib/auth/permissions";
-import { orgLabel } from "@/lib/orgs/input";
 import { viewer, viewerOpenablePackages } from "@/server/users-store";
+import { listProjects } from "@/server/orgs-store";
 import { NewRequestWizard } from "@/components/requests/NewRequestWizard";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewRequestPage() {
-  const [all, orgs, allowed, contacts, v] = await Promise.all([listPackagesForWizard(), listOrganizations({ activeOnly: true }), viewerOpenablePackages(), listContacts(), viewer()]);
+  const [all, orgs, allowed, contacts, v, projects] = await Promise.all([listPackagesForWizard(), listOrganizations({ activeOnly: true }), viewerOpenablePackages(), listContacts(), viewer(), listProjects()]);
   const packages = allowed ? all.filter((p) => allowed.includes(p.id)) : all;
   const usable = v.orgIds ? orgs.filter((o) => v.orgIds!.includes(o.id)) : orgs;
   const lookups = await lookupsFor(packages.map((p) => p.requesterDefinition));
@@ -20,7 +20,7 @@ export default async function NewRequestPage() {
       {packages.length === 0 && <p className="text-sm text-muted-foreground">אין לך הרשאה לפתוח בקשות. פנו למנהל המערכת.</p>}
       <NewRequestWizard
         packages={packages}
-        orgs={usable.map((o) => ({ id: o.id, name: orgLabel(o) }))}
+        orgs={usable.map((o) => ({ id: o.id, name: o.name, projects: projects.filter((p) => p.organizationId === o.id && p.active).map((p) => ({ id: p.id, name: p.name })) }))}
         lookups={lookups}
         contacts={contacts.map((c) => ({ id: c.id, name: c.name }))}
         chainEditable={packages.filter((p) => can(v.user, v.perms, p.id, "edit_chain")).map((p) => p.id)}

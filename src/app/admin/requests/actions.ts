@@ -11,7 +11,9 @@ import { getWizardPackage } from "@/server/packages-store";
 import { can, orgAllowed } from "@/lib/auth/permissions";
 import { checkChain } from "@/lib/workflow/chain";
 import type { Workflow } from "@/lib/workflow/types";
-import { viewer } from "@/server/users-store";
+import { canSeeRequest, viewer } from "@/server/users-store";
+import { mayGrant, requireGrant, requireRequest } from "@/server/guards";
+import { listProjects } from "@/server/orgs-store";
 import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
 export interface ShareLink {
@@ -31,6 +33,8 @@ export type CreateResult =
 export interface CreateInput {
   packageId: string;
   organizationId: string;
+  /** Optional project of that organization. */
+  projectId?: string;
   subject: { name: string; idNumber?: string; email?: string; phone?: string };
   requesterAnswers: Answers;
   /** An edited approval chain for this request only (needs the "edit chain" permission). */
@@ -59,6 +63,12 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהערכה הזו";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
   else if (!orgAllowed(user, orgIds, org.id)) errors["organizationId"] = "אין לך הרשאה לעמותה / לעסק הזה";
+  let projectId: string | undefined;
+  if (input.projectId && org) {
+    const project = UUID.test(input.projectId) ? (await listProjects()).find((p) => p.id === input.projectId) : undefined;
+    if (!project || project.organizationId !== org.id || !project.active) errors["projectId"] = "הפרויקט לא נמצא בעמותה הזו";
+    else projectId = project.id;
+  }
 
   // Server-side validation; only the cleaned answers are stored.
   let cleaned: Answers = {};
@@ -82,6 +92,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   const requestId = await createRequest({
     packageTemplateId: pkg.id,
     organizationId: org.id,
+    projectId,
     subject: { name, idNumber: input.subject.idNumber?.trim() || undefined, email, phone },
     requesterAnswers: cleaned,
     createdBy: user?.id,
@@ -99,6 +110,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
  * otherwise issues a fresh link per step (which revokes the previous one, including an emailed one).
  */
 export async function linksFor(requestId: string, known?: { stepId: string; token: string }[]): Promise<ShareLink[]> {
+  if (!(await canSeeRequest(requestId))) return [];
   const data = await getRequest(requestId);
   if (!data) return [];
   const [org] = (await listOrganizations()).filter((o) => o.id === data.request.organizationId);
@@ -127,6 +139,7 @@ export async function refreshLinksAction(requestId: string): Promise<ShareLink[]
 
 /** Generates (or re-generates when missing) the final PDFs of a completed request. */
 export async function finalizeRequestAction(requestId: string): Promise<{ ok: boolean; message: string }> {
+  if (!(await canSeeRequest(requestId))) return { ok: false, message: "אין הרשאה" };
   try {
     const { finalizeRequest } = await import("@/server/finalize");
     const r = await finalizeRequest(requestId);
@@ -140,6 +153,7 @@ export async function finalizeRequestAction(requestId: string): Promise<{ ok: bo
 type ActionResult = { ok: boolean; message: string };
 
 async function run(requestId: string, ok: string, fn: () => Promise<unknown>): Promise<ActionResult> {
+  if (!(await canSeeRequest(requestId))) return { ok: false, message: "אין הרשאה לבקשה הזו" };
   try {
     await fn();
     revalidatePath(`/admin/requests/${requestId}`);
@@ -152,6 +166,7 @@ async function run(requestId: string, ok: string, fn: () => Promise<unknown>): P
 
 export async function cancelRequestAction(requestId: string, reason: string): Promise<ActionResult> {
   if (!reason.trim()) return { ok: false, message: "נדרשת סיבה" };
+  if (!(await mayGrant("cancel"))) return { ok: false, message: "אין לך הרשאה לבטל בקשות" };
   return run(requestId, "הבקשה בוטלה", () => cancelRequest(requestId, reason.trim()));
 }
 
@@ -165,16 +180,23 @@ export async function changeAssigneeAction(requestId: string, stepId: string, as
   if (email && !EMAIL.test(email)) return { ok: false, message: "כתובת מייל לא תקינה" };
   if (phone && !normalizeIsraeliPhone(phone)) return { ok: false, message: "מספר טלפון לא תקין" };
   if (!assignee.name?.trim() && !email && !phone) return { ok: false, message: "נדרש שם, מייל או טלפון" };
+  // The step must belong to this request (the visibility check in `run` is per request).
+  if (!(await getRequest(requestId))?.steps.some((s) => s.id === stepId)) return { ok: false, message: "השלב לא נמצא בבקשה" };
   return run(requestId, "הנמען הוחלף. צרו קישור חדש לשיתוף.", () => changeAssignee(stepId, { name: assignee.name?.trim() || undefined, email, phone }));
 }
 
 /** Cancel several requests at once from the dashboard. Requests that are already finished are skipped. */
 export async function bulkCancelAction(formData: FormData) {
+  await requireGrant("cancel");
   const reason = String(formData.get("reason") ?? "").trim() || "בוטל בפעולה מרוכזת";
   const ids = formData.getAll("id").map(String).filter((i) => /^[0-9a-f-]{36}$/i.test(i));
   let cancelled = 0;
   let skipped = 0;
   for (const id of ids) {
+    if (!(await canSeeRequest(id))) {
+      skipped++;
+      continue;
+    }
     try {
       await cancelRequest(id, reason);
       cancelled++;
@@ -190,7 +212,7 @@ export async function bulkCancelAction(formData: FormData) {
 /** A request saved as draft: send it now. */
 export async function sendDraftAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/admin/requests");
+  await requireRequest(id);
   try {
     await sendRequest(id);
   } catch {
@@ -204,7 +226,7 @@ export async function sendDraftAction(formData: FormData) {
 /** Discard a draft that was never sent. */
 export async function discardDraftAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/admin/requests");
+  await requireRequest(id);
   try {
     await cancelRequest(id, "טיוטה נמחקה");
   } catch {

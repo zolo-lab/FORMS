@@ -15,12 +15,49 @@ export const normalizeRole = (raw: string | null | undefined): UserRole => (raw 
 /** `null` = every organization; otherwise the ids a manager may work with (never empty). */
 export type OrgAccess = string[] | null;
 
+/** Extra permissions an admin can tick for a manager (like iForms). Admins have all of them. */
+export interface UserGrants {
+  /** Sees every request (within their organizations), not only their own. */
+  viewAll: boolean;
+  /** May open requests from every package. */
+  openAll: boolean;
+  /** May cancel requests and delete drafts. */
+  cancel: boolean;
+  /** May build forms and packages. */
+  manageForms: boolean;
+  /** May export to Excel / CSV and download the signed PDFs. */
+  export: boolean;
+}
+
+export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "export"] as const satisfies readonly (keyof UserGrants)[];
+
+export const GRANT_LABELS: Record<keyof UserGrants, string> = {
+  viewAll: "רואה את כל הבקשות (לא רק את שלו)",
+  openAll: "רשאי לפתוח בקשות מכל הערכות",
+  cancel: "יכול לבטל בקשות ולמחוק טיוטות",
+  manageForms: "יכול לבנות טפסים וערכות",
+  export: "רשאי לייצא דוחות (Excel / CSV / PDF חתומים)",
+};
+
+/** Stored JSON (possibly partial or junk) to a full set of booleans. */
+export function normalizeGrants(raw: unknown): UserGrants {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return { viewAll: o.viewAll === true, openAll: o.openAll === true, cancel: o.cancel === true, manageForms: o.manageForms === true, export: o.export === true };
+}
+
 export interface SessionUser {
   id: string;
   email: string;
   name: string;
   role: UserRole;
   active: boolean;
+  grants?: Partial<UserGrants>;
+}
+
+/** Admins (and open mode) have every grant; an inactive user none. */
+export function hasGrant(u: SessionUser | null | undefined, grant: keyof UserGrants): boolean {
+  if (isAdmin(u)) return true;
+  return u!.active && u!.grants?.[grant] === true;
 }
 
 export interface PackagePermission {
@@ -48,14 +85,14 @@ export function can(u: SessionUser | null | undefined, perms: PackagePermission[
   if (isAdmin(u)) return true;
   if (!u!.active) return false;
   const p = perms.find((x) => x.packageTemplateId === packageTemplateId);
-  if (!p) return false;
+  const openAll = u!.grants?.openAll === true;
   switch (ability) {
     case "open":
-      return p.canOpen;
+      return openAll || !!p?.canOpen;
     case "view_all":
-      return p.canViewAll;
+      return u!.grants?.viewAll === true || !!p?.canViewAll;
     case "edit_chain":
-      return p.canOpen && p.canEditChain;
+      return (openAll || !!p?.canOpen) && !!p?.canEditChain;
   }
 }
 
@@ -63,6 +100,7 @@ export function can(u: SessionUser | null | undefined, perms: PackagePermission[
 export function openablePackageIds(u: SessionUser | null | undefined, perms: PackagePermission[]): string[] | null {
   if (isAdmin(u)) return null;
   if (!u!.active) return [];
+  if (u!.grants?.openAll) return null;
   return perms.filter((p) => p.canOpen).map((p) => p.packageTemplateId);
 }
 
@@ -82,6 +120,8 @@ export interface VisibilityScope {
   userId: string;
   email: string;
   viewAllPackageIds: string[];
+  /** The "sees every request" grant: all requests (still within `orgIds`). */
+  allRequests: boolean;
   /** Limits the requests they opened and the packages they may view fully; a step addressed to them is always visible. `null` = no limit. */
   orgIds: OrgAccess;
 }
@@ -93,6 +133,7 @@ export function visibilityScope(u: SessionUser | null | undefined, perms: Packag
     userId: u!.id,
     email: u!.email.toLowerCase(),
     viewAllPackageIds: u!.active ? perms.filter((p) => p.canViewAll).map((p) => p.packageTemplateId) : [],
+    allRequests: u!.active && u!.grants?.viewAll === true,
     orgIds: allowedOrgIds(u, orgIds),
   };
 }

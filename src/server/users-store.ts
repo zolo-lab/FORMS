@@ -4,13 +4,13 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { SESSION_COOKIE, sessionEmail } from "@/lib/auth/session";
-import { allowedOrgIds, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserRole } from "@/lib/auth/permissions";
+import { allowedOrgIds, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 
 const { users, packagePermissions, userOrganizations } = schema;
 
 export type UserRow = typeof users.$inferSelect;
 
-const toSession = (u: UserRow): SessionUser => ({ id: u.id, email: u.email, name: u.name, role: normalizeRole(u.role), active: u.active });
+const toSession = (u: UserRow): SessionUser => ({ id: u.id, email: u.email, name: u.name, role: normalizeRole(u.role), active: u.active, grants: normalizeGrants(u.grants) });
 
 /** Create the user on first sign-in (first ever = admin), or refresh the name. Returns the row. */
 export async function upsertUserFromLogin(email: string, name: string): Promise<UserRow> {
@@ -78,6 +78,10 @@ export async function viewerScope() {
 
 export async function listUsers(): Promise<UserRow[]> {
   return db.select().from(users).orderBy(asc(users.name));
+}
+
+export async function setUserGrants(id: string, grants: UserGrants) {
+  await db.update(users).set({ grants, updatedAt: new Date() }).where(eq(users.id, id));
 }
 
 export async function updateUser(id: string, patch: { role?: UserRole; active?: boolean }) {

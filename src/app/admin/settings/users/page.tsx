@@ -4,8 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABELS, isAdmin, normalizeRole, type UserRole } from "@/lib/auth/permissions";
-import { orgLabel } from "@/lib/orgs/input";
+import { GRANT_KEYS, GRANT_LABELS, ROLE_LABELS, isAdmin, normalizeGrants, normalizeRole, type UserRole } from "@/lib/auth/permissions";
 import { listOrganizations } from "@/server/requests-store";
 import { listPackages } from "@/server/dashboard-store";
 import { currentUser, listAllOrgAccess, listAllPermissions, listUsers } from "@/server/users-store";
@@ -58,6 +57,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         const mine = perms.filter((p) => p.userId === user.id);
         const myOrgs = orgAccess.filter((a) => a.userId === user.id).map((a) => a.organizationId);
         const limited = myOrgs.length > 0;
+        const grants = normalizeGrants(user.grants);
         return (
           <Card key={user.id} className="space-y-4 p-4" id={`u-${user.id}`}>
             <form action={updateUserAction} className="flex flex-wrap items-end gap-3">
@@ -102,6 +102,16 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             {user.role !== "admin" && (
               <form action={savePermissionsAction} className="space-y-2">
                 <input type="hidden" name="userId" value={user.id} />
+                <fieldset className="space-y-1.5 pb-2">
+                  <legend className="text-sm font-medium">הרשאות נוספות</legend>
+                  <div className="grid gap-1.5 text-sm sm:grid-cols-2">
+                    {GRANT_KEYS.map((k) => (
+                      <label key={k} className="flex items-center gap-2">
+                        <Checkbox name={`grant.${k}`} defaultChecked={grants[k]} /> {GRANT_LABELS[k]}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <p className="text-sm font-medium">הרשאות לפי ערכה</p>
                 {packages.length === 0 ? (
                   <p className="text-sm text-muted-foreground">אין ערכות עדיין.</p>
@@ -146,8 +156,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   <div className="grid gap-1.5 text-sm sm:grid-cols-2">
                     {orgs.map((o) => (
                       <label key={o.id} className="flex items-center gap-2">
-                        <Checkbox name="orgs" value={o.id} defaultChecked={myOrgs.includes(o.id)} aria-label={`עמותה / עסק – ${orgLabel(o)}`} />
-                        {orgLabel(o)}{!o.active && <span className="text-muted-foreground"> (לא פעיל)</span>}
+                        <Checkbox name="orgs" value={o.id} defaultChecked={myOrgs.includes(o.id)} aria-label={`עמותה / עסק – ${o.name}`} />
+                        {o.name}{!o.active && <span className="text-muted-foreground"> (לא פעיל)</span>}
                       </label>
                     ))}
                   </div>
