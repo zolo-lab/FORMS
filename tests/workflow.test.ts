@@ -225,6 +225,8 @@ describe("requester as assignee (6.15a)", () => {
   });
   it("without a known opener the step is created without a person (admin can delegate)", () => {
     const steps = planSteps(w, {}, id, {});
-    expect(steps.find((s) => s.order === 2)).toMatchObject({ assigneeName: undefined, assigneeEmail: undefined });
+    const s2 = steps.find((s) => s.order === 2)!;
+    expect(s2.assigneeName).toBeUndefined();
+    expect(s2.assigneeEmail).toBeUndefined();
   });
 });
