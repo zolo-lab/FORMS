@@ -11,7 +11,7 @@ import { Badge, Card } from "@/components/ui/card";
 import { eventLabel } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
-import { requestAnswerItems } from "@/server/dashboard-store";
+import { requestAnswerItems, uploadedFiles } from "@/server/dashboard-store";
 import { getRequest } from "@/server/requests-store";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   if (!(await canSeeRequest(id))) notFound();
   const { request, steps, events, documents } = data;
   const answers = await requestAnswerItems(id);
+  const files = await uploadedFiles(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
   const roleOf = (r: string) => ROLE_LABELS[r as StepRole] ?? r;
@@ -161,6 +162,21 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
           </Card>
         )}
       </section>
+
+      {files.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">קבצים שהועלו</h2>
+          <Card className="p-3">
+            <ul className="space-y-1 text-sm">
+              {files.map((f, i) => (
+                <li key={i}>
+                  <a href={f.url} target="_blank" rel="noreferrer" className="text-primary underline">{f.name}</a>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="font-semibold">היסטוריה</h2>

@@ -29,7 +29,9 @@ import {
 } from "@/lib/workflow/engine";
 import { renderDefault } from "@/lib/notifications/templates";
 import { peopleForWorkflow } from "./people-store";
-import { normalizeIsraeliPhone } from "@/lib/whatsapp";
+import { deliveryTargets } from "@/lib/notifications/channels";
+import { statusNotices } from "@/lib/notifications/status";
+import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 
 const { requests, signingSteps, stepTokens, submissions, events, notifications, packageTemplates, packageTemplateItems, packageDocuments, formTemplates, formTemplateVersions, organizations } = schema;
@@ -226,27 +228,31 @@ async function persist(
     const { token, hash } = createToken();
     await db.insert(stepTokens).values({ stepId: id, tokenHash: hash, expiresAt: req.expiresAt });
     tokensToLink.push({ stepId: id, token });
-    const to = s.assigneeEmail;
-    const smsTo = !to && s.assigneePhone ? normalizeIsraeliPhone(s.assigneePhone) : null;
-    if (to || smsTo) {
+    const targets = deliveryTargets({ email: s.assigneeEmail, phone: s.assigneePhone });
+    if (targets.length) {
       const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
-      const msg = inviteMessage({
+      const vars = {
         name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
         org: org?.name ?? "",
         link: `${appUrl()}/s/${token}`,
         dueDate: req.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(req.expiresAt) : "",
-      });
-      await db.insert(notifications).values({
-        organizationId: req.organizationId,
-        requestId,
-        stepId: id,
-        // Email when we have one; otherwise an SMS to the phone number.
-        channel: to ? "email" : "sms",
-        to: (to ?? smsTo)!,
-        templateKey: "step_invite",
-        subject: to ? msg.subject : null,
-        body: msg.body,
-      });
+      };
+      // A step that was sent back for correction gets the "returned" text with the reason, not the plain invitation.
+      const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason;
+      const msg = returnReason ? renderDefault("returned", { ...vars, reason: String(returnReason) }) : inviteMessage(vars);
+      // Both channels when both are known: the e-mail and an SMS with the same link.
+      await db.insert(notifications).values(
+        targets.map((t) => ({
+          organizationId: req.organizationId,
+          requestId,
+          stepId: id,
+          channel: t.channel,
+          to: t.to,
+          templateKey: returnReason ? "returned" : "step_invite",
+          subject: t.channel === "email" ? msg.subject : null,
+          body: msg.body,
+        })),
+      );
       await kickDelivery();
     }
   }
@@ -395,6 +401,11 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
       });
   }
   const out = await persist(row.requestId, before, result, actor, patch);
+  try {
+    await notifyStatus(row.requestId, result.events, result.steps);
+  } catch (e) {
+    console.error("[status notices] failed", row.requestId, e);
+  }
   if (out.status === "completed") {
     // Final PDFs are generated lazily too (admin page), so a failure here must not break the signer's submit.
     try {
@@ -494,4 +505,33 @@ export async function changeAssignee(stepId: string, assignee: { name?: string; 
     .where(eq(signingSteps.id, stepId));
   await db.update(stepTokens).set({ revokedAt: new Date() }).where(eq(stepTokens.stepId, stepId));
   await db.insert(events).values({ requestId: step.requestId, stepId, actorType: actor.type, actorId: actor.id, type: "step_assignee_changed", payload: { role: step.role } });
+}
+
+/** Tell the person and the opener about the new state (completed, declined, progress). Best effort. */
+async function notifyStatus(requestId: string, evs: EngineEvent[], steps: EngineStep[]) {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) return;
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
+  const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
+  const notices = statusNotices(evs, {
+    subject: { name: req.subjectName, email: req.subjectEmail, phone: req.subjectPhone },
+    creator: creator ? { name: creator.name, email: creator.email } : null,
+    stepName: (id) => ROLE_LABELS[(steps.find((x) => x.id === id)?.role ?? "employee") as StepRole],
+  });
+  const rows = notices.flatMap((n) => {
+    const msg = renderDefault(n.key, { ...n.vars, org: org?.name ?? "" });
+    return deliveryTargets(n.to).map((t) => ({
+      organizationId: req.organizationId,
+      requestId,
+      channel: t.channel,
+      to: t.to,
+      templateKey: n.key,
+      subject: t.channel === "email" ? msg.subject : null,
+      body: msg.body,
+    }));
+  });
+  if (rows.length) {
+    await db.insert(notifications).values(rows);
+    await kickDelivery();
+  }
 }

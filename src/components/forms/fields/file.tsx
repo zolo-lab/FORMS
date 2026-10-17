@@ -24,8 +24,8 @@ export function FileUploadInput({ field, domId, value, onChange, disabled, onUpl
         next.push(await onUpload(f));
       }
       onChange(next);
-    } catch {
-      setError("ההעלאה נכשלה, נסו שוב");
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "ההעלאה נכשלה, נסו שוב");
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";

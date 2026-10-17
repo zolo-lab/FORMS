@@ -199,3 +199,18 @@ export async function requestAnswerItems(requestId: string): Promise<{ label: st
   }
   return out;
 }
+
+/** Files the signers uploaded (answers whose value is a list of `{ url, name }` pointing into our file store). */
+export async function uploadedFiles(requestId: string): Promise<{ name: string; url: string }[]> {
+  const { collectedAnswers } = await import("./requests-store");
+  const answers = await collectedAnswers(requestId);
+  const out: { name: string; url: string }[] = [];
+  for (const v of Object.values(answers)) {
+    if (!Array.isArray(v)) continue;
+    for (const f of v) {
+      const o = f as { name?: unknown; url?: unknown };
+      if (o && typeof o.url === "string" && o.url.startsWith("/api/admin/files/") && typeof o.name === "string") out.push({ name: o.name, url: o.url });
+    }
+  }
+  return out;
+}

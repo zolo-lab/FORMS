@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
+import type { UploadedFile } from "@/components/forms/fields/types";
+import { UPLOAD_ERRORS } from "@/lib/forms/upload";
 import type { Lookups } from "@/lib/forms/lookups";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -132,6 +134,17 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
     return () => clearTimeout(t);
   }, [answers, token]);
 
+  async function upload(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/s/${token}/upload`, { method: "POST", body: fd });
+    if (!res.ok) {
+      const code = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "";
+      throw new Error(UPLOAD_ERRORS[code] ?? "ההעלאה נכשלה");
+    }
+    return (await res.json()) as UploadedFile;
+  }
+
   async function onSubmit(cleaned: Answers) {
     setProblem(null);
     const res = await fetch(`/api/s/${token}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned }) });
@@ -179,7 +192,7 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
       {hasForm && canOnDoc && mode === "document" ? (
         <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} />
       ) : hasForm ? (
-        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} />
+        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
       )}

@@ -98,6 +98,7 @@ export function eventLabel(type: string, payload: Record<string, unknown> = {}):
     case "step_opened": return `הקישור נפתח${r ? ` · ${r}` : ""}`;
     case "step_saved": return "נשמרה טיוטה";
     case "step_completed": return `שלב הושלם${r ? ` · ${r}` : ""}`;
+    case "file_uploaded": return `הועלה קובץ${payload.name ? `: ${String(payload.name)}` : ""}`;
     case "step_declined": return `שלב נדחה${reason}`;
     case "step_returned": return `הוחזר לתיקון${reason}`;
     case "step_delegated": return "השלב הועבר לאדם אחר";
