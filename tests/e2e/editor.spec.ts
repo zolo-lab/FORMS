@@ -1,15 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { login, openPalette } from "./helpers";
+import { login, newFormFromPdf, openPalette } from "./helpers";
 
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
 test("edit a field inline, style it, and see it in the form preview", async ({ page }) => {
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
-  await page.getByPlaceholder("שם הטופס החדש").fill(`טופס e2e ${Date.now()}`);
-  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
-  const id = page.url().split("/").pop()!;
+  const id = await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
+  await page.getByRole("tab", { name: "עריכה" }).click();
 
   await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
@@ -41,9 +39,8 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 
 test("form settings: layout, description and thank-you message", async ({ page }) => {
   await login(page, "/admin/forms");
-  await page.getByPlaceholder("שם הטופס החדש").fill(`הגדרות ${Date.now()}`);
-  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}/);
+  await newFormFromPdf(page, `הגדרות ${Date.now()}`);
+  await page.getByRole("tab", { name: "עריכה" }).click();
   await page.getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");

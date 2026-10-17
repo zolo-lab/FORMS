@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { login, newFormFromPdf, plainPdf } from "./helpers";
 
 // builder-plan.md §2.7 (route A): a form built from scratch, Google-Forms style, then filled and published.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -9,10 +9,8 @@ test.setTimeout(180_000);
 test("from scratch: eight field types, labels, a condition, a second page, preview fill+submit, publish, package", async ({ page }) => {
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
-  await page.getByPlaceholder("שם הטופס החדש").fill(title);
-  await page.getByRole("button", { name: "להתחיל מטופס ריק" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
-  const id = page.url().split("/").pop()!;
+  const id = await newFormFromPdf(page, title);
+  await page.getByRole("tab", { name: "עריכה" }).click();
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });
 
   // Eight field types from the palette; the last one added is selected in the settings panel.
@@ -65,6 +63,8 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: "הבא" }).click();
   await page.getByLabel("הערות").fill("אין");
   await page.getByRole("button", { name: "שליחה" }).click();
+  // With a PDF attached the saved answers sit in a collapsed section.
+  await page.getByText("התשובות כפי שנשמרות (JSON)").click();
   const result = page.getByTestId("result");
   await expect(result).toBeVisible();
   await expect(result).toContainText("12000");
@@ -90,7 +90,11 @@ test("a form from a built-in template opens with its fields and publishes", asyn
   const title = `תבנית e2e ${Date.now()}`;
   await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(title);
   await page.getByRole("button", { name: "יצירה מתבנית" }).first().click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}$/);
+  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}\?tab=pdf/);
+  // A template brings the fields; the PDF they go on is uploaded next (a new form cannot be published without one).
+  await page.locator('input[type="file"][accept="application/pdf"]').setInputFiles({ name: "source.pdf", mimeType: "application/pdf", buffer: await plainPdf() });
+  await expect(page.getByText(/source\.pdf · 1 עמודים/)).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("tab", { name: "עריכה" }).click();
   await expect(page.getByText("פרטי ההעסקה (ממלא המבקש)")).toBeVisible();
   await expect(page.getByText("תאריך תחילת עבודה")).toBeVisible();
   await page.getByRole("button", { name: "פרסום" }).click();

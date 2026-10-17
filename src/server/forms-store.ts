@@ -11,13 +11,18 @@ export async function listTemplates() {
   return db.select().from(formTemplates).orderBy(desc(formTemplates.updatedAt));
 }
 
-export async function createTemplate(title: string, definition?: FormDefinition, kind: "web" | "pdf" | "both" = "web"): Promise<string> {
+export async function createTemplate(
+  title: string,
+  definition?: FormDefinition,
+  kind: "web" | "pdf" | "both" = "web",
+  pdf?: { pdfFileId: string; pdfMapping: PdfMapping },
+): Promise<string> {
   const def = definition ?? blankForm(title);
   const [t] = await db
     .insert(formTemplates)
     .values({ slug: `form-${nanoid(8).toLowerCase().replace(/[^a-z0-9]/g, "x")}`, title, kind })
     .returning({ id: formTemplates.id });
-  await db.insert(formTemplateVersions).values({ templateId: t!.id, version: 1, definition: { ...def, title } });
+  await db.insert(formTemplateVersions).values({ templateId: t!.id, version: 1, definition: { ...def, title }, ...(pdf ?? {}) });
   return t!.id;
 }
 
@@ -74,12 +79,16 @@ export async function saveDraft(
   return { version: version.version };
 }
 
+export const NEEDS_PDF = "העלו PDF לפני הפרסום: כל טופס חדש מתחיל ממסמך";
+
 export async function publishTemplate(templateId: string): Promise<{ ok: true; version: number } | { ok: false; issues: string[] }> {
   const data = await getEditorData(templateId);
   if (!data) return { ok: false, issues: ["הטופס לא נמצא"] };
   if (data.version.publishedAt) return { ok: false, issues: ["אין טיוטה חדשה לפרסום"] };
-  const issues = publishIssues(data.version.definition);
-  if (issues.length) return { ok: false, issues: issues.map((i) => i.message) };
+  const issues = publishIssues(data.version.definition).map((i) => i.message);
+  // Every new form starts from a PDF; forms published before that rule keep working without one.
+  if (!data.version.pdfFileId && data.template.publishedVersion === null) issues.unshift(NEEDS_PDF);
+  if (issues.length) return { ok: false, issues };
   await db.update(formTemplateVersions).set({ publishedAt: new Date() }).where(eq(formTemplateVersions.id, data.version.id));
   await db
     .update(formTemplates)

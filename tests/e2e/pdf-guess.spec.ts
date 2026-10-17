@@ -31,7 +31,7 @@ test("PDF upload to an existing form offers automatic placement", async ({ page 
   const title = `Guess e2e ${Date.now()}`;
   await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(title);
   await page.locator("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+$/);
+  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+\?tab=pdf/);
   await page.getByRole("tab", { name: "PDF" }).click();
 
   await page.locator('input[type="file"][accept="application/pdf"]').setInputFiles({ name: "labelled.pdf", mimeType: "application/pdf", buffer: await labelledPdf() });
@@ -51,7 +51,7 @@ test("placing a waiting field by hand starts from the PDF's own label", async ({
   await login(page, "/admin/forms");
   await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(`Guess one e2e ${Date.now()}`);
   await page.locator("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+$/);
+  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+\?tab=pdf/);
   await page.getByRole("tab", { name: "PDF" }).click();
   await page.locator('input[type="file"][accept="application/pdf"]').setInputFiles({ name: "labelled.pdf", mimeType: "application/pdf", buffer: await labelledPdf() });
   const dialog = page.getByRole("dialog", { name: "שיבוץ אוטומטי של השדות" });
