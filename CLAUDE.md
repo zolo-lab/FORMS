@@ -3,7 +3,7 @@
 Internal HR system for 5 Israeli nonprofits: dynamic forms (builder), PDF stamping,
 sequential e-signature chains, dashboard, Priority payroll export. Replaces iForms + Google Sheets.
 
-**Current focus:** `docs/builder-plan.md` part 5 (tasks 5.1–5.6, run them back to back without stopping, one PR each; see "אופן ביצוע" there).
+**Current focus:** `docs/builder-plan.md` part 5 (tasks 5.1–5.6, run them back to back without stopping, one PR each; see "אופן ביצוע" there). For every UI task, run the `ui-ux-pro-max` skill first and adopt all its recommendations (hard rules below still win).
 
 **Read before any work:** `docs/build-plan-v3.md` (active plan: tasks, acceptance criteria; `build-plan.md` §1 holds the base decisions) and
 `docs/HANDOFF.md` (environment quirks, dev loop, current state). Do the next unfinished phase only.
