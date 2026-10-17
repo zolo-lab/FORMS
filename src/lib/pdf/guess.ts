@@ -5,10 +5,10 @@
  * that, just below), and a plain default box next to the label when the page has no such shape.
  * Everything returned is marked `guessed`, so the editor can show it as a suggestion.
  */
-import { allFields, type FormDefinition } from "@/lib/forms/schema";
+import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { DEFAULT_SIZE, placeableItems } from "@/lib/forms/pdf-items";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
-import type { Match } from "./match";
+import { matchLocal, type Match } from "./match";
 import type { PageLabel } from "./labels";
 import type { Rect, Shapes } from "./geometry";
 
@@ -99,4 +99,38 @@ export function guessPlacements(def: FormDefinition, pages: GuessPage[], matches
     });
   }
   return out;
+}
+
+/** Fields that have nothing on the document yet and are a single thing to place (no parts, no options). */
+export function unplacedSimpleFields(def: FormDefinition, stamps: PdfStamp[]): FormField[] {
+  const items = placeableItems(def);
+  const placed = new Set(stamps.map((s) => s.fieldId));
+  return allFields(def).filter((f) => {
+    if (placed.has(f.id)) return false;
+    const mine = items.filter((it) => it.fieldId === f.id);
+    return mine.length === 1 && !mine[0]!.part && !mine[0]!.whenValue;
+  });
+}
+
+/**
+ * The whole suggestion: which unplaced fields have a spot and where. `claude` (optional) are pairs a language
+ * model chose; the local matcher fills in whatever it left open, or does everything when `claude` is null.
+ */
+export function planGuess(
+  def: FormDefinition,
+  existing: PdfStamp[],
+  pages: GuessPage[],
+  newId: () => string,
+  claude?: Match[] | null,
+): { total: number; stamps: PdfStamp[]; matches: Match[] } {
+  const targets = unplacedSimpleFields(def, existing);
+  const labels = pages.flatMap((p) => p.labels).map((l) => ({ id: l.id, text: l.str }));
+  const ids = new Set(targets.map((f) => f.id));
+  const known = new Set(labels.map((l) => l.id));
+  const fromClaude = (claude ?? []).filter((m) => ids.has(m.fieldId) && known.has(m.labelId));
+  const usedF = new Set(fromClaude.map((m) => m.fieldId));
+  const usedL = new Set(fromClaude.map((m) => m.labelId));
+  const local = matchLocal(targets.filter((f) => !usedF.has(f.id)), labels.filter((l) => !usedL.has(l.id)));
+  const matches = [...fromClaude, ...local];
+  return { total: targets.length, stamps: guessPlacements(def, pages, matches, newId), matches };
 }

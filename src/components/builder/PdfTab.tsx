@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
+import { usePdfDocument } from "@/components/pdf/usePdfDocument";
+import { extractPageData } from "@/components/pdf/extract-page-data";
+import { planGuess, unplacedSimpleFields } from "@/lib/pdf/guess";
+import type { Match } from "@/lib/pdf/match";
 import { nanoid } from "nanoid";
-import type { PdfMapping } from "@/lib/forms/pdf-mapping";
+import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { tableCellOf } from "@/lib/forms/pdf-items";
 import { addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
@@ -33,6 +37,14 @@ export function PdfTab({
   const [filled, setFilled] = useState<{ url: string; data: Uint8Array } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [acro, setAcro] = useState<AcroImport | null>(null);
+  const { doc, docKey } = usePdfDocument(pdf ? { url: pdf.file.url } : null);
+  /** Placements the automatic matcher found, waiting for the admin's answer. */
+  const [guess, setGuess] = useState<{ total: number; stamps: PdfStamp[] } | null>(null);
+  const [guessNote, setGuessNote] = useState<string | null>(null);
+  const [guessBusy, setGuessBusy] = useState(false);
+  /** Set after an upload: ask about automatic placement as soon as the new document is open. */
+  const askAfterUpload = useRef(false);
+  const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
   const defRef = useRef(definition);
   useEffect(() => { defRef.current = definition; }, [definition]);
@@ -49,6 +61,9 @@ export function PdfTab({
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "ההעלאה נכשלה"); return; }
       setAcro(json.acro ?? null);
+      askAfterUpload.current = !json.acro;
+      setGuess(null);
+      setGuessNote(null);
       const same = pdf && pdf.file.pages.length === json.pages.length;
       onChange({
         file: { id: json.id, name: json.name, url: json.url, pages: json.pages },
@@ -62,6 +77,48 @@ export function PdfTab({
       if (input.current) input.current.value = "";
     }
   }
+
+  /** Read the PDF's text and drawing, match its labels to the unplaced fields and propose positions. */
+  async function analyze() {
+    if (!pdf || !doc) return;
+    setGuessBusy(true);
+    setGuessNote(null);
+    try {
+      const pages = await extractPageData(doc, pdf.file.pages);
+      if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
+      const targets = unplacedSimpleFields(defRef.current, pdf.mapping.stamps);
+      if (targets.length === 0) { setGuessNote("כל שדות הטופס כבר שובצו."); return; }
+      // A language model may pair names with labels (names only, never coordinates); without it the local matcher does.
+      let claude: Match[] | null = null;
+      try {
+        const res = await fetch("/api/admin/pdf-match", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            fields: targets.map((f) => ({ id: f.id, type: f.type, label: f.label })),
+            labels: pages.flatMap((p) => p.labels).map((l) => ({ id: l.id, text: l.str })),
+          }),
+        });
+        if (res.ok) claude = ((await res.json()) as { matches: Match[] | null }).matches;
+      } catch { /* local matcher */ }
+      const plan = planGuess(defRef.current, pdf.mapping.stamps, pages, () => nanoid(8), claude);
+      if (plan.stamps.length === 0) { setGuessNote("לא מצאנו ב-PDF תוויות שמתאימות לשדות הטופס, לכן השיבוץ ידני."); return; }
+      setGuess({ total: plan.total, stamps: plan.stamps });
+    } catch {
+      setGuessNote("לא הצלחנו לנתח את ה-PDF, השיבוץ ידני.");
+    } finally {
+      setGuessBusy(false);
+    }
+  }
+
+  // After an upload the question comes up once the new document (not the previous one) is open.
+  useEffect(() => {
+    if (askAfterUpload.current && pdf && doc && docKey === pdf.file.url) {
+      askAfterUpload.current = false;
+      void analyze();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the document finishes loading
+  }, [doc, docKey, pdf?.file.url]);
 
   async function preview() {
     if (!pdf) return;
@@ -90,8 +147,14 @@ export function PdfTab({
         </Button>
         {pdf && <span className="text-sm text-muted-foreground"><bdi>{pdf.file.name}</bdi> · {pdf.file.pages.length} עמודים</span>}
         {pdf && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>הסרת ה-PDF מהטופס</Button>}
+        {pdf && pending > 0 && (
+          <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
+            {guessBusy ? "מנתח את ה-PDF…" : `שיבוץ אוטומטי של ${pending} שדות ממתינים`}
+          </Button>
+        )}
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {guessNote && <p role="status" className="text-sm text-muted-foreground">{guessNote}</p>}
       {pdf && acro && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border bg-card p-3 text-sm">
           <span>נמצאו {acro.fields.length} שדות אינטראקטיביים בתוך ה-PDF.</span>
@@ -143,6 +206,26 @@ export function PdfTab({
           previewBusy={previewBusy}
         />
       )}
+      <Dialog open={!!guess} onClose={() => setGuess(null)} title="שיבוץ אוטומטי של השדות" className="w-[min(92vw,30rem)]">
+        {guess && (
+          <div className="space-y-4 text-sm">
+            <p>
+              מצאנו ב-PDF מקום ל-<b>{guess.stamps.length}</b> מתוך {guess.total} שדות. השיבוצים יסומנו בקו מקווקו, ואפשר להזיז, לשנות או למחוק אותם. שדות שלא נמצא להם מקום נשארים ברשימת &quot;ממתינים לשיבוץ&quot;.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  if (pdf) onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...guess.stamps] } });
+                  setGuess(null);
+                }}
+              >
+                לשבץ אוטומטית
+              </Button>
+              <Button variant="outline" onClick={() => setGuess(null)}>אשבץ ידנית</Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
       <Dialog open={!!filled} onClose={() => { if (filled) URL.revokeObjectURL(filled.url); setFilled(null); }} title="תצוגה מקדימה עם נתוני דוגמה" className="h-[90dvh] w-[min(95vw,60rem)]">
         {filled && <PdfPreview data={filled.data} downloadUrl={filled.url} fileName={`${definition.title}.pdf`} />}
       </Dialog>

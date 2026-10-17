@@ -108,6 +108,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const { pending, placed: placedGroups } = useMemo(() => splitPlacement(groups, new Set(stampByKey.keys())), [groups, stampByKey]);
   const orphans = useMemo(() => orphanStamps(definition, mapping.stamps), [definition, mapping.stamps]);
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
+  const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
   const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
   const pushHistory = () => {
     history.current.past = [...history.current.past.slice(-49), latest.current];
@@ -134,7 +135,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   };
 
   const setStamps = (stamps: PdfStamp[]) => { pushHistory(); onMappingChange({ ...mapping, stamps }); };
-  const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const patchStamp = (id: string, patch: Partial<PdfStamp>) => setStamps(mapping.stamps.map((s) => (s.id === id ? { ...s, ...patch, guessed: undefined } : s)));
   const patchMany = (patches: Map<string, Partial<PdfStamp>>) => setStamps(mapping.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)));
   const select = (id: string | null) => { setSelected(id); setExtra([]); };
 
@@ -238,7 +239,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           hit.push(...snapped.guides.map((g) => ({ ...g, page: origin.page })));
         }
         const c = clampBox(box, pg.width, pg.height);
-        patches.set(id, { x: round1(c.x), y: round1(c.y), width: round1(c.width), height: round1(c.height) });
+        // Touching a suggested placement confirms it.
+        patches.set(id, { x: round1(c.x), y: round1(c.y), width: round1(c.width), height: round1(c.height), guessed: undefined });
       }
       setGuides(hit);
       onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)) });
@@ -367,6 +369,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       {/* Fields to place */}
       <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
         <p className="text-xs text-muted-foreground">שדות הטופס שעדיין אין להם מקום על המסמך מופיעים תחת &quot;ממתינים לשיבוץ&quot;. לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד.</p>
+        {guessedCount > 0 && (
+          <div role="status" className="space-y-2 rounded-md border border-dashed border-primary bg-primary/5 p-2 text-xs">
+            <p>{guessedCount} שיבוצים הוצעו אוטומטית (מסומנים בקו מקווקו). גרירה או שינוי גודל מאשרים שיבוץ.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setStamps(mapping.stamps.map((s) => (s.guessed ? { ...s, guessed: undefined } : s)))}>אישור כל ההצעות</Button>
+              <Button size="sm" variant="ghost" onClick={() => setStamps(mapping.stamps.filter((s) => !s.guessed))}>הסרת ההצעות</Button>
+            </div>
+          </div>
+        )}
         {tables.map((t) => {
           const current = rowsFor(t);
           const max = Number(t.settings?.maxRows ?? 20);
@@ -527,6 +538,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
                         inGroup ? ROLE_OVERLAY[roleOf(s)].boxActive : ROLE_OVERLAY[roleOf(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
+                        s.guessed && "border-dashed",
                         viewAs && (roleOf(s) === "none" ? "employee" : roleOf(s)) !== viewAs && !inGroup && "opacity-25",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}

@@ -3,7 +3,7 @@ import fixture from "./fixtures/guess-page.json";
 import { extractShapes, type OpCodes } from "@/lib/pdf/geometry";
 import { groupLabels, textItems } from "@/lib/pdf/labels";
 import { aliasesFor, matchLocal, matchPrompt, normalizeText, sanitizeMatches, scoreFieldLabel, similarity } from "@/lib/pdf/match";
-import { guessPlacements, type GuessPage } from "@/lib/pdf/guess";
+import { guessPlacements, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 
@@ -168,5 +168,31 @@ describe("guessPlacements", () => {
     const [a, b] = twin;
     expect(a).toBeDefined();
     if (b) expect(b.x + b.width <= a!.x || a!.x + a!.width <= b.x || b.y + b.height <= a!.y || a!.y + a!.height <= b.y).toBe(true);
+  });
+});
+
+describe("planGuess", () => {
+  const existing = [{ id: "e", fieldId: "when", kind: "text" as const, page: 0, x: 1, y: 1, width: 10, height: 10 }];
+  it("only looks at fields that are not placed yet", () => {
+    expect(unplacedSimpleFields(def, existing).map((f) => f.id)).toEqual(["lname", "tz", "agree", "sig", "notes"]);
+    expect(unplacedSimpleFields(def, []).map((f) => f.id)).toHaveLength(6);
+  });
+  it("matches locally when there is no model answer", () => {
+    let n = 0;
+    const r = planGuess(def, existing, [page], () => `g${++n}`, null);
+    expect(r.total).toBe(5);
+    expect(r.stamps.map((s) => s.fieldId).sort()).toEqual(["agree", "lname", "sig", "tz"]);
+  });
+  it("trusts the model's pairs first and lets the local matcher do the rest", () => {
+    const dateLabel = labels.find((l) => l.str === "תאריך")!;
+    const sigLabel = labels.find((l) => l.str === "חתימה")!;
+    // The model says the notes field is the date label; local matching must not reuse that label or field.
+    const r = planGuess(def, [], [page], () => "x", [
+      { fieldId: "notes", labelId: dateLabel.id, score: 0.9 },
+      { fieldId: "ghost", labelId: sigLabel.id, score: 0.9 }, // unknown field: ignored
+    ]);
+    expect(r.matches.find((m) => m.labelId === dateLabel.id)!.fieldId).toBe("notes");
+    expect(r.matches.some((m) => m.fieldId === "when")).toBe(false);
+    expect(r.matches.find((m) => m.labelId === sigLabel.id)!.fieldId).toBe("sig");
   });
 });
