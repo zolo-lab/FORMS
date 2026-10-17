@@ -71,6 +71,13 @@
       "when": 1792264749389,
       "tag": "0009_nebulous_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792265668633,
+      "tag": "0010_chief_old_lace",
+      "breakpoints": true
     }
   ]
 }
