@@ -63,6 +63,8 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: "הבא" }).click();
   await page.getByLabel("הערות").fill("אין");
   await page.getByRole("button", { name: "שליחה" }).click();
+  // With a PDF attached the saved answers sit in a collapsed section.
+  await page.getByText("התשובות כפי שנשמרות (JSON)").click();
   const result = page.getByTestId("result");
   await expect(result).toBeVisible();
   await expect(result).toContainText("12000");

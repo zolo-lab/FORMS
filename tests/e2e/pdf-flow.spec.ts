@@ -126,7 +126,7 @@ test("a new form cannot be published without a PDF, and a form is created only f
   // The old "blank form" entry is gone; the one card asks for a PDF.
   await expect(page.getByRole("button", { name: "להתחיל מטופס ריק" })).toHaveCount(0);
   await page.getByRole("button", { name: "יצירת הטופס" }).click();
-  await expect(page.getByRole("alert")).toContainText("בחרו קובץ PDF");
+  await expect(page.getByText("בחרו קובץ PDF כדי להתחיל")).toBeVisible();
 
   // From a template the form has fields but no document yet: publishing says why it is blocked.
   await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(`ללא PDF ${Date.now()}`);
