@@ -32,7 +32,7 @@ export function NewFormFromPdf() {
       const uploaded = (await up.json()) as { id?: string; name?: string; error?: string };
       if (!up.ok || !uploaded.id) { setError(uploaded.error ?? "ההעלאה נכשלה"); return; }
       const made = await createFormFromPdfAction(title || uploaded.name?.replace(/\.pdf$/i, "") || "", uploaded.id);
-      if ("error" in made) { setError(made.error); return; }
+      if (!("id" in made) || !made.id) { setError("error" in made && made.error ? made.error : "יצירת הטופס נכשלה"); return; }
       router.push(`/admin/forms/${made.id}?tab=pdf`);
     } catch {
       setError("ההעלאה נכשלה, בדקו את החיבור ונסו שוב");
