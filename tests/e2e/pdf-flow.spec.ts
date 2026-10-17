@@ -42,9 +42,10 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   // The last element (signature) is selected: give it to the employee.
   await page.getByLabel("מי ממלא").selectOption("employee");
 
-  // The drawn fields live on their own page in the form editor, not among the questions.
+  // The drawn fields are ordinary fields of the form: they show in the editor like any other (no hidden page).
   await page.getByRole("tab", { name: "עריכה" }).click();
-  await expect(page.getByText("שדות במסמך")).toBeVisible();
+  await expect(page.getByText("מספר זהות").first()).toBeVisible();
+  await expect(page.getByText("שדות במסמך")).toHaveCount(0);
 
   // Publish.
   await page.getByRole("button", { name: "פרסום" }).click();
