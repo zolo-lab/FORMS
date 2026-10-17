@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { safeNext } from "@/lib/auth/google";
-import { verifyPassword } from "@/lib/auth/password";
+import { isDemoAddress, verifyPassword } from "@/lib/auth/password";
 import { SESSION_COOKIE, SESSION_TTL_MS, checkAdminPassword, createSessionToken, createUserSessionToken } from "@/lib/auth/session";
 
 export type LoginState = { error?: string };
@@ -17,7 +17,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (email) {
     if (!secret) return { error: "ההתחברות לא הוגדרה בשרת (SESSION_SECRET)" };
     const [u] = await db.select().from(schema.users).where(eq(schema.users.email, email));
-    if (!u || !u.active || !verifyPassword(password, u.passwordHash)) return { error: "מייל או סיסמה שגויים" };
+    // Demo sign-in without a password: only for invented addresses (@demo.test…) and only while DEMO_LOGIN=1 is set.
+    const demoOpen = process.env.DEMO_LOGIN === "1" && isDemoAddress(email) && !password;
+    if (demoOpen && !u) return { error: "אין משתמש הדגמה כזה. מנהל/ת המערכת יוצר/ת אותו במסך המשתמשים." };
+    if (!u || !u.active || !(demoOpen || verifyPassword(password, u.passwordHash))) return { error: "מייל או סיסמה שגויים" };
     (await cookies()).set(SESSION_COOKIE, await createUserSessionToken(secret, email), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

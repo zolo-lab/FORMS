@@ -13,7 +13,7 @@ import { createDemoUserAction, impersonateAction, savePermissionsAction, setPass
 
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם וסיסמה של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה" };
+const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם, וסיסמה (אם יש) של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; u?: string }> }) {
   const { error, saved, u } = await searchParams;
@@ -35,11 +35,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">משתמש הדגמה</h2>
-        <p className="text-sm text-muted-foreground">משתמש עם מייל בדוי (@demo.test) וסיסמה, להצגת התהליך. הודעות אליו לא נשלחות בפועל.</p>
+        <p className="text-sm text-muted-foreground">משתמש עם מייל בדוי (@demo.test), להצגת התהליך. בלי סיסמה אפשר להיכנס רק עם המייל כשמשתנה הסביבה DEMO_LOGIN=1 מוגדר. הודעות אליו לא נשלחות בפועל.</p>
         <form action={createDemoUserAction} className="grid gap-3 sm:grid-cols-5 sm:items-end">
           <div className="space-y-1"><Label htmlFor="d-name">שם</Label><Input id="d-name" name="name" required /></div>
           <div className="space-y-1"><Label htmlFor="d-email">מייל</Label><Input id="d-email" name="email" type="email" dir="ltr" placeholder="ruth@demo.test" required /></div>
-          <div className="space-y-1"><Label htmlFor="d-pass">סיסמה</Label><Input id="d-pass" name="password" type="text" dir="ltr" minLength={6} required /></div>
+          <div className="space-y-1"><Label htmlFor="d-pass">סיסמה (לא חובה)</Label><Input id="d-pass" name="password" type="text" dir="ltr" minLength={6} /></div>
           <div className="space-y-1">
             <Label htmlFor="d-role">תפקיד</Label>
             <Select id="d-role" name="role" defaultValue="org_office">

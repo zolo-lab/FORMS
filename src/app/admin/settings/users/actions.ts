@@ -56,10 +56,10 @@ export async function createDemoUserAction(fd: FormData) {
   const name = String(fd.get("name") ?? "").trim();
   const password = String(fd.get("password") ?? "");
   const role = String(fd.get("role") ?? "org_office") as UserRole;
-  if (!name || !isDemoAddress(email) || !validDemoPassword(password) || !ROLES.includes(role)) redirect(`${PATH}?error=demo`);
+  if (!name || !isDemoAddress(email) || (password && !validDemoPassword(password)) || !ROLES.includes(role)) redirect(`${PATH}?error=demo`);
   const [exists] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
   if (exists) redirect(`${PATH}?error=exists`);
-  await db.insert(schema.users).values({ email, name, role, passwordHash: hashPassword(password) });
+  await db.insert(schema.users).values({ email, name, role, passwordHash: password ? hashPassword(password) : null });
   revalidatePath(PATH);
   redirect(`${PATH}?saved=1`);
 }
