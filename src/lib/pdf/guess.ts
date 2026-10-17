@@ -75,6 +75,16 @@ export function guessPlacements(def: FormDefinition, pages: GuessPage[], matches
     }
 
     cands.sort((a, b) => a.cost - b.cost);
+    // A tall box (signature, image) that would run into an earlier guess is shortened to the free space under it.
+    if (size.height >= 40) {
+      for (const c of cands) {
+        let top = c.box.height;
+        for (const t of taken) {
+          if (t.page === page.index && t.box.y > c.box.y && t.box.x < c.box.x + c.box.width && t.box.x + t.box.width > c.box.x) top = Math.min(top, Math.floor(t.box.y - c.box.y));
+        }
+        if (top >= 20) c.box = { ...c.box, height: top };
+      }
+    }
     const pick = cands.find((c) => {
       if (c.box.x < 0 || c.box.y < 0 || c.box.x + c.box.width > page.width + 1 || c.box.y + c.box.height > page.height + 1) return false;
       if (taken.some((t) => t.page === page.index && overlapArea(t.box, c.box) > 0.5)) return false;

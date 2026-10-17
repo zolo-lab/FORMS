@@ -148,8 +148,9 @@ describe("guessPlacements", () => {
     expect(of("agree")).toMatchObject({ kind: "check", x: 520, y: 680, width: 10, height: 10 });
     expect(of("when")).toMatchObject({ kind: "text", x: 331, y: 635, width: 128, height: 18 });
   });
-  it("places the signature above its rule with the default signature height", () => {
-    expect(of("sig")).toMatchObject({ kind: "signature", x: 300, height: 40 });
+  it("places the signature above its rule, shortened to stay clear of the date box", () => {
+    // The date box starts at y 635, so the signature (40pt by default) is shortened to the free 35pt under it.
+    expect(of("sig")).toMatchObject({ kind: "signature", x: 300, height: 35 });
     expect(of("sig").y).toBeCloseTo(599.5, 1);
   });
   it("falls back to a default box beside the label when the page has no shape there", () => {

@@ -29,8 +29,8 @@ async function labelledPdf(): Promise<Buffer> {
 test("PDF upload to an existing form offers automatic placement", async ({ page }) => {
   await login(page, "/admin/forms");
   const title = `Guess e2e ${Date.now()}`;
-  await page.getByRole("form").filter({ hasText: "קליטת עובד" }).getByRole("textbox").fill(title);
-  await page.getByRole("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
+  await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(title);
+  await page.locator("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]+$/);
   await page.getByRole("tab", { name: "PDF" }).click();
 
