@@ -58,12 +58,11 @@ export function sanitizeRefinements(raw: unknown, fields: Named[]): Refinement[]
     const id = typeof item?.id === "string" ? item.id : "";
     const original = byId.get(id);
     if (!original || seen.has(id)) continue;
-    seen.add(id);
     const r: Refinement = { id };
     const label = typeof item.label === "string" ? item.label.replace(/\s+/g, " ").trim().slice(0, 120) : "";
     if (label && label !== original.label) r.label = label;
     if (typeof item.type === "string" && REFINABLE.has(item.type) && REFINABLE.has(original.type) && item.type !== original.type) r.type = item.type as FieldType;
-    if (r.label || r.type) out.push(r);
+    if (r.label || r.type) { out.push(r); seen.add(id); }
   }
   return out;
 }
