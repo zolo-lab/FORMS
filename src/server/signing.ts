@@ -16,6 +16,7 @@ import { applyStepAction, collectedAnswers, StepConflictError } from "./requests
 import { getFile, putFile } from "./storage";
 import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
 import { delegateError } from "@/lib/workflow/delegate";
+import { checkUpload } from "@/lib/forms/upload";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 
 const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
@@ -267,4 +268,20 @@ export async function getPdfForToken(token: string, fileId: string): Promise<{ b
   const storedId = row ? /([0-9a-f-]{36})$/.exec(row.blobUrl)?.[1] : undefined;
   const file = storedId ? await getFile(storedId) : null;
   return file ? { bytes: file.bytes } : null;
+}
+
+export type UploadResult =
+  | { ok: true; file: { url: string; name: string; size: number; mime: string } }
+  | { ok: false; state: TokenState | "otp_required" | "too_big" | "bad_type" | "empty" };
+
+/** A file chosen by the signer: stored, and returned in the shape the upload field keeps in the answers. */
+export async function uploadForToken(token: string, file: File, cookieHeader: string | null = null): Promise<UploadResult> {
+  const ctx = await loadByToken(token);
+  if (ctx.state !== "ok") return { ok: false, state: ctx.state };
+  if (!otpPassed(ctx, cookieHeader)) return { ok: false, state: "otp_required" };
+  const check = checkUpload({ size: file.size, mime: file.type });
+  if (!check.ok) return { ok: false, state: check.error };
+  const stored = await putFile({ name: file.name.slice(0, 200) || "file", mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) });
+  await db.insert(events).values({ requestId: ctx.request.id, stepId: ctx.step.id, actorType: "signer", type: "file_uploaded", payload: { name: file.name, size: file.size } });
+  return { ok: true, file: { url: stored.url, name: file.name, size: file.size, mime: file.type } };
 }

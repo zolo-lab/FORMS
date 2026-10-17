@@ -5,7 +5,7 @@ import { createToken } from "@/lib/auth/tokens";
 import { renderDefault } from "@/lib/notifications/templates";
 import { reminderDue } from "@/lib/workflow/reminders";
 import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
-import { normalizeIsraeliPhone } from "@/lib/whatsapp";
+import { deliveryTargets } from "@/lib/notifications/channels";
 import { enqueue } from "./notifications";
 import { appUrl } from "./requests-store";
 
@@ -34,9 +34,8 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
   let queued = 0;
   for (const { step, request, org } of open) {
     if (step.role === "requester" || !step.activatedAt) continue;
-    const email = step.assigneeEmail;
-    const sms = !email && step.assigneePhone ? normalizeIsraeliPhone(step.assigneePhone) : null;
-    if (!email && !sms) continue;
+    const targets = deliveryTargets({ email: step.assigneeEmail, phone: step.assigneePhone });
+    if (!targets.length) continue;
     const policy = org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
 
     const past = sentByStep.get(step.id) ?? [];
@@ -51,16 +50,18 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
       link: `${appUrl()}/s/${token}`,
       dueDate: request.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(request.expiresAt) : "",
     });
-    await enqueue({
-      organizationId: org.id,
-      requestId: request.id,
-      stepId: step.id,
-      channel: email ? "email" : "sms",
-      to: (email ?? sms)!,
-      templateKey: "reminder",
-      subject: email ? msg.subject : "",
-      body: msg.body,
-    });
+    for (const t of targets) {
+      await enqueue({
+        organizationId: org.id,
+        requestId: request.id,
+        stepId: step.id,
+        channel: t.channel,
+        to: t.to,
+        templateKey: "reminder",
+        subject: t.channel === "email" ? msg.subject : "",
+        body: msg.body,
+      });
+    }
     queued++;
   }
   return queued;
