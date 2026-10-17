@@ -7,7 +7,7 @@ import { withDefaults } from "@/lib/forms/defaults";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
-import { nextPageIndex, prevPageIndex, reachedPageIndexes, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
+import { nextPageIndex, prevPageIndex, reachedPageIndexes, resumePageIndex, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { pipeText } from "@/lib/forms/piping";
 import { CardFlow } from "./CardFlow";
@@ -43,7 +43,8 @@ export function FormRenderer({
   const layout = definition.settings?.layout ?? "wizard";
   const wizard = layout === "wizard" && !readonly;
   const cardMode = layout === "card" && !readonly;
-  const [pageIndex, setPageIndex] = useState(0);
+  // Coming back to a half-filled wizard lands on the step that still needs something, not on step 1.
+  const [pageIndex, setPageIndex] = useState(() => (wizard ? resumePageIndex(definition, answers, { role, today: todayStr }) : 0));
   const [localErrors, setLocalErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
