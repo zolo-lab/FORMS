@@ -54,9 +54,11 @@ export interface PdfPlacementProps {
   onCloneField?: (fieldId: string) => string | null;
   /** Pressing "place" on a waiting field: a suggested stamp from the PDF's own text (null = no idea, the field goes to the page centre). */
   onSuggest?: (fieldId: string) => Promise<PdfStamp | null>;
+  /** "New step from here": cut the form's step at this field. */
+  onSplitStep?: (fieldId: string) => void;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -623,6 +625,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 </div>
               ))}
             </div>
+            {onSplitStep && fieldOf(selectedStamp) && !tableCellOf(selectedStamp.fieldId) && (
+              <Button size="sm" variant="outline" className="min-h-9" onClick={() => onSplitStep(selectedStamp.fieldId)}>שלב חדש מכאן</Button>
+            )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
                 <Label className="text-muted-foreground">מי ממלא</Label>

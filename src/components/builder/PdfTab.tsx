@@ -15,7 +15,7 @@ import { nanoid } from "nanoid";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { tableCellOf } from "@/lib/forms/pdf-items";
-import { addDetectedFields, addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
+import { addDetectedFields, addDrawnElement, cloneField, splitStepAt } from "@/lib/forms/pdf-draw";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
@@ -223,6 +223,12 @@ export function PdfTab({
           pages={pdf.file.pages}
           mapping={pdf.mapping}
           onMappingChange={(mapping) => onChange({ ...pdf, mapping })}
+          onSplitStep={(fieldId) => {
+            const r = splitStepAt(defRef.current, fieldId);
+            if (!r) { setGuessNote("זה כבר תחילת שלב, אין מה לחתוך."); return; }
+            changeDefinition(r.definition);
+            setGuessNote(`נוצר שלב חדש (${r.definition.pages[r.step]!.title}). אפשר לשנות לו שם בלשונית העריכה.`);
+          }}
           onSuggest={async (fieldId) => {
             try {
               const pages = await readPages();

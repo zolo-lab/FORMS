@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDetectedFields, addDrawnElement, cloneField, insertFieldByPosition, PDF_PALETTE, readingOrder, uniqueFieldId } from "@/lib/forms/pdf-draw";
+import { addDetectedFields, orderByPdf, splitStepAt, addDrawnElement, cloneField, insertFieldByPosition, PDF_PALETTE, readingOrder, uniqueFieldId } from "@/lib/forms/pdf-draw";
 import { allFields, parseFormDefinition, stripLegacyPdfOnly } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { importAcroForm, mergeAcroImport } from "@/lib/pdf/acroform";
@@ -229,5 +229,47 @@ describe("addDetectedFields", () => {
     const { definition } = addDetectedFields(base, [detected[1]!], stamps, () => "n", { stepPerPage: true });
     expect(definition.pages).toHaveLength(1);
     expect(allFields(definition).map((f) => f.label)).toEqual(["ראשון", "שם משפחה", "אחרון"]);
+  });
+});
+
+describe("orderByPdf", () => {
+  const st = (fieldId: string, page: number, x: number, y: number) => ({ id: `s_${fieldId}`, fieldId, kind: "text" as const, page, x, y, width: 100, height: 16 });
+  const f = (id: string, type = "short_text") => ({ id, type, label: id });
+  it("orders each step by the document: page, top to bottom, right to left", () => {
+    const d = def([{ id: "p1", fields: [f("c"), f("a"), f("b"), f("d")] }]);
+    const out = orderByPdf(d, [st("a", 0, 400, 700), st("b", 0, 100, 700), st("c", 1, 300, 800), st("d", 0, 300, 500)]);
+    expect(out.pages[0]!.fields.map((x) => x.id)).toEqual(["a", "b", "d", "c"]);
+  });
+  it("keeps unplaced fields and layout blocks right after the field they followed, and never moves ids between steps", () => {
+    const d = def([{ id: "p1", fields: [f("intro", "heading"), f("b"), f("note", "info_text"), f("a")] }, { id: "p2", fields: [f("z")] }]);
+    const out = orderByPdf(d, [st("a", 0, 300, 700), st("b", 0, 300, 400), st("z", 0, 300, 900)]);
+    expect(out.pages.map((p) => p.fields.map((x) => x.id))).toEqual([["intro", "a", "b", "note"], ["z"]]);
+  });
+  it("counts a table's cells for the table", () => {
+    const d = def([{ id: "p1", fields: [f("t", "short_text"), f("a")] }]);
+    const out = orderByPdf(d, [st("t[0].c", 0, 300, 100), st("a", 0, 300, 700)]);
+    expect(out.pages[0]!.fields.map((x) => x.id)).toEqual(["a", "t"]);
+  });
+});
+
+describe("splitStepAt", () => {
+  const fields = ["a", "b", "c", "d"].map((id) => ({ id, type: "short_text", label: id }));
+  it("moves the field and the ones after it to a new step", () => {
+    const r = splitStepAt(def([{ id: "p1", fields }]), "c")!;
+    expect(r.definition.pages.map((p) => p.fields.map((x) => x.id))).toEqual([["a", "b"], ["c", "d"]]);
+    expect(r.step).toBe(1);
+    expect(r.definition.pages[1]!.title).toBe("שלב 2");
+    expect(parseFormDefinition(r.definition).success).toBe(true);
+  });
+  it("does nothing at the first field of a step or for an unknown field", () => {
+    const d = def([{ id: "p1", fields }]);
+    expect(splitStepAt(d, "a")).toBeNull();
+    expect(splitStepAt(d, "nope")).toBeNull();
+  });
+  it("keeps the skip rules on the half where the step now ends", () => {
+    const d = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p1", title: "", fields, nextPage: [{ if: { field: "a", op: "eq", value: "x" }, goTo: "end" }] }] }).data!;
+    const r = splitStepAt(d, "c")!;
+    expect(r.definition.pages[0]!.nextPage).toBeUndefined();
+    expect(r.definition.pages[1]!.nextPage).toHaveLength(1);
   });
 });
