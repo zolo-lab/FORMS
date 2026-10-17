@@ -11,7 +11,7 @@ export function LoginForm({ next }: { next: string }) {
     <form action={action} className="space-y-4">
       <input type="hidden" name="next" value={next} />
       <div className="space-y-2">
-        <Label htmlFor="email">מייל (למשתמש הדגמה; להשאיר ריק לסיסמה משותפת)</Label>
+        <Label htmlFor="email">מייל משתמש (הדגמה בלבד)</Label>
         <Input id="email" name="email" type="email" autoComplete="username" dir="ltr" />
       </div>
       <div className="space-y-2">
