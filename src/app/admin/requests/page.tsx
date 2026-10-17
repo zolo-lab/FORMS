@@ -8,6 +8,7 @@ import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
 import { viewerScope } from "@/server/users-store";
+import { orgLabel } from "@/lib/orgs/input";
 import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
@@ -101,9 +102,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <Label htmlFor="org">ארגון</Label>
           <Select id="org" name="org" defaultValue={filters.org ?? ""}>
             <option value="">הכול</option>
-            {orgs.map((o) => (
+            {(scope?.orgIds ? orgs.filter((o) => scope.orgIds!.includes(o.id)) : orgs).map((o) => (
               <option key={o.id} value={o.id}>
-                {o.name}
+                {orgLabel(o)}
               </option>
             ))}
           </Select>

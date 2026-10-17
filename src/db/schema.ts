@@ -33,7 +33,8 @@ const timestamps = {
     .$onUpdate(() => new Date()),
 };
 
-export const userRole = pgEnum("user_role", ["admin", "payroll", "approver", "org_office"]);
+/** `manager` is the ordinary user. payroll / approver / org_office are legacy values, read as `manager` (see normalizeRole). */
+export const userRole = pgEnum("user_role", ["admin", "payroll", "approver", "org_office", "manager"]);
 export const templateStatus = pgEnum("template_status", ["draft", "active", "archived"]);
 export const templateKind = pgEnum("template_kind", ["web", "pdf", "both"]);
 export const requestStatus = pgEnum("request_status", [
@@ -51,6 +52,8 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   /** מספר עמותה, e.g. 580556306 */
   registrationNumber: text("registration_number").notNull().unique(),
+  /** שם הפרויקט בעמותה / בעסק (optional). */
+  projectName: text("project_name"),
   active: boolean("active").notNull().default(true),
   /** Short URL-safe key, e.g. "shivat-zion" (used in /preview/sample?org=...). */
   slug: text("slug").unique(),
@@ -73,11 +76,25 @@ export const users = pgTable("users", {
   role: userRole("role").notNull(),
   /** scrypt hash for demo/test users who sign in with a password (Google users have none). */
   passwordHash: text("password_hash"),
-  /** null = all organizations (admin/payroll). */
+  /** Unused since `user_organizations`: the organizations a manager may work with live there. */
   organizationId: uuid("organization_id").references(() => organizations.id),
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });
+
+/** Limits a manager to some organizations. A user with no rows here may work with all of them. */
+export const userOrganizations = pgTable(
+  "user_organizations",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.organizationId] })],
+);
 
 /**
  * People who can be the next signer of a step: staff (secretariats, managers, payroll) and outside contacts

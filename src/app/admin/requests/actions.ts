@@ -8,7 +8,7 @@ import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { getWizardPackage } from "@/server/packages-store";
-import { can } from "@/lib/auth/permissions";
+import { can, orgAllowed } from "@/lib/auth/permissions";
 import { checkChain } from "@/lib/workflow/chain";
 import type { Workflow } from "@/lib/workflow/types";
 import { viewer } from "@/server/users-store";
@@ -52,12 +52,13 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
 
   // Only the chosen package (listing every package to find one was slow).
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations()]);
+  const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations({ activeOnly: true })]);
   const org = orgs.find((o) => o.id === input.organizationId);
   if (!pkg) errors["packageId"] = "ערכה לא נמצאה";
-  const { user, perms } = await viewer();
+  const { user, perms, orgIds } = await viewer();
   if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהערכה הזו";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
+  else if (!orgAllowed(user, orgIds, org.id)) errors["organizationId"] = "אין לך הרשאה לעמותה / לעסק הזה";
 
   // Server-side validation; only the cleaned answers are stored.
   let cleaned: Answers = {};

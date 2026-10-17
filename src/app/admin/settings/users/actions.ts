@@ -7,13 +7,13 @@ import { isAdmin, type PackagePermission, type UserRole } from "@/lib/auth/permi
 import { db, schema } from "@/db";
 import { hashPassword, isDemoAddress, validDemoPassword } from "@/lib/auth/password";
 import { RETURN_COOKIE, SESSION_COOKIE, SESSION_TTL_MS, createUserSessionToken, sessionEmail } from "@/lib/auth/session";
-import { currentUser, setUserPermissions, updateUser } from "@/server/users-store";
+import { currentUser, setUserOrgAccess, setUserPermissions, updateUser } from "@/server/users-store";
 
 const cookieOpts = (maxAge: number) => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge });
 
 const PATH = "/admin/settings/users";
 const UUID = /^[0-9a-f-]{36}$/i;
-const ROLES: UserRole[] = ["admin", "org_office", "approver", "payroll"];
+const ROLES: UserRole[] = ["admin", "manager"];
 
 async function requireAdmin() {
   if (!isAdmin(await currentUser())) redirect("/admin/forms");
@@ -32,12 +32,19 @@ export async function updateUserAction(fd: FormData) {
   redirect(`${PATH}?saved=1`);
 }
 
-/** One form per user: checkboxes named `<packageId>.open|view|chain`, plus `packages` = every package id shown. */
+/**
+ * One form per user: checkboxes named `<packageId>.open|view|chain`, plus `packages` = every package id shown;
+ * and `orgScope` = "all" | "some" with `orgs` = the organizations ticked.
+ */
 export async function savePermissionsAction(fd: FormData) {
   await requireAdmin();
   const userId = String(fd.get("userId") ?? "");
   const packageIds = fd.getAll("packages").map(String).filter((p) => UUID.test(p));
   if (!UUID.test(userId)) redirect(`${PATH}?error=input`);
+  const orgIds = fd.getAll("orgs").map(String).filter((o) => UUID.test(o));
+  // "Only some" with nothing ticked would silently mean "all": refuse it instead.
+  if (fd.get("orgScope") === "some" && orgIds.length === 0) redirect(`${PATH}?error=orgs&u=${userId}`);
+  await setUserOrgAccess(userId, fd.get("orgScope") === "some" ? orgIds : []);
   const rows: PackagePermission[] = packageIds.map((p) => ({
     packageTemplateId: p,
     canOpen: !!fd.get(`${p}.open`),
@@ -55,7 +62,7 @@ export async function createDemoUserAction(fd: FormData) {
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const name = String(fd.get("name") ?? "").trim();
   const password = String(fd.get("password") ?? "");
-  const role = String(fd.get("role") ?? "org_office") as UserRole;
+  const role = String(fd.get("role") ?? "manager") as UserRole;
   if (!name || !isDemoAddress(email) || (password && !validDemoPassword(password)) || !ROLES.includes(role)) redirect(`${PATH}?error=demo`);
   const [exists] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
   if (exists) redirect(`${PATH}?error=exists`);

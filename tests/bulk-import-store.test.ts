@@ -1,5 +1,8 @@
 /** Runs against the dev database; skipped when DATABASE_URL is not set. */
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The actions now check permissions through the session cookie; with no cookie there is no signed-in user (open mode = admin).
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
 const hasDb = !!process.env.DATABASE_URL;
 

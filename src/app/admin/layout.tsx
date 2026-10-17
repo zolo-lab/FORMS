@@ -22,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/archive" className="hover:text-foreground">ארכיון נתונים</Link>
           {admin && <Link href="/admin/forms" className="hover:text-foreground">טפסים</Link>}
           {admin && <Link href="/admin/packages" className="hover:text-foreground">ערכות</Link>}
-          {admin && <Link href="/admin/settings/organizations" className="hover:text-foreground">ארגונים</Link>}
+          {admin && <Link href="/admin/settings/organizations" className="hover:text-foreground">עמותות ועסקים</Link>}
           {admin && <Link href="/admin/settings/people" className="hover:text-foreground">אנשי קשר</Link>}
           {admin && <Link href="/admin/settings/exports" className="hover:text-foreground">תבניות ייצוא</Link>}
           {admin && <Link href="/admin/settings/webhooks" className="hover:text-foreground">Webhooks</Link>}

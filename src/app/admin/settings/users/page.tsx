@@ -4,30 +4,32 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABELS, isAdmin, type UserRole } from "@/lib/auth/permissions";
+import { ROLE_LABELS, isAdmin, normalizeRole, type UserRole } from "@/lib/auth/permissions";
+import { orgLabel } from "@/lib/orgs/input";
+import { listOrganizations } from "@/server/requests-store";
 import { listPackages } from "@/server/dashboard-store";
-import { currentUser, listAllPermissions, listUsers } from "@/server/users-store";
+import { currentUser, listAllOrgAccess, listAllPermissions, listUsers } from "@/server/users-store";
 import { isDemoAddress } from "@/lib/auth/password";
 import { Input } from "@/components/ui/input";
 import { createDemoUserAction, impersonateAction, savePermissionsAction, setPasswordAction, updateUserAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם, וסיסמה (אם יש) של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה" };
+const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם, וסיסמה (אם יש) של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה", orgs: "בחרת \"רק עמותות / עסקים מסוימים\" בלי לסמן אף אחד" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; u?: string }> }) {
   const { error, saved, u } = await searchParams;
   const me = await currentUser();
   if (!isAdmin(me)) redirect("/admin/forms");
-  const [users, perms, packages] = await Promise.all([listUsers(), listAllPermissions(), listPackages()]);
+  const [users, perms, packages, orgs, orgAccess] = await Promise.all([listUsers(), listAllPermissions(), listPackages(), listOrganizations(), listAllOrgAccess()]);
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">משתמשים והרשאות</h1>
         <p className="text-sm text-muted-foreground">
-          משתמש נוצר אוטומטית בכניסה הראשונה עם Google (רק כתובות שמותרות ב-ADMIN_EMAILS). מנהל/ת מערכת רואה הכול. משתמש רגיל רואה את הבקשות
-          שפתח ואת אלה שהוא שלב בהן, ויכול לפתוח בקשות רק מהערכות שסומנו לו כאן.
+          שני תפקידים: אדמין רואה ומנהל הכול. מנהל רואה את הבקשות שפתח ואת אלה שהוא שלב בהן, פותח בקשות רק מהערכות שסומנו לו,
+          ואפשר להגביל אותו לחלק מהעמותות והעסקים. משתמש נוצר אוטומטית בכניסה הראשונה עם Google (רק כתובות שמותרות ב-ADMIN_EMAILS).
         </p>
       </header>
       {error && ERRORS[error] && <p role="alert" className="text-sm text-destructive">{ERRORS[error]}</p>}
@@ -42,7 +44,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           <div className="space-y-1"><Label htmlFor="d-pass">סיסמה (לא חובה)</Label><Input id="d-pass" name="password" type="text" dir="ltr" minLength={6} /></div>
           <div className="space-y-1">
             <Label htmlFor="d-role">תפקיד</Label>
-            <Select id="d-role" name="role" defaultValue="org_office">
+            <Select id="d-role" name="role" defaultValue="manager">
               {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </Select>
           </div>
@@ -54,6 +56,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
       {users.map((user) => {
         const mine = perms.filter((p) => p.userId === user.id);
+        const myOrgs = orgAccess.filter((a) => a.userId === user.id).map((a) => a.organizationId);
+        const limited = myOrgs.length > 0;
         return (
           <Card key={user.id} className="space-y-4 p-4" id={`u-${user.id}`}>
             <form action={updateUserAction} className="flex flex-wrap items-end gap-3">
@@ -64,7 +68,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`role-${user.id}`}>תפקיד</Label>
-                <Select id={`role-${user.id}`} name="role" defaultValue={user.role}>
+                <Select id={`role-${user.id}`} name="role" defaultValue={normalizeRole(user.role)}>
                   {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
@@ -129,6 +133,25 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     </tbody>
                   </table>
                 )}
+                <fieldset className="space-y-2 pt-2">
+                  <legend className="text-sm font-medium">עמותות ועסקים</legend>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="orgScope" value="all" defaultChecked={!limited} className="size-4 accent-primary" /> כל העמותות והעסקים
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="orgScope" value="some" defaultChecked={limited} className="size-4 accent-primary" /> רק המסומנים
+                    </label>
+                  </div>
+                  <div className="grid gap-1.5 text-sm sm:grid-cols-2">
+                    {orgs.map((o) => (
+                      <label key={o.id} className="flex items-center gap-2">
+                        <Checkbox name="orgs" value={o.id} defaultChecked={myOrgs.includes(o.id)} aria-label={`עמותה / עסק – ${orgLabel(o)}`} />
+                        {orgLabel(o)}{!o.active && <span className="text-muted-foreground"> (לא פעיל)</span>}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <Button type="submit" size="sm">{u === user.id && saved ? "נשמר ✓" : "שמירת הרשאות"}</Button>
               </form>
             )}
