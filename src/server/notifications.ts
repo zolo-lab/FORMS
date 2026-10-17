@@ -2,6 +2,7 @@
  * Outbox: rows in `notifications` are created by `enqueue` and sent by `deliverQueued` (Resend over plain fetch).
  * No real mail from non-production: without RESEND_API_KEY a queued row is only logged and stays queued.
  */
+import { isDemoAddress } from "@/lib/auth/password";
 import { and, asc, eq, inArray, lt, lte } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { emailHtml } from "@/lib/email-html";
@@ -98,6 +99,12 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
   const apiKey = process.env.RESEND_API_KEY;
   const out = { sent: 0, failed: 0, skipped: 0 };
   for (const n of rows) {
+    // Demo addresses (@demo.test…) never reach a provider: the message is recorded as sent so the process can be shown.
+    if (n.channel === "email" && isDemoAddress(n.to)) {
+      await db.update(notifications).set({ status: "sent", attempts: n.attempts + 1, providerId: "demo", sentAt: now }).where(eq(notifications.id, n.id));
+      out.sent++;
+      continue;
+    }
     if (n.channel === "email" && (!apiKey || !realMailAllowed())) {
       console.log(`[notifications] (mail disabled here) would send "${n.subject ?? n.templateKey}" to ${n.to}`);
       out.skipped++;

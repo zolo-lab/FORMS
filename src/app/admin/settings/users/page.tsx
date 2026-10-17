@@ -7,11 +7,13 @@ import { Label } from "@/components/ui/label";
 import { ROLE_LABELS, isAdmin, type UserRole } from "@/lib/auth/permissions";
 import { listPackages } from "@/server/dashboard-store";
 import { currentUser, listAllPermissions, listUsers } from "@/server/users-store";
-import { savePermissionsAction, updateUserAction } from "./actions";
+import { isDemoAddress } from "@/lib/auth/password";
+import { Input } from "@/components/ui/input";
+import { createDemoUserAction, impersonateAction, savePermissionsAction, setPasswordAction, updateUserAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל" };
+const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם וסיסמה של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; u?: string }> }) {
   const { error, saved, u } = await searchParams;
@@ -30,6 +32,23 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </header>
       {error && ERRORS[error] && <p role="alert" className="text-sm text-destructive">{ERRORS[error]}</p>}
       {saved && <p role="status" className="text-sm text-success">נשמר.</p>}
+
+      <Card className="space-y-3 p-4">
+        <h2 className="font-semibold">משתמש הדגמה</h2>
+        <p className="text-sm text-muted-foreground">משתמש עם מייל בדוי (@demo.test) וסיסמה, להצגת התהליך. הודעות אליו לא נשלחות בפועל.</p>
+        <form action={createDemoUserAction} className="grid gap-3 sm:grid-cols-5 sm:items-end">
+          <div className="space-y-1"><Label htmlFor="d-name">שם</Label><Input id="d-name" name="name" required /></div>
+          <div className="space-y-1"><Label htmlFor="d-email">מייל</Label><Input id="d-email" name="email" type="email" dir="ltr" placeholder="ruth@demo.test" required /></div>
+          <div className="space-y-1"><Label htmlFor="d-pass">סיסמה</Label><Input id="d-pass" name="password" type="text" dir="ltr" minLength={6} required /></div>
+          <div className="space-y-1">
+            <Label htmlFor="d-role">תפקיד</Label>
+            <Select id="d-role" name="role" defaultValue="org_office">
+              {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </Select>
+          </div>
+          <Button type="submit">יצירה</Button>
+        </form>
+      </Card>
 
       {users.length === 0 && <Card className="p-4 text-sm text-muted-foreground">עדיין אין משתמשים. המשתמש הראשון שייכנס עם Google יהיה מנהל/ת המערכת.</Card>}
 
@@ -56,6 +75,25 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               </label>
               <Button type="submit" variant="outline" size="sm">שמירה</Button>
             </form>
+
+            <div className="flex flex-wrap items-end gap-3">
+              {isDemoAddress(user.email) && (
+                <form action={setPasswordAction} className="flex items-end gap-2">
+                  <input type="hidden" name="id" value={user.id} />
+                  <div className="space-y-1">
+                    <Label htmlFor={`pw-${user.id}`}>סיסמה חדשה</Label>
+                    <Input id={`pw-${user.id}`} name="password" type="text" dir="ltr" minLength={6} required />
+                  </div>
+                  <Button type="submit" variant="outline" size="sm">עדכון סיסמה</Button>
+                </form>
+              )}
+              {user.id !== me?.id && user.active && (
+                <form action={impersonateAction}>
+                  <input type="hidden" name="id" value={user.id} />
+                  <Button type="submit" variant="outline" size="sm">היכנס כמשתמש הזה</Button>
+                </form>
+              )}
+            </div>
 
             {user.role !== "admin" && (
               <form action={savePermissionsAction} className="space-y-2">

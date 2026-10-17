@@ -11,6 +11,10 @@ export function LoginForm({ next }: { next: string }) {
     <form action={action} className="space-y-4">
       <input type="hidden" name="next" value={next} />
       <div className="space-y-2">
+        <Label htmlFor="email">מייל (למשתמש הדגמה; להשאיר ריק לסיסמה משותפת)</Label>
+        <Input id="email" name="email" type="email" autoComplete="username" dir="ltr" />
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="password">סיסמה</Label>
         <Input id="password" name="password" type="password" autoComplete="current-password" required dir="ltr" />
       </div>

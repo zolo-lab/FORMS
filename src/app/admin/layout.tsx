@@ -4,10 +4,14 @@ import { Button } from "@/components/ui/button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { isAdmin } from "@/lib/auth/permissions";
 import { currentUser } from "@/server/users-store";
+import { cookies } from "next/headers";
+import { RETURN_COOKIE } from "@/lib/auth/session";
+import { stopImpersonatingAction } from "./settings/users/actions";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   const admin = isAdmin(user);
+  const acting = !!(await cookies()).get(RETURN_COOKIE);
   return (
     <div className="min-h-dvh">
       <header className="flex items-center gap-4 border-b bg-card px-4 py-2">
@@ -34,6 +38,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </form>
         )}
       </header>
+      {acting && user && (
+        <div className="flex flex-wrap items-center gap-3 border-b bg-warning/15 px-4 py-1.5 text-sm" role="status">
+          <span>מחובר/ת כ-{user.name} ({user.email})</span>
+          <form action={stopImpersonatingAction}>
+            <Button type="submit" variant="outline" size="sm">חזרה למנהל</Button>
+          </form>
+        </div>
+      )}
       {children}
     </div>
   );
