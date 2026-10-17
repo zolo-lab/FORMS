@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
-import { fieldIsRequired, nextPageIndex, prevPageIndex, reachedPageIndexes, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
+import { fieldIsRequired, nextPageIndex, prevPageIndex, reachedPageIndexes, resumePageIndex, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
 import { sampleForm, validAnswers } from "./fixtures/sample-form";
 
 const today = "2026-10-13";
@@ -87,5 +87,29 @@ describe("page jumps and locked fields", () => {
     expect(r.errors.locked).toBeUndefined();
     expect(r.cleaned.locked).toBeUndefined();
     expect(validateAnswers(def, { hasKids: "no" }, { today: "2026-10-13" }).errors.locked).toBe("שדה חובה");
+  });
+});
+
+describe("resumePageIndex", () => {
+  const form = parseFormDefinition({
+    schemaVersion: 1,
+    title: "t",
+    pages: ["a", "b", "c"].map((id) => ({ id: `p_${id}`, title: id, fields: [{ id, type: "short_text", label: id, required: true }] })),
+  }).data!;
+  it("starts at the first step when nothing is answered", () => {
+    expect(resumePageIndex(form, {}, { today })).toBe(0);
+  });
+  it("lands on the first step that still needs an answer", () => {
+    expect(resumePageIndex(form, { a: "x" }, { today })).toBe(1);
+    expect(resumePageIndex(form, { a: "x", c: "z" }, { today })).toBe(1);
+    expect(resumePageIndex(form, { b: "y" }, { today })).toBe(0);
+  });
+  it("counts an unanswered optional question as an unfinished step", () => {
+    const optional = parseFormDefinition({ schemaVersion: 1, title: "t", pages: ["a", "b"].map((id) => ({ id: `p_${id}`, title: id, fields: [{ id, type: "short_text", label: id }] })) }).data!;
+    expect(resumePageIndex(optional, { a: "x" }, { today })).toBe(1);
+    expect(resumePageIndex(optional, { a: "x", b: "y" }, { today })).toBe(1);
+  });
+  it("lands on the last step when everything is filled in", () => {
+    expect(resumePageIndex(form, { a: "x", b: "y", c: "z" }, { today })).toBe(2);
   });
 });
