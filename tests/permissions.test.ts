@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedOrgIds, can, hasGrant, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, roleForNewUser, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
+import { allowedOrgIds, can, hasGrant, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, projectLimit, resolveAccess, roleForNewUser, usableOrgIds, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
 
 const admin: SessionUser = { id: "a", email: "a@x.org", name: "A", role: "admin", active: true };
 const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "manager", active: true };
