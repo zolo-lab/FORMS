@@ -6,7 +6,8 @@
  */
 import type { FieldType } from "@/lib/forms/field-types";
 import { DEFAULT_SIZE } from "@/lib/forms/pdf-items";
-import type { Rect } from "./geometry";
+import type { HLine, Rect } from "./geometry";
+import { fieldKey, labelKey, sectionKey } from "@/lib/forms/field-keys";
 import type { GuessPage } from "./guess";
 import type { PageLabel } from "./labels";
 import { normalizeText } from "./match";
@@ -24,7 +25,15 @@ export interface DetectedField {
   comb?: number;
   /** Choices, each with the little square to mark. */
   options?: DetectedOption[];
+  /** A readable id for the field ("employee_firstName"), from the label and the section it sits in. */
+  key?: string;
+  /** The section heading above the field ("ב. פרטי העובד/ת"), when there is one. */
+  section?: string;
+  /** repeating_table: one column per title (right to left) and the rows ruled under the titles. */
+  columns?: DetectedColumn[];
+  rows?: { y: number; height: number }[];
 }
+export interface DetectedColumn { key: string; label: string; type: FieldType; x: number; width: number }
 
 const overlapsX = (x1: number, x2: number, l: PageLabel) => x1 < l.x + l.width && x2 > l.x;
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -46,7 +55,7 @@ export function cleanLabel(s: string, keepLong = false): string {
 }
 
 /** Section headings ("ב. פרטי העובד…") and running prose are not the name of a field. */
-const isHeading = (str: string) => /^\s*[א-ת]\s*[.)]\s/.test(str) && str.length > 22;
+const isHeading = (l: { str: string; height: number }) => /^\s*[א-ת]\s*[.)]\s/.test(l.str) && (l.str.length > 22 || (l.str.length > 12 && l.height >= 11.5));
 const isProse = (str: string) => str.trim().split(/\s+/).length > 12 || /סמן/.test(str);
 
 const has = (n: string, words: string[]) => words.some((w) => n.includes(normalizeText(w)));
@@ -72,9 +81,10 @@ interface Pair { area: Area; label: PageLabel; cost: number }
 const labelsInside = (b: Rect, labels: PageLabel[]) =>
   labels.filter((l) => l.x + l.width / 2 >= b.x && l.x + l.width / 2 <= b.x + b.width && l.y + l.height / 2 >= b.y && l.y + l.height / 2 <= b.y + b.height);
 
-function textAreas(page: GuessPage): Area[] {
+function textAreas(page: GuessPage, skip: Set<HLine>): Area[] {
   const out: Area[] = [];
-  const { lines, combs } = page.shapes;
+  const { combs } = page.shapes;
+  const lines = page.shapes.lines.filter((l) => !skip.has(l));
   const boxes = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length < 2);
   for (const c of combs) out.push({ kind: "comb", box: c, cells: c.cells, edge: c });
   for (const b of boxes) out.push({ kind: "box", box: { x: b.x + 1, y: b.y + 1, width: Math.max(2, b.width - 2), height: Math.max(2, b.height - 2) }, edge: b });
@@ -205,9 +215,17 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     out.push({ label: text, type, page: page.index, box: union(group.map((g) => g.cb)), options });
   }
 
-  // 2. Places to write: each pairs with its closest unclaimed label, one label per area.
-  const areas = textAreas(page);
-  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l.str) && !isProse(l.str));
+  // 2. Tables: a row of short column titles over evenly ruled lines → one repeating table, a cell per column per row.
+  const ruled = new Set<HLine>();
+  for (const t of detectTables(page, claimed)) {
+    t.rules.forEach((l) => ruled.add(l));
+    t.titles.forEach((l) => claimed.add(l.id));
+    out.push(t.field);
+  }
+
+  // 3. Places to write: each pairs with its closest unclaimed label, one label per area.
+  const areas = textAreas(page, ruled);
+  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
   const pairs: Pair[] = [];
   for (const area of areas) for (const label of labels) {
     const cost = costOf(area, label);
@@ -230,7 +248,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     out.push({ label: text, type: type as FieldType, page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) }, ...(area.kind === "comb" ? { comb: area.cells } : {}) });
   }
 
-  // 3. Table cells: a short label inside a frame with nothing drawn to write on. The answer goes under it, in the
+  // 4. Table cells: a short label inside a frame with nothing drawn to write on. The answer goes under it, in the
   //    cell, which ends where the next label to its left begins.
   const frames = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length >= 2);
   for (const label of labels) {
@@ -257,12 +275,121 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   return out;
 }
 
+interface FoundTable { field: Omit<DetectedField, "id">; titles: PageLabel[]; rules: HLine[] }
+
+function detectTables(page: GuessPage, claimed: Set<string>): FoundTable[] {
+  const found: FoundTable[] = [];
+  const free = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
+  const used = new Set<string>();
+  const usedRules = new Set<HLine>();
+  for (const l of [...free].sort((a, b) => b.y - a.y)) {
+    if (used.has(l.id)) continue;
+    const row = free.filter((o) => !used.has(o.id) && Math.abs(o.y - l.y) <= 3).sort((a, b) => b.x - a.x);
+    const titles = row.filter((o) => { const t = cleanLabel(o.str); return t && t.split(" ").length <= 4; });
+    if (titles.length < 2) continue;
+    const left = Math.min(...titles.map((o) => o.x));
+    const right = Math.max(...titles.map((o) => o.x + o.width));
+    const first = page.shapes.lines
+      .filter((r) => !usedRules.has(r) && r.y < l.y && r.y >= l.y - 30 && r.x1 <= left + 6 && r.x2 >= right - 6)
+      .sort((a, b) => b.y - a.y)[0];
+    if (!first) continue;
+    const inSpan = row.filter((o) => o.x + o.width / 2 >= first.x1 - 2 && o.x + o.width / 2 <= first.x2 + 2);
+    const rules: HLine[] = [first];
+    const same = page.shapes.lines
+      .filter((r) => r !== first && !usedRules.has(r) && r.y < first.y && Math.abs(r.x1 - first.x1) <= 4 && Math.abs(r.x2 - first.x2) <= 4)
+      .sort((a, b) => b.y - a.y);
+    for (const r of same) {
+      const gap = rules[rules.length - 1]!.y - r.y;
+      if (gap < 8) continue; // a double rule
+      if (rules.length >= 2) {
+        const pitch = rules[0]!.y - rules[1]!.y;
+        if (Math.abs(gap - pitch) > Math.max(3, pitch * 0.2)) break;
+      } else if (gap > 40) break;
+      rules.push(r);
+    }
+    if (rules.length < 3) continue; // at least two rows
+    // Columns: split the width halfway between neighbouring titles (all texts on the row count as neighbours).
+    const centres = inSpan.map((o) => o.x + o.width / 2).sort((a, b) => b - a);
+    const keys = new Set<string>();
+    const columns: DetectedColumn[] = titles.map((o, i) => {
+      const c = o.x + o.width / 2;
+      const k = centres.indexOf(c);
+      const hi = Math.min(first.x2, k > 0 ? (centres[k - 1]! + c) / 2 : first.x2);
+      const lo = Math.max(first.x1, k < centres.length - 1 ? (centres[k + 1]! + c) / 2 : first.x1);
+      const label = cleanLabel(o.str);
+      let key = labelKey(label) || `col${i + 1}`;
+      for (let n = 2; keys.has(key); n++) key = `${labelKey(label) || "col"}${n}`;
+      keys.add(key);
+      return { key, label, type: typeFromLabel(label), x: round1(lo + 2), width: round1(hi - lo - 4) };
+    });
+    const rows = rules.slice(0, -1).map((r, k) => {
+      const bottom = rules[k + 1]!.y;
+      return { y: round1(bottom + 1.5), height: round1(Math.min(DEFAULT_SIZE.text.height, r.y - bottom - 3)) };
+    });
+    const last = rules[rules.length - 1]!;
+    inSpan.forEach((o) => used.add(o.id));
+    rules.forEach((r) => usedRules.add(r));
+    found.push({
+      titles: inSpan,
+      rules,
+      field: {
+        label: "טבלה",
+        type: "repeating_table",
+        page: page.index,
+        box: { x: round1(first.x1), y: round1(last.y), width: round1(first.x2 - first.x1), height: round1(l.y + l.height - last.y) },
+        columns,
+        rows,
+      },
+    });
+  }
+  return found;
+}
+
+/**
+ * Section headings on the page, top to bottom. Two headings printed side by side can arrive as one text
+ * ("ג. פרטים על ילדיי … ד. פרטים על הכנסותיי"): each part gets its share of the width (Hebrew: the first part on the right).
+ */
+function headingsOf(page: GuessPage): PageLabel[] {
+  const out: PageLabel[] = [];
+  for (const l of page.labels.filter((x) => isHeading(x))) {
+    const cuts = [0, ...[...l.str.matchAll(/\s(?=[א-ת]\.\s)/g)].map((m) => m.index! + 1), l.str.length];
+    const len = l.str.length || 1;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const a = cuts[i]!;
+      const b = cuts[i + 1]!;
+      out.push({ ...l, id: `${l.id}_${i}`, str: l.str.slice(a, b).trim(), x: l.x + l.width * (1 - b / len), width: (l.width * (b - a)) / len });
+    }
+  }
+  return out.sort((a, b) => b.y - a.y);
+}
+
+/** Text of a heading up to its first bracket: "ג. פרטים על ילדיי (עפ"י ספח)" → "פרטים על ילדיי". */
+const headingName = (h: string) => cleanLabel(h.split(/[()]/)[0] ?? h, true);
+
 /** Reading order of a Hebrew page: top to bottom, then right to left within a row. */
 function inReadingOrder<T extends { page: number; box: Rect }>(list: T[]): T[] {
   return [...list].sort((a, b) => a.page - b.page || Math.round((b.box.y + b.box.height) / 6) - Math.round((a.box.y + a.box.height) / 6) || b.box.x - a.box.x);
 }
 
 export function detectFields(pages: GuessPage[]): DetectedField[] {
-  const all = pages.flatMap((p) => detectPage(p));
-  return inReadingOrder(all).map((f, i) => ({ ...f, id: `d${i}` }));
+  const all = pages.flatMap((p) => {
+    const heads = headingsOf(p);
+    return detectPage(p).map((f) => {
+      // The nearest heading above the field (its top edge, a little tolerance for headings on the same line).
+      const top = f.box.y + f.box.height;
+      const above = heads.filter((x) => x.y >= top - 2).sort((a, b) => a.y - b.y);
+      // Prefer the heading over the same part of the page (two sections side by side).
+      const near = above[0];
+      const h = (near && above.find((x) => x.y - near.y < 40 && x.x < f.box.x + f.box.width + 20 && x.x + x.width > f.box.x - 20)) || near;
+      return h ? { ...f, section: cleanLabel(h.str, true) } : f;
+    });
+  });
+  return inReadingOrder(all).map((f, i) => {
+    const prefix = sectionKey(f.section);
+    if (f.type === "repeating_table") {
+      const label = (f.section && headingName(f.section)) || f.label;
+      return { ...f, id: `d${i}`, label, key: prefix || labelKey(label) || "table" };
+    }
+    return { ...f, id: `d${i}`, key: fieldKey(f.label, f.section, "") || undefined };
+  });
 }

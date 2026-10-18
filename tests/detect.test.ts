@@ -175,3 +175,38 @@ describe("statements and signature lines", () => {
     expect(found.map((f) => [f.label, f.type])).toEqual([["חתימת המבקש/ת", "signature"]]);
   });
 });
+
+describe("tables", () => {
+  // A children table like form 101: three titles over 5 evenly ruled lines (4 rows).
+  const titles = [label("t1", "שם", 483, 466, 11), label("t2", "מספר זהות", 379, 466, 37), label("t3", "תאריך לידה", 282, 466, 37)];
+  const lines = [462, 440, 418, 396, 374].map((y) => ({ x1: 256, x2: 540, y }));
+  const heading = label("h", "ג. פרטים על ילדיי שבשנת המס טרם מלאו להם 19 שנה", 85, 499, 459);
+  const found = detectFields([page([heading, ...titles], { lines })]);
+  it("finds one repeating table with a column per title and a row per ruled line", () => {
+    expect(found).toHaveLength(1);
+    const t = found[0]!;
+    expect(t.type).toBe("repeating_table");
+    expect(t.columns!.map((c) => [c.key, c.type])).toEqual([["name", "short_text"], ["idNumber", "id_number"], ["birthDate", "date"]]);
+    expect(t.rows).toHaveLength(4);
+    expect(t.key).toBe("children");
+  });
+  it("splits the width between the titles, right to left", () => {
+    const [name, id, birth] = found[0]!.columns!;
+    expect(name!.x).toBeGreaterThan(id!.x + id!.width - 1);
+    expect(id!.x).toBeGreaterThan(birth!.x + birth!.width - 1);
+    expect(birth!.x).toBeGreaterThanOrEqual(256);
+    expect(name!.x + name!.width).toBeLessThanOrEqual(540);
+  });
+  it("does not make a table from a single ruled line", () => {
+    const one = detectFields([page(titles, { lines: [lines[0]!] })]);
+    expect(one.some((f) => f.type === "repeating_table")).toBe(false);
+  });
+});
+
+describe("ids from the section", () => {
+  it("gives each field a readable key with its section prefix", () => {
+    const heading = label("h", "ו. פרטים על בן/בת הזוג ועוד פרטים", 300, 720, 230);
+    const f = detectFields([page([heading, label("a", "שם פרטי", 450, 700, 40)], { lines: [{ x1: 300, x2: 445, y: 700 }] })]);
+    expect(f[0]).toMatchObject({ label: "שם פרטי", key: "spouse_firstName" });
+  });
+});
