@@ -9,7 +9,7 @@ const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo", di
 const signatureFont = localFont({ src: "./fonts/GveretLevin-Regular.ttf", variable: "--font-signature", display: "swap", preload: false });
 
 export const metadata: Metadata = {
-  title: "טפסים וחתימות",
+  title: "מערכת הטפסים",
   description: "מערכת קליטה, טפסים וחתימות דיגיטליות",
 };
 

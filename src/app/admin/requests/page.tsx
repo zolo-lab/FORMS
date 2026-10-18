@@ -200,9 +200,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
-              <th className="w-8 px-3 py-2"><SelectAll formId="bulk" /></th>
+              <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
               {["עובד", "ארגון", "ערכה", "סטטוס", "ממתין ל", "ימים בשלב", "התקדמות", "נוצרה", "יעד"].map((h) => (
-                <th key={h} className="px-3 py-2 text-start font-medium">
+                <th key={h} scope="col" className="px-3 py-2 text-start font-medium">
                   {h}
                 </th>
               ))}
@@ -235,7 +235,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <td className="px-3 py-2">{r.daysInStep ?? "—"}</td>
                   <td className="px-3 py-2">{r.progress.total ? `${r.progress.done}/${r.progress.total}` : "—"}</td>
                   <td className="px-3 py-2">{fmt.format(r.createdAt)}</td>
-                  <td className={`px-3 py-2 ${r.overdue ? "font-medium text-destructive" : ""}`}>{r.expiresAt ? fmt.format(r.expiresAt) : "—"}</td>
+                  <td className={`px-3 py-2 ${r.overdue ? "font-medium text-destructive" : ""}`}>{r.overdue && <span aria-hidden="true">⚠ </span>}{r.expiresAt ? fmt.format(r.expiresAt) : "—"}{r.overdue && <span className="sr-only"> (באיחור)</span>}</td>
                 </tr>
               );
             })}

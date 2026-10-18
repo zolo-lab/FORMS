@@ -70,11 +70,11 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
             </caption>
             <thead>
               <tr className="border-b text-xs text-muted-foreground">
-                <th className="px-3 py-2 text-start font-medium">#</th>
-                <th className="px-3 py-2 text-start font-medium">עמודה בקובץ</th>
-                <th className="px-3 py-2 text-start font-medium">מקור הערך</th>
-                <th className="px-3 py-2 text-start font-medium">ערך קבוע</th>
-                <th className="px-3 py-2 text-start font-medium">פורמט</th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">#</th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">עמודה בקובץ</th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">מקור הערך</th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">ערך קבוע</th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">פורמט</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -125,7 +125,7 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
           <Card className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b">{preview[0]!.map((h, i) => <th key={i} className="whitespace-nowrap px-2 py-1 text-start font-medium">{h}</th>)}</tr>
+                <tr className="border-b">{preview[0]!.map((h, i) => <th key={i} scope="col" className="whitespace-nowrap px-2 py-1 text-start font-medium">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y">
                 {preview.slice(1).map((r, ri) => (

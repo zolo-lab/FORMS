@@ -13,7 +13,7 @@ export const buttonVariants = cva(
         ghost: "hover:bg-accent",
         destructive: "bg-destructive text-primary-foreground hover:bg-destructive/90",
       },
-      size: { default: "h-10 px-4", sm: "h-8 px-3", lg: "h-11 px-6", icon: "size-10" },
+      size: { default: "h-10 px-4 max-md:min-h-11", sm: "h-8 px-3 max-md:min-h-11", lg: "h-11 px-6", icon: "size-10 max-md:size-11" },
     },
     defaultVariants: { variant: "default", size: "default" },
   },

@@ -120,7 +120,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
                   <tr>
                     {view.headers.map((h, i) => (
                       <th key={i} scope="col" className="whitespace-nowrap px-3 py-2 text-start font-medium">
-                        {h}
+                        {i === 0 ? "בקשה" : h}
                       </th>
                     ))}
                   </tr>
@@ -132,7 +132,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
                         <td key={ci} className="whitespace-nowrap px-3 py-1.5 text-start">
                           {ci === 0 ? (
                             <Link className="text-primary hover:underline" href={`/admin/requests/${c}`}>
-                              פתיחה
+                              פתיחת הבקשה
                             </Link>
                           ) : (
                             c
