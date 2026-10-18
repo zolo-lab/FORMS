@@ -180,11 +180,12 @@ export function PdfTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <input ref={input} type="file" accept="application/pdf" hidden onChange={(e) => upload(e.target.files?.[0])} />
-        <Button variant={pdf ? "outline" : "default"} disabled={busy} onClick={() => input.current?.click()}>
-          {busy ? "מעלה…" : pdf ? "החלפת PDF" : "העלאת PDF"}
-        </Button>
+        {pdf && (
+          <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}>
+            {busy ? "מעלה…" : "החלפת PDF"}
+          </Button>
+        )}
         {pdf && <span className="text-sm text-muted-foreground"><bdi>{pdf.file.name}</bdi> · {pdf.file.pages.length} עמודים</span>}
-        {pdf && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>הסרת ה-PDF מהטופס</Button>}
         {pdf && pending === 0 && allFields(definition).length === 0 && (
           <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
             {guessBusy ? "מנתח את ה-PDF…" : "זיהוי שדות מה-PDF"}
@@ -215,7 +216,15 @@ export function PdfTab({
           <Button size="sm" variant="ghost" onClick={() => setAcro(null)}>התעלמות</Button>
         </div>
       )}
-      {!pdf && <p className="text-sm text-muted-foreground">העלו PDF של הטופס (עד 4MB), ואז הצמידו אליו את שדות הטופס. כך נוצר PDF ממולא וחתום.</p>}
+      {!pdf && (
+        <div className="mx-auto max-w-xl space-y-3 rounded-lg border-2 border-dashed border-primary/40 p-6 text-center">
+          <h2 className="text-lg font-semibold">קודם מעלים את המסמך</h2>
+          <p className="text-sm text-muted-foreground">
+            כל טופס מתחיל מ-PDF (עד 4MB, עם טקסט ולא סרוק). המערכת קוראת אותו ומציעה שדות, או שמשבצים עליו את השדות שכבר בטופס. אותם שדות משמשים גם את הטופס הרספונסיבי וגם את המילוי על המסמך.
+          </p>
+          <Button disabled={busy} onClick={() => input.current?.click()} className="min-h-11">{busy ? "מעלה…" : "בחירת קובץ PDF"}</Button>
+        </div>
+      )}
       {pdf && (
         <PdfPlacement
           definition={definition}

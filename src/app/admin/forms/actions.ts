@@ -50,7 +50,8 @@ export async function importFormAction(formData: FormData) {
   }
   if (!parsed.success) return redirect("/admin/forms?error=schema");
   const id = await createTemplate(parsed.data.title, parsed.data);
-  redirect(`/admin/forms/${id}`);
+  // An imported definition has no document yet: the PDF tab asks for it.
+  redirect(`/admin/forms/${id}?tab=pdf`);
 }
 
 export async function duplicateFormAction(formData: FormData) {
