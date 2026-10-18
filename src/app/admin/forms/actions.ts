@@ -1,7 +1,8 @@
 "use server";
 import { requireGrant } from "@/server/guards";
 import { redirect } from "next/navigation";
-import { createTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
+import { createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
+import { revalidatePath } from "next/cache";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
 import { findTemplate } from "@/lib/forms/templates";
@@ -80,4 +81,13 @@ export async function saveDraftAction(templateId: string, definition: unknown, p
 export async function publishAction(templateId: string) {
   await requireGrant("manageForms");
   return publishTemplate(templateId);
+}
+
+/** Deletes a form and everything that used it; the list page asks for confirmation first. */
+export async function deleteFormAction(formData: FormData) {
+  await requireGrant("manageForms");
+  const id = String(formData.get("id") ?? "");
+  if (id) await deleteTemplate(id);
+  revalidatePath("/admin/forms");
+  redirect("/admin/forms?deleted=1");
 }
