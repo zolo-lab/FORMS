@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +16,13 @@ const linkCls = (on: boolean) =>
 /** Everyday items in a row, the rarely used admin pages in a "הגדרות" menu. On a phone everything folds into one menu. */
 export function AdminNav({ items, settings }: { items: NavItem[]; settings: NavGroup[] }) {
   const path = usePathname();
-  const [open, setOpen] = useState(false);
-  const [menu, setMenu] = useState(false);
-  useEffect(() => { setOpen(false); setMenu(false); }, [path]);
+  // Menus are open for the page they were opened on, so navigating closes them without an effect.
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  const [menuAt, setMenuAt] = useState<string | null>(null);
+  const open = openAt === path;
+  const menu = menuAt === path;
+  const setOpen = (f: (v: boolean) => boolean) => setOpenAt(f(open) ? path : null);
+  const setMenu = (f: boolean | ((v: boolean) => boolean)) => setMenuAt((typeof f === "function" ? f(menu) : f) ? path : null);
   const settingsOn = settings.some((g) => g.items.some((i) => isOn(path, i)));
 
   const settingsList = settings.map((g) => (

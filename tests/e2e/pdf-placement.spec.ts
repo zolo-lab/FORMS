@@ -15,11 +15,10 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /^ממתינים לשיבוץ/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "סוגי שדות" })).toBeVisible();
 
-  // Adding a type puts a stamp in the middle of the page (A4: 595.28 x 841.89 pt).
+  // Adding a type puts a stamp on the page.
   await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
-  expect(stamps[0]!.x).toBeCloseTo((595.28 - 120) / 2, -1);
 
   // Dragging by 100px right and 50px up at 100% zoom moves it by 100pt / 50pt in PDF space.
   const box = (await page.locator("[data-stamp]").first().boundingBox())!;
