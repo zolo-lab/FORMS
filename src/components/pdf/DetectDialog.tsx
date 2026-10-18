@@ -59,6 +59,12 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
       <p className="text-muted-foreground">
         מצאנו <b className="text-foreground">{fields.length}</b> מקומות למילוי. בטלו סימון למה שאינו שדה, תקנו שם, סוג או מזהה, והשדות יתווספו לטופס וימוקמו על המסמך (אפשר להזיז אחר כך). המערכת זוכרת את התיקונים ומציעה אותם בפעם הבאה.
       </p>
+      {fields.some((f) => f.skip) && (
+        <p role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-muted p-2">
+          {fields.filter((f) => f.skip).length} הצעות לא מסומנות כי ביטלתם אותן בעבר.
+          <Button size="sm" variant="outline" onClick={() => setRows((r) => r.map((x, i) => (fields[i]!.skip ? { ...x, include: true } : x)))}>סימון גם אותן</Button>
+        </p>
+      )}
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: true })))}>סימון הכול</Button>
         <Button size="sm" variant="ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: false })))}>ניקוי הכול</Button>

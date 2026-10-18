@@ -21,6 +21,7 @@ describe("feedback from the dialog", () => {
 describe("the latest decision per label", () => {
   const rows = [
     { sourceLabel: "בשנת המס", sourceNorm: learnKey("בשנת המס"), detectedType: "short_text", kept: false },
+    { sourceLabel: "בשנת המס", sourceNorm: learnKey("בשנת המס"), detectedType: "short_text", kept: false },
     { sourceLabel: "תאריך", sourceNorm: learnKey("תאריך"), detectedType: "short_text", kept: true, finalLabel: "תאריך החתימה", finalType: "date", finalKey: "signDate" },
     // Older: a different decision for the same label is ignored.
     { sourceLabel: "בשנת המס", sourceNorm: learnKey("בשנת המס"), detectedType: "short_text", kept: true, finalLabel: "שנת המס" },
@@ -29,6 +30,19 @@ describe("the latest decision per label", () => {
   it("keeps only the newest decision", () => {
     expect(learned[learnKey("בשנת המס")]).toEqual({ skip: true });
     expect(learned[learnKey("תאריך")]).toEqual({ label: "תאריך החתימה", type: "date", key: "signDate" });
+  });
+  it("needs agreement to hide a label: one unticked short label does not hide the others", () => {
+    const one = latestDecisions([{ sourceLabel: "שם", sourceNorm: learnKey("שם"), detectedType: "short_text", kept: false }]);
+    expect(one.get(learnKey("שם"))).toBeUndefined();
+    const mixed = latestDecisions([
+      { sourceLabel: "שם", sourceNorm: learnKey("שם"), detectedType: "short_text", kept: false },
+      { sourceLabel: "שם", sourceNorm: learnKey("שם"), detectedType: "short_text", kept: true },
+      { sourceLabel: "שם", sourceNorm: learnKey("שם"), detectedType: "short_text", kept: false },
+      { sourceLabel: "שם", sourceNorm: learnKey("שם"), detectedType: "short_text", kept: true },
+    ]);
+    expect(mixed.get(learnKey("שם"))).toEqual({});
+    const long = latestDecisions([{ sourceLabel: "מספר ילדים שנולדו בשנת המס", sourceNorm: learnKey("מספר ילדים שנולדו בשנת המס"), detectedType: "consent", kept: false }]);
+    expect(long.get(learnKey("מספר ילדים שנולדו בשנת המס"))).toEqual({ skip: true });
   });
   it("applies it to new proposals: dropped ones come unticked, kept ones renamed", () => {
     const out = applyLearned([f("d0", "בשנת המס", "short_text"), f("d1", "תאריך:", "short_text"), f("d2", "טלפון", "phone")], learned);
