@@ -30,7 +30,7 @@ export const learnKey = (label: string) => normalizeText(label);
 export function feedbackFrom(proposed: Pick<DetectedField, "id" | "label" | "type" | "key">[], kept: Pick<DetectedField, "id" | "label" | "type" | "key">[]): Feedback[] {
   const byId = new Map(kept.map((k) => [k.id, k]));
   return proposed
-    .filter((p) => learnKey(p.label))
+    .filter((p) => /[A-Za-z֐-׿]/.test(p.label) && learnKey(p.label))
     .map((p) => {
       const k = byId.get(p.id);
       return k
