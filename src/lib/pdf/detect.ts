@@ -55,7 +55,7 @@ export function cleanLabel(s: string, keepLong = false): string {
 }
 
 /** Section headings ("ב. פרטי העובד…") and running prose are not the name of a field. */
-const isHeading = (str: string) => /^\s*[א-ת]\s*[.)]\s/.test(str) && str.length > 22;
+const isHeading = (l: { str: string; height: number }) => /^\s*[א-ת]\s*[.)]\s/.test(l.str) && (l.str.length > 22 || (l.str.length > 12 && l.height >= 11.5));
 const isProse = (str: string) => str.trim().split(/\s+/).length > 12 || /סמן/.test(str);
 
 const has = (n: string, words: string[]) => words.some((w) => n.includes(normalizeText(w)));
@@ -225,7 +225,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
 
   // 3. Places to write: each pairs with its closest unclaimed label, one label per area.
   const areas = textAreas(page, ruled);
-  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l.str) && !isProse(l.str));
+  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
   const pairs: Pair[] = [];
   for (const area of areas) for (const label of labels) {
     const cost = costOf(area, label);
@@ -279,7 +279,7 @@ interface FoundTable { field: Omit<DetectedField, "id">; titles: PageLabel[]; ru
 
 function detectTables(page: GuessPage, claimed: Set<string>): FoundTable[] {
   const found: FoundTable[] = [];
-  const free = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l.str) && !isProse(l.str));
+  const free = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
   const used = new Set<string>();
   const usedRules = new Set<HLine>();
   for (const l of [...free].sort((a, b) => b.y - a.y)) {
@@ -345,10 +345,26 @@ function detectTables(page: GuessPage, claimed: Set<string>): FoundTable[] {
   return found;
 }
 
-/** Section headings on the page, top to bottom. */
+/**
+ * Section headings on the page, top to bottom. Two headings printed side by side can arrive as one text
+ * ("ג. פרטים על ילדיי … ד. פרטים על הכנסותיי"): each part gets its share of the width (Hebrew: the first part on the right).
+ */
 function headingsOf(page: GuessPage): PageLabel[] {
-  return page.labels.filter((l) => isHeading(l.str)).sort((a, b) => b.y - a.y);
+  const out: PageLabel[] = [];
+  for (const l of page.labels.filter((x) => isHeading(x))) {
+    const cuts = [0, ...[...l.str.matchAll(/\s(?=[א-ת]\.\s)/g)].map((m) => m.index! + 1), l.str.length];
+    const len = l.str.length || 1;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const a = cuts[i]!;
+      const b = cuts[i + 1]!;
+      out.push({ ...l, id: `${l.id}_${i}`, str: l.str.slice(a, b).trim(), x: l.x + l.width * (1 - b / len), width: (l.width * (b - a)) / len });
+    }
+  }
+  return out.sort((a, b) => b.y - a.y);
 }
+
+/** Text of a heading up to its first bracket: "ג. פרטים על ילדיי (עפ"י ספח)" → "פרטים על ילדיי". */
+const headingName = (h: string) => cleanLabel(h.split(/[()]/)[0] ?? h, true);
 
 /** Reading order of a Hebrew page: top to bottom, then right to left within a row. */
 function inReadingOrder<T extends { page: number; box: Rect }>(list: T[]): T[] {
@@ -361,14 +377,16 @@ export function detectFields(pages: GuessPage[]): DetectedField[] {
     return detectPage(p).map((f) => {
       // The nearest heading above the field (its top edge, a little tolerance for headings on the same line).
       const top = f.box.y + f.box.height;
-      const h = heads.filter((x) => x.y >= top - 2).sort((a, b) => a.y - b.y)[0];
+      const above = heads.filter((x) => x.y >= top - 2).sort((a, b) => a.y - b.y);
+      // Prefer the heading over the same part of the page (two sections side by side).
+      const h = above.find((x) => x.x < f.box.x + f.box.width + 20 && x.x + x.width > f.box.x - 20) ?? above[0];
       return h ? { ...f, section: cleanLabel(h.str, true) } : f;
     });
   });
   return inReadingOrder(all).map((f, i) => {
     const prefix = sectionKey(f.section);
     if (f.type === "repeating_table") {
-      const label = f.section ? cleanLabel(f.section) || f.label : f.label;
+      const label = (f.section && headingName(f.section)) || f.label;
       return { ...f, id: `d${i}`, label, key: prefix || labelKey(label) || "table" };
     }
     return { ...f, id: `d${i}`, key: fieldKey(f.label, f.section, "") || undefined };
