@@ -23,7 +23,7 @@ export function Board({ rows }: { rows: RequestRow[] }) {
                   <span className="block text-xs text-muted-foreground">{r.organizationName} · {r.packageName}</span>
                   <span className="mt-1 flex items-center justify-between text-xs">
                     <span>{r.progress.total ? `${r.progress.done}/${r.progress.total}` : ""}</span>
-                    {r.daysInStep !== null && <span className={r.overdue ? "font-medium text-destructive" : "text-muted-foreground"}>{r.daysInStep} ימים בשלב</span>}
+                    {r.daysInStep !== null && <span className={r.overdue ? "font-medium text-destructive" : "text-muted-foreground"}>{r.overdue ? "⚠ באיחור · " : ""}{r.daysInStep} ימים בשלב</span>}
                   </span>
                 </Link>
               </li>

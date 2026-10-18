@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { isAdmin, hasGrant } from "@/lib/auth/permissions";
 import { currentUser } from "@/server/users-store";
+import { queryRequests } from "@/server/dashboard-store";
 import { cookies } from "next/headers";
 import { RETURN_COOKIE } from "@/lib/auth/session";
 import { stopImpersonatingAction } from "./settings/users/actions";
@@ -13,14 +14,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await currentUser();
   const admin = isAdmin(user);
   const builds = hasGrant(user, "manageForms");
+  let pending = 0;
+  if (user) {
+    try { pending = (await queryRequests({ assigneeEmail: user.email, page: 1 }, new Date(), 1)).total; } catch { pending = 0; }
+  }
   const acting = !!(await cookies()).get(RETURN_COOKIE);
   return (
     <div className="min-h-dvh">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-card px-4 py-2">
+        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground">דילוג לתוכן</a>
         <Link href={builds ? "/admin/requests" : "/admin/inbox"} className="shrink-0 font-bold">מערכת הטפסים</Link>
         <AdminNav
           items={[
-            { href: "/admin/inbox", label: "לטיפולי" },
+            { href: "/admin/inbox", label: "לטיפולי", badge: pending },
             { href: "/admin/requests", label: "בקשות" },
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }, { href: "/admin/packages", label: "מסלולי חתימה" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
@@ -54,7 +60,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </form>
         </div>
       )}
-      {children}
+      <div id="main" tabIndex={-1} className="outline-none">{children}</div>
     </div>
   );
 }
