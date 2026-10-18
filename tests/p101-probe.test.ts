@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { it } from "vitest";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractShapes, type OpCodes } from "@/lib/pdf/geometry";
