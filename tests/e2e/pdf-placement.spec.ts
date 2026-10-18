@@ -20,16 +20,16 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
 
-  // Dragging by 100px right and 50px up at 100% zoom moves it by 100pt / 50pt in PDF space.
+  // Dragging by 100px right and 50px down at 100% zoom moves it by 100pt / -50pt in PDF space.
   const box = (await page.locator("[data-stamp]").first().boundingBox())!;
   await page.mouse.move(box.x + 10, box.y + 8);
   await page.mouse.down();
-  await page.mouse.move(box.x + 110, box.y - 42, { steps: 6 });
+  await page.mouse.move(box.x + 110, box.y + 58, { steps: 6 });
   await page.mouse.up();
   const moved = (await mapping())[0]!;
   // Moves snap to a 2pt grid, so allow ±2pt.
   expect(Math.abs(moved.x - stamps[0]!.x - 100)).toBeLessThanOrEqual(2);
-  expect(Math.abs(moved.y - stamps[0]!.y - 50)).toBeLessThanOrEqual(2);
+  expect(Math.abs(moved.y - stamps[0]!.y + 50)).toBeLessThanOrEqual(2);
 
   // Keyboard nudge and delete work on the selected stamp.
   const before = (await mapping()).length;
