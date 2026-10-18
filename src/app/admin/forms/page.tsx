@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Badge, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { listTemplates } from "@/server/forms-store";
+import { listTemplates, requestCountsByTemplate } from "@/server/forms-store";
+import { DeleteFormButton } from "./DeleteFormButton";
 import { archiveFormAction, createFromTemplateAction, duplicateFormAction, importFormAction } from "./actions";
 import { FORM_TEMPLATES } from "@/lib/forms/templates";
 import { NewFormFromPdf } from "./NewFormFromPdf";
@@ -11,9 +12,9 @@ export const dynamic = "force-dynamic";
 
 const STATUS = { draft: ["טיוטה", "warning"], active: ["פעיל", "success"], archived: ["בארכיון", "muted"] } as const;
 
-export default async function FormsListPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
-  const templates = await listTemplates();
+export default async function FormsListPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string }> }) {
+  const { error, deleted } = await searchParams;
+  const [templates, counts] = await Promise.all([listTemplates(), requestCountsByTemplate()]);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
@@ -37,6 +38,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
           ))}
         </div>
       </Card>
+      {deleted && <p role="status" className="rounded-md bg-muted p-3 text-sm">הטופס נמחק.</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">הייבוא נכשל: {error === "json" ? "הקובץ אינו JSON תקין" : error === "template" ? "התבנית לא נמצאה" : "הגדרת הטופס אינה תקינה"}</p>}
 
       <Card className="divide-y">
@@ -57,6 +59,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
                 <input type="hidden" name="archive" value={t.status === "archived" ? "0" : "1"} />
                 <Button variant="ghost" size="sm" type="submit">{t.status === "archived" ? "שחזור" : "ארכוב"}</Button>
               </form>
+              <DeleteFormButton id={t.id} title={t.title} requests={counts.get(t.id) ?? 0} />
             </div>
           </div>
         ))}

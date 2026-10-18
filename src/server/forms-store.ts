@@ -1,11 +1,11 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db, schema } from "@/db";
 import { blankForm, publishIssues } from "@/lib/forms/builder";
 import { parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 
-const { formTemplates, formTemplateVersions, pdfFiles } = schema;
+const { formTemplates, formTemplateVersions, pdfFiles, packageDocuments, packageTemplateItems, requests, webhooks } = schema;
 
 export async function listTemplates() {
   return db.select().from(formTemplates).orderBy(desc(formTemplates.updatedAt));
@@ -119,4 +119,51 @@ export async function getPdfFile(id: string | null) {
   if (!id) return null;
   const [row] = await db.select().from(pdfFiles).where(eq(pdfFiles.id, id));
   return row ?? null;
+}
+
+/** Requests that used any version of each form (a request is counted once per form). */
+export async function requestCountsByTemplate(): Promise<Map<string, number>> {
+  const rows = await db
+    .selectDistinct({ templateId: formTemplateVersions.templateId, requestId: packageDocuments.requestId })
+    .from(packageDocuments)
+    .innerJoin(formTemplateVersions, eq(packageDocuments.templateVersionId, formTemplateVersions.id));
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.templateId, (out.get(r.templateId) ?? 0) + 1);
+  return out;
+}
+
+/**
+ * Deletes a form for good: its versions, the requests that used it (with their steps, signatures and history),
+ * its place in packages, its webhooks, and its PDFs that no other form uses. Writes are sequential (neon-http);
+ * the request rows go first so nothing is left pointing at a deleted version.
+ */
+export async function deleteTemplate(templateId: string): Promise<{ requests: number }> {
+  const versions = await db
+    .select({ id: formTemplateVersions.id, pdfFileId: formTemplateVersions.pdfFileId })
+    .from(formTemplateVersions)
+    .where(eq(formTemplateVersions.templateId, templateId));
+  const versionIds = versions.map((v) => v.id);
+  let requestIds: string[] = [];
+  if (versionIds.length) {
+    const docs = await db
+      .selectDistinct({ requestId: packageDocuments.requestId })
+      .from(packageDocuments)
+      .where(inArray(packageDocuments.templateVersionId, versionIds));
+    requestIds = docs.map((d) => d.requestId);
+  }
+  if (requestIds.length) await db.delete(requests).where(inArray(requests.id, requestIds));
+  await db.delete(packageTemplateItems).where(eq(packageTemplateItems.templateId, templateId));
+  await db.delete(webhooks).where(eq(webhooks.templateId, templateId));
+  await db.delete(formTemplates).where(eq(formTemplates.id, templateId));
+  const pdfIds = [...new Set(versions.map((v) => v.pdfFileId).filter((id): id is string => !!id))];
+  if (pdfIds.length) {
+    const stillUsed = await db
+      .selectDistinct({ id: formTemplateVersions.pdfFileId })
+      .from(formTemplateVersions)
+      .where(inArray(formTemplateVersions.pdfFileId, pdfIds));
+    const used = new Set(stillUsed.map((r) => r.id));
+    const orphans = pdfIds.filter((id) => !used.has(id));
+    if (orphans.length) await db.delete(pdfFiles).where(inArray(pdfFiles.id, orphans));
+  }
+  return { requests: requestIds.length };
 }
