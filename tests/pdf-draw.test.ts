@@ -273,3 +273,32 @@ describe("splitStepAt", () => {
     expect(r.definition.pages[1]!.nextPage).toHaveLength(1);
   });
 });
+
+describe("addDetectedFields with tables and keys", () => {
+  it("uses the detected key as the field id", () => {
+    const { definition } = addDetectedFields(empty(), [{ id: "d0", label: "שם פרטי", type: "short_text", page: 0, box: { x: 300, y: 700, width: 120, height: 16 }, key: "employee_firstName" }], [], () => "s");
+    expect(allFields(definition)[0]!.id).toBe("employee_firstName");
+  });
+  it("makes a repeating table with a stamp per row and column", () => {
+    let n = 0;
+    const { definition, stamps } = addDetectedFields(
+      empty(),
+      [{
+        id: "d0", label: "פרטים על ילדיי", type: "repeating_table", page: 0, box: { x: 256, y: 374, width: 284, height: 102 }, key: "children",
+        columns: [
+          { key: "name", label: "שם", type: "short_text", x: 445, width: 90 },
+          { key: "birthDate", label: "תאריך לידה", type: "date", x: 258, width: 90 },
+        ],
+        rows: [{ y: 441.5, height: 16 }, { y: 419.5, height: 16 }, { y: 397.5, height: 16 }],
+      }],
+      [],
+      () => `s${++n}`,
+    );
+    const table = allFields(definition)[0]!;
+    expect(table).toMatchObject({ id: "children", type: "repeating_table", settings: { maxRows: 3 } });
+    expect(table.fields!.map((f) => [f.id, f.type])).toEqual([["name", "short_text"], ["birthDate", "date"]]);
+    expect(stamps.map((s) => s.fieldId)).toEqual(["children[0].name", "children[0].birthDate", "children[1].name", "children[1].birthDate", "children[2].name", "children[2].birthDate"]);
+    expect(stamps[2]).toMatchObject({ x: 445, y: 419.5, kind: "text", guessed: true });
+    expect(parseFormDefinition(definition).success).toBe(true);
+  });
+});

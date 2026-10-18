@@ -8,7 +8,9 @@ import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { REFINABLE_TYPES } from "@/lib/pdf/refine";
 import type { DetectedField } from "@/lib/pdf/detect";
 
-interface Row { include: boolean; label: string; type: DetectedField["type"] }
+interface Row { include: boolean; label: string; type: DetectedField["type"]; key: string }
+
+const KEY = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 
 const TEXT_TYPES = new Set<string>(REFINABLE_TYPES);
 
@@ -38,15 +40,16 @@ export function DetectDialog({
 }
 
 function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: DetectedField[]; pageCount: number; canSplit: boolean; onConfirm: (f: DetectedField[], o: { stepPerPage: boolean }) => void; onClose: () => void }) {
-  const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: true, label: f.label, type: f.type })));
+  const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: true, label: f.label, type: f.type, key: f.key ?? "" })));
   const [split, setSplit] = useState(canSplit);
   const patch = (i: number, p: Partial<Row>) => setRows((r) => r.map((x, k) => (k === i ? { ...x, ...p } : x)));
   const chosen = rows.filter((r) => r.include && r.label.trim()).length;
+  const badKey = rows.some((r) => r.include && r.key.trim() && !KEY.test(r.key.trim()));
 
   function confirm() {
     const out = fields.flatMap((f, i) => {
       const r = rows[i]!;
-      return r.include && r.label.trim() ? [{ ...f, label: r.label.trim(), type: r.type }] : [];
+      return r.include && r.label.trim() ? [{ ...f, label: r.label.trim(), type: r.type, key: r.key.trim() || undefined }] : [];
     });
     onConfirm(out, { stepPerPage: split });
   }
@@ -81,7 +84,22 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
               ) : (
                 <span className="w-40 rounded-md bg-muted px-2 py-2 text-center text-muted-foreground">{FIELD_TYPE_META[f.type].label}</span>
               )}
+              <Input
+                value={r.key}
+                onChange={(e) => patch(i, { key: e.target.value })}
+                dir="ltr"
+                placeholder="מזהה"
+                aria-label={`מזהה השדה ${f.label}`}
+                aria-invalid={r.include && !!r.key.trim() && !KEY.test(r.key.trim())}
+                disabled={!r.include}
+                className="w-44 font-mono text-xs"
+              />
               {pageCount > 1 && <span className="text-xs text-muted-foreground">עמוד {f.page + 1}</span>}
+              {f.columns && f.rows && (
+                <span className="basis-full ps-7 text-xs text-muted-foreground">
+                  עמודות: {f.columns.map((c) => c.label).join(" · ")} · {f.rows.length} שורות
+                </span>
+              )}
               {f.options && <span className="basis-full ps-7 text-xs text-muted-foreground">אפשרויות: {f.options.map((o) => o.label).join(" · ")}</span>}
             </li>
           );
@@ -93,8 +111,9 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
           <span>שלב נפרד לכל עמוד ב-PDF (נוח למילוי בחלקים)</span>
         </label>
       )}
+      {badKey && <p className="text-destructive">מזהה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות.</p>}
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <Button onClick={confirm} disabled={chosen === 0} className="min-h-11">הוספת {chosen} שדות לטופס</Button>
+        <Button onClick={confirm} disabled={chosen === 0 || badKey} className="min-h-11">הוספת {chosen} שדות לטופס</Button>
         <Button variant="outline" onClick={onClose} className="min-h-11">אבנה ידנית</Button>
       </div>
     </div>

@@ -6,7 +6,7 @@
  */
 import type { PdfStamp } from "./pdf-mapping";
 import { DEFAULT_SIZE } from "./pdf-items";
-import type { FieldType } from "./field-types";
+import { FIELD_TYPE_META, type FieldType } from "./field-types";
 import { allFields, type FormDefinition, type FormField } from "./schema";
 import { uniqueId } from "./builder";
 import type { DetectedField } from "@/lib/pdf/detect";
@@ -191,13 +191,28 @@ export function addDetectedFields(
   const pageOf = new Map<string, number>();
   const ordered = [...detected].sort((a, b) => readingOrder({ page: a.page, ...a.box }, { page: b.page, ...b.box }));
   for (const d of ordered) {
-    const fieldId = uniqueFieldId(definition, `pdf_${d.type}_`);
+    const fieldId = d.key && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(d.key) ? uniqueId(d.key, new Set(allFields(definition).map((f) => f.id))) : uniqueFieldId(definition, `pdf_${d.type}_`);
     const field: FormField = { id: fieldId, type: d.type, label: d.label };
     const base = PDF_PALETTE.find((e) => e.fieldType === d.type)?.stamp;
     const stamps: PdfStamp[] = [];
     const put = (partial: Partial<PdfStamp> & { kind: PdfStamp["kind"] }, box: { x: number; y: number; width: number; height: number }) =>
       stamps.push({ id: newId(), fieldId, page: d.page, ...box, ...partial, guessed: true } as PdfStamp);
-    if (d.options && (d.type === "radio" || d.type === "checkboxes")) {
+    if (d.type === "repeating_table" && d.columns && d.rows) {
+      const ids = new Set<string>();
+      const cols = d.columns.map((c) => {
+        const id = uniqueId(/^[a-zA-Z]/.test(c.key) ? c.key : "col", ids);
+        ids.add(id);
+        return { ...c, id };
+      });
+      field.fields = cols.map((c) => ({ id: c.id, type: c.type, label: c.label }));
+      field.settings = { ...(FIELD_TYPE_META.repeating_table.defaultSettings ?? {}), maxRows: d.rows.length };
+      d.rows.forEach((r, k) => {
+        for (const c of cols) {
+          const t = PDF_PALETTE.find((e) => e.fieldType === c.type)?.stamp;
+          stamps.push({ id: newId(), fieldId: `${fieldId}[${k}].${c.id}`, page: d.page, x: c.x, y: r.y, width: c.width, height: r.height, ...(t && t.kind === "text" ? t : {}), kind: "text", guessed: true } as PdfStamp);
+        }
+      });
+    } else if (d.options && (d.type === "radio" || d.type === "checkboxes")) {
       field.options = d.options.map((o, i) => ({ value: `o${i + 1}`, label: o.label }));
       d.options.forEach((o, i) => put({ kind: "check", whenValue: `o${i + 1}` }, o.box));
     } else if (d.options && d.type === "yes_no") {
