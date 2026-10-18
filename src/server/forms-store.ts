@@ -14,7 +14,7 @@ export async function listTemplates() {
 export async function createTemplate(
   title: string,
   definition?: FormDefinition,
-  kind: "web" | "pdf" | "both" = "web",
+  kind: "web" | "pdf" | "both" = "pdf",
   pdf?: { pdfFileId: string; pdfMapping: PdfMapping },
 ): Promise<string> {
   const def = definition ?? blankForm(title);
@@ -101,7 +101,9 @@ export async function duplicateTemplate(templateId: string): Promise<string | nu
   const data = await getEditorData(templateId);
   if (!data) return null;
   const title = `${data.template.title} (עותק)`;
-  return createTemplate(title, data.version.definition);
+  // The copy keeps the document and where the fields sit on it (a form is its PDF plus its fields).
+  const pdf = data.version.pdfFileId && data.version.pdfMapping ? { pdfFileId: data.version.pdfFileId, pdfMapping: data.version.pdfMapping } : undefined;
+  return createTemplate(title, data.version.definition, "pdf", pdf);
 }
 
 export async function setArchived(templateId: string, archived: boolean) {

@@ -16,6 +16,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
     <FormEditor
       templateId={id}
       initialTab={tab === "pdf" ? "pdf" : "edit"}
+      needsPdf={!data.version.pdfFileId && data.template.publishedVersion === null}
       groups={groups.map((g) => ({ id: g.id, name: g.name }))}
       initial={data.version.definition}
       initialVersion={data.version.version}

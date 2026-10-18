@@ -63,7 +63,8 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
       </Card>
 
       <details className="rounded-lg border bg-card p-3">
-        <summary className="cursor-pointer text-sm font-medium">ייבוא טופס מ-JSON</summary>
+        <summary className="cursor-pointer text-sm font-medium">ייבוא הגדרת טופס מ-JSON</summary>
+        <p className="mt-2 text-sm text-muted-foreground">הטופס נוצר בלי מסמך; אחרי הייבוא מעלים לו את ה-PDF בלשונית &quot;מסמך PDF&quot;.</p>
         <form action={importFormAction} className="mt-3 space-y-2">
           <Textarea name="json" dir="ltr" rows={6} placeholder='{"schemaVersion":1,"title":"…","pages":[…]}' required />
           <Button type="submit" variant="outline">ייבוא</Button>

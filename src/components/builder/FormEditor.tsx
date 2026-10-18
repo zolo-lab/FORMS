@@ -33,11 +33,13 @@ export interface FormEditorProps {
   initiallyPublished: boolean;
   initialPdf: PdfState | null;
   initialTab?: TabId;
+  /** A form that was never published and has no document yet: publishing needs one. */
+  needsPdf?: boolean;
   /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
   groups?: { id: string; name: string }[];
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", groups = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [] }: FormEditorProps) {
   const [def, setDef] = useState(initial);
   const [past, setPast] = useState<FormDefinition[]>([]);
   const [future, setFuture] = useState<FormDefinition[]>([]);
@@ -168,6 +170,12 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           <ul className="list-disc ps-5">{issues.map((m, i) => <li key={i}>{m}</li>)}</ul>
         </div>
       )}
+      {needsPdf && !pdf && tab !== "pdf" && (
+        <p role="status" className="flex flex-wrap items-center gap-2 border-b bg-muted px-4 py-1.5 text-sm">
+          הטופס עדיין בלי מסמך, ואי אפשר לפרסם אותו עד שמעלים PDF.
+          <Button variant="outline" size="sm" onClick={() => setTab("pdf")}>להעלאת המסמך</Button>
+        </p>
+      )}
       {published && (
         <p className="border-b bg-muted px-4 py-1.5 text-xs text-muted-foreground">גרסה {version} נעולה. כל שינוי ייצור אוטומטית גרסה {version + 1} כטיוטה.</p>
       )}
@@ -176,7 +184,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <Tabs<TabId>
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
-          tabs={[{ id: "edit", label: "עריכה" }, { id: "preview", label: "תצוגה מקדימה" }, { id: "pdf", label: "PDF" }, { id: "json", label: "JSON" }]}
+          tabs={[{ id: "pdf", label: "מסמך PDF" }, { id: "edit", label: "עריכה (רספונסיבי)" }, { id: "preview", label: "תצוגה מקדימה" }, { id: "json", label: "JSON" }]}
         />
       </div>
 
