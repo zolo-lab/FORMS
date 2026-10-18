@@ -11,39 +11,25 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; part?: string; x: number; y: number; width: number; height: number; page: number }[];
   expect(await mapping()).toEqual([]);
 
-  // Every form field starts as pending; placing one moves it to "placed".
-  const pendingCount = async () => Number(/\((\d+)\)/.exec((await page.getByRole("heading", { name: /^ממתינים לשיבוץ/ }).textContent())!)![1]);
-  const before0 = await pendingCount();
-  expect(before0).toBeGreaterThan(3);
-  await expect(page.getByRole("heading", { name: "שובצו (0)" })).toBeVisible();
+  // The right panel offers only field types, no list of form fields.
+  await expect(page.getByRole("heading", { name: /^ממתינים לשיבוץ/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "סוגי שדות" })).toBeVisible();
 
-  // Click-to-place puts a stamp in the middle of the page (A4: 595.28 x 841.89 pt).
-  await page.getByRole("button", { name: "מיקום שם פרטי טקסט" }).click();
+  // Adding a type puts a stamp on the page.
+  await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
-  expect(stamps[0]!.fieldId).toBe("firstName");
-  expect(await pendingCount()).toBe(before0 - 1);
-  await expect(page.getByRole("heading", { name: "שובצו (1)" })).toBeVisible();
-  expect(stamps[0]!.x).toBeCloseTo((595.28 - 120) / 2, 0);
-  expect(stamps[0]!.y).toBeCloseTo(841.89 / 2, 0);
 
-  // Dragging by 100px right and 50px up at 100% zoom moves it by 100pt / 50pt in PDF space.
+  // Dragging by 100px right and 50px down at 100% zoom moves it by 100pt / -50pt in PDF space.
   const box = (await page.locator("[data-stamp]").first().boundingBox())!;
   await page.mouse.move(box.x + 10, box.y + 8);
   await page.mouse.down();
-  await page.mouse.move(box.x + 110, box.y - 42, { steps: 6 });
+  await page.mouse.move(box.x + 110, box.y + 58, { steps: 6 });
   await page.mouse.up();
   const moved = (await mapping())[0]!;
   // Moves snap to a 2pt grid, so allow ±2pt.
   expect(Math.abs(moved.x - stamps[0]!.x - 100)).toBeLessThanOrEqual(2);
-  expect(Math.abs(moved.y - stamps[0]!.y - 50)).toBeLessThanOrEqual(2);
-
-  // Composite and table items map to their own keys.
-  await page.getByRole("button", { name: "מיקום כתובת יישוב" }).click();
-  await page.getByRole("button", { name: /מיקום ילדים · שורה 1 · שם טקסט/ }).click();
-  await page.getByRole("button", { name: /מיקום שנישואין|מיקום מצב משפחתי X ליד/ }).first().click();
-  const keys = (await mapping()).map((s) => `${s.fieldId}${s.part ? "." + s.part : ""}`);
-  expect(keys).toEqual(expect.arrayContaining(["firstName", "address.city", "children[0].name", "maritalStatus"]));
+  expect(Math.abs(moved.y - stamps[0]!.y + 50)).toBeLessThanOrEqual(2);
 
   // Keyboard nudge and delete work on the selected stamp.
   const before = (await mapping()).length;

@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Crosshair, Minus, Plus, Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { alignBoxes, distributeBoxes, snapPosition, type AlignMode, nextFreePosition } from "@/lib/pdf/arrange";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
-import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, splitPlacement, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
+import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
@@ -23,16 +23,6 @@ import { usePdfDocument, type PdfSource } from "./usePdfDocument";
 
 const ITEM_DRAG = "application/x-pdf-item";
 const ELEMENT_DRAG = "application/x-pdf-element";
-const KIND_LABEL = {
-  text: "טקסט",
-  check: "X",
-  signature: "חתימה",
-  image: "תמונה",
-  comb: "תאים",
-  date_signed: "תאריך חתימה",
-  initials: "ראשי תיבות",
-  stamp_image: "חותמת",
-} as const;
 
 export interface PdfPlacementProps {
   definition: FormDefinition;
@@ -103,13 +93,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const reveal = (id: string) => requestAnimationFrame(() => rootRef.current?.querySelector(`[data-stamp="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }));
 
   const items = useMemo(() => placeableItems(definition, tableRows), [definition, tableRows]);
-  const groups = useMemo(() => {
-    const m = new Map<string, PlaceableItem[]>();
-    for (const it of items) m.set(it.group, [...(m.get(it.group) ?? []), it]);
-    return [...m.entries()];
-  }, [items]);
   const stampByKey = useMemo(() => new Map(mapping.stamps.map((s) => [stampKey(s), s])), [mapping.stamps]);
-  const { pending, placed: placedGroups } = useMemo(() => splitPlacement(groups, new Set(stampByKey.keys())), [groups, stampByKey]);
   const orphans = useMemo(() => orphanStamps(definition, mapping.stamps), [definition, mapping.stamps]);
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
   const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
@@ -365,34 +349,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   })();
   const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
-  const renderGroup = ([group, list]: [string, PlaceableItem[]]) => (
-    <section key={group}>
-      <h4 className="mb-1 text-xs font-semibold text-muted-foreground">{group}</h4>
-      <ul className="space-y-1">
-        {list.map((it) => {
-          const placed = stampByKey.get(it.key);
-          return (
-            <li
-              key={it.key}
-              draggable
-              onDragStart={(e) => e.dataTransfer.setData(ITEM_DRAG, it.key)}
-              className={cn("flex items-center gap-2 rounded-md border bg-card px-2 py-1 text-sm", placed && selected === placed.id && "border-primary")}
-            >
-              <span className="flex-1 truncate">{placed ? "✓ " : ""}{it.label}</span>
-              <span className="text-xs text-muted-foreground">{KIND_LABEL[it.kind]}</span>
-              <Button variant="ghost" size="sm" aria-label={`מיקום ${it.group} ${it.label}`} onClick={() => place(it, activePage)}><Crosshair className="size-4" /></Button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-
   return (
     <div ref={rootRef} tabIndex={-1} className="grid gap-4 outline-none lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
-      <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="שדות למיקום">
-        <p className="text-xs text-muted-foreground">שדות הטופס שעדיין אין להם מקום על המסמך מופיעים תחת &quot;ממתינים לשיבוץ&quot;. לחצו על &quot;מיקום&quot; או גררו שדה אל העמוד.</p>
+      <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="סוגי שדות">
+        <h3 className="text-sm font-semibold">סוגי שדות</h3>
+        <p className="text-xs text-muted-foreground">גררו שדה אל העמוד, או לחצו + להוספה בעמוד הנוכחי. לחיצה על שדה בעמוד פותחת את המאפיינים שלו משמאל.</p>
         {guessedCount > 0 && (
           <div role="status" className="space-y-2 rounded-md border border-dashed border-primary bg-primary/5 p-2 text-xs">
             <p>{guessedCount} שיבוצים הוצעו אוטומטית (מסומנים בקו מקווקו). גרירה או שינוי גודל מאשרים שיבוץ.</p>
@@ -416,19 +378,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             </div>
           );
         })}
-        <section aria-label="ממתינים לשיבוץ">
-          <h3 className="text-sm font-semibold">ממתינים לשיבוץ ({pending.length})</h3>
-          {pending.length === 0 && <p className="text-xs text-muted-foreground">כל שדות הטופס שובצו על המסמך ✓</p>}
-        {pending.map(renderGroup)}
-        </section>
-        <section aria-label="שובצו">
-          <h3 className="text-sm font-semibold">שובצו ({placedGroups.length})</h3>
-        {placedGroups.map(renderGroup)}
-        </section>
         {onDrawElement && (
-          <details open className="rounded-md border p-2" aria-label="הוספה על המסמך">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">הוספת שדה חדש על המסמך</summary>
-            <p className="my-1 text-xs text-muted-foreground">השדה נוסף גם לטופס עצמו, במקום שמתאים למיקומו בדף.</p>
+          <section aria-label="סוגי שדות להוספה">
             <ul className="grid grid-cols-2 gap-1">
               {PDF_PALETTE.map((entry) => (
                 <li
@@ -442,7 +393,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 </li>
               ))}
             </ul>
-          </details>
+          </section>
         )}
         {orphans.length > 0 && (
           <section className="rounded-md border border-destructive p-2 text-sm">

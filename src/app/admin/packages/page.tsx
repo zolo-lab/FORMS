@@ -17,7 +17,7 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">ערכות</h1>
+        <h1 className="text-2xl font-bold">מסלולי חתימה</h1>
         <form action={createPackageAction} className="flex gap-2">
           <Input name="name" placeholder="שם הערכה החדשה" className="w-56" aria-label="שם הערכה החדשה" />
           <Button type="submit">ערכה חדשה</Button>
