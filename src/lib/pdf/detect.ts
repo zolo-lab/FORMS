@@ -40,7 +40,7 @@ export function cleanLabel(s: string, keepLong = false): string {
     .trim();
   if (!/[A-Za-z֐-׿]/.test(t)) return ""; // "(1)", "9", "/": a mark, not a name
   const words = t.split(" ");
-  if (words.length >= 3 && words.every((w) => w.length === 1)) return ""; // a letter-spaced heading
+  if (words.length >= 2 && words.every((w) => w.length === 1)) return ""; // a letter-spaced heading
   // A sentence ending at the place to write: its last words name the field (the end sits closest to a Hebrew line).
   return !keepLong && words.length > 7 ? words.slice(-6).join(" ") : t;
 }
