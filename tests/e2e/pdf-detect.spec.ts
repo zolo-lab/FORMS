@@ -16,7 +16,7 @@ async function formPdf(): Promise<Buffer> {
   doc.registerFontkit(fontkit);
   const font = await doc.embedFont(readFileSync(path.join(process.cwd(), "assets/fonts/Heebo-Regular.ttf")), { subset: true });
   const page = doc.addPage([595.28, 841.89]);
-  ["שם מלא", "מספר זהות", "תאריך לידה"].forEach((label, i) => {
+  ["שם פרטי ומשפחה", "מספר זהות", "תאריך לידה"].forEach((label, i) => {
     const y = 760 - i * 40;
     drawHebrew(page, label, { x: 400, y, width: 120, size: 12, font });
     page.drawLine({ start: { x: 180, y: y - 2 }, end: { x: 390, y: y - 2 }, thickness: 0.7, color: rgb(0, 0, 0) });
@@ -43,7 +43,8 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   await expect(dialog.getByText("אפשרויות: זכר · נקבה")).toBeVisible();
 
   // Fix one name, then add everything.
-  // (By position: once a name was corrected, the system proposes the corrected one the next time.)
+  // (By position: once a name was corrected, the system proposes the corrected one the next time. The label is
+  // used by this spec only, so the correction it teaches does not leak into other specs on the shared dev database.)
   await rows.nth(0).getByRole("textbox").first().fill("שם העובד");
   await dialog.getByRole("button", { name: /^הוספת 4 שדות לטופס$/ }).click();
   await expect(dialog).toBeHidden();
