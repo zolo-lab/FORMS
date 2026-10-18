@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Redo2, Undo2 } from "lucide-react";
+import { Download, Redo2, Undo2, Sparkles } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
@@ -13,6 +13,8 @@ import {
   renameFieldId, updateField, updatePage,
 } from "@/lib/forms/builder";
 import { orderByPdf } from "@/lib/forms/pdf-draw";
+import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/field-dictionary";
+import { buildXlsx } from "@/lib/export/xlsx";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FieldType } from "@/lib/forms/field-types";
 import { parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
@@ -54,6 +56,47 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const first = useRef(true);
+  const [note, setNote] = useState<string | null>(null);
+  /** Published once: answers are stored under the field ids, so ids stay and only the export keys are filled. */
+  const everPublished = initiallyPublished || initialVersion > 1;
+
+  function autoIds() {
+    const pairs = suggestFieldIds(def);
+    if (!pairs.length) { setNote("לכל השדות כבר יש שמות מזהים."); return; }
+    if (everPublished) {
+      let next = def;
+      let n = 0;
+      for (const [from, to] of pairs) {
+        const loc = findLocation(next, from);
+        const f = loc ? next.pages[loc.page]!.fields[loc.index]! : null;
+        if (f && !f.exportKey?.trim()) { next = updateField(next, from, { exportKey: to }); n++; }
+      }
+      commit(next);
+      setNote(n ? `נוספו ${n} מפתחות ייצוא. המזהים עצמם לא השתנו כי הטופס כבר פורסם.` : "לכל השדות כבר יש מפתח ייצוא.");
+      return;
+    }
+    let next = def;
+    let stamps = pdf?.mapping.stamps ?? [];
+    for (const [from, to] of pairs) {
+      const r = renameFieldId(next, from, to);
+      if (r.error) continue;
+      next = r.def;
+      stamps = renameStamps(stamps, from, to);
+    }
+    commit(next);
+    if (pdf) setPdf({ ...pdf, mapping: { ...pdf.mapping, stamps } });
+    setNote(`${pairs.length} שדות קיבלו שם מזהה.`);
+  }
+
+  function downloadDictionary() {
+    const bytes = buildXlsx(fieldDictionary(def, pdf?.mapping.stamps ?? []), "שדות");
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(def.title || "טופס").replace(/[\\/:*?"<>|]/g, "_")} - שדות.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   /** All edits go through here so undo/redo and autosave see them. */
   const commit = useCallback((next: FormDefinition) => {
@@ -154,7 +197,13 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         >
           צפייה בטופס (בחלון חדש)
         </a>
-        <div className="ms-auto flex items-center gap-1">
+        <div className="ms-auto flex flex-wrap items-center gap-1">
+          <Button variant="outline" size="sm" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית והשלב, לשדות שעדיין אין להם">
+            <Sparkles className="size-4" />שמות מזהים
+          </Button>
+          <Button variant="outline" size="sm" onClick={downloadDictionary} title="קובץ Excel עם כל השדות: מזהה, שם, סוג, שלב וממלא">
+            <Download className="size-4" />רשימת השדות (Excel)
+          </Button>
           {pdf && pdf.mapping.stamps.length > 0 && (
             <Button variant="outline" size="sm" onClick={() => commit(orderByPdf(def, pdf.mapping.stamps))} title="מסדר את השדות בכל שלב לפי המקום שלהם במסמך">סידור לפי ה-PDF</Button>
           )}
@@ -164,6 +213,12 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         </div>
       </div>
 
+      {note && (
+        <div role="status" className="flex items-center gap-2 border-b bg-muted px-4 py-2 text-sm">
+          <span>{note}</span>
+          <Button variant="ghost" size="sm" className="ms-auto" onClick={() => setNote(null)}>סגירה</Button>
+        </div>
+      )}
       {issues.length > 0 && (
         <div role="alert" className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
           <p className="font-medium">אי אפשר לפרסם עדיין:</p>
@@ -230,6 +285,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                     const r = renameFieldId(def, selectedField.id, to);
                     if (r.error) return r.error;
                     commit(r.def);
+                    // The places on the document follow the new id.
+                    if (pdf) setPdf({ ...pdf, mapping: { ...pdf.mapping, stamps: renameStamps(pdf.mapping.stamps, selectedField.id, to) } });
                     setSelection({ kind: "field", id: to });
                   }}
                 />
