@@ -307,7 +307,7 @@ export function PdfTab({
         {guess && (
           <div className="space-y-4 text-sm">
             <p>
-              מצאנו ב-PDF מקום ל-<b>{guess.stamps.length}</b> מתוך {guess.total} שדות. השיבוצים יסומנו בקו מקווקו, ואפשר להזיז, לשנות או למחוק אותם. שדות שלא נמצא להם מקום נשארים ברשימת &quot;ממתינים לשיבוץ&quot;.
+              מצאנו ב-PDF מקום ל-<b>{guess.stamps.length}</b> מתוך {guess.total} שדות. השיבוצים יסומנו בקו מקווקו, ואפשר להזיז, לשנות או למחוק אותם.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button

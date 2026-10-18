@@ -18,7 +18,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <h1 className="text-2xl font-bold">טפסים</h1>
+      <h1 className="text-2xl font-bold">תבניות טפסים</h1>
       {/* Every form starts from a PDF: the system reads it and proposes the fields. */}
       <NewFormFromPdf />
       <Card className="p-4">

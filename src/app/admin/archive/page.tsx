@@ -10,7 +10,7 @@ import { listPackages } from "@/server/dashboard-store";
 import { listExportTemplates } from "@/server/export-templates-store";
 import { loadExport } from "@/server/export-store";
 import { listOrganizations } from "@/server/requests-store";
-import { hasGrant } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin } from "@/lib/auth/permissions";
 import { currentUser, viewerScope } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,8 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold">ארכיון נתונים</h1>
-        <p className="text-sm text-muted-foreground">כל הערכים שמולאו, לפי סוג טופס (ערכה). המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.</p>
+        <h1 className="text-2xl font-bold">נתונים וייצוא</h1>
+        <p className="text-sm text-muted-foreground">כל הערכים שמולאו, לפי סוג טופס (מסלול חתימה). המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.{isAdmin(me) && <> <Link href="/admin/settings/exports" className="underline">תבניות ייצוא</Link></>}</p>
       </div>
 
       <form method="get" className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="סינון">
