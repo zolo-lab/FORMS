@@ -43,7 +43,8 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   await expect(dialog.getByText("אפשרויות: זכר · נקבה")).toBeVisible();
 
   // Fix one name, then add everything.
-  await dialog.getByLabel("שם השדה שם מלא").fill("שם העובד");
+  // (By position: once a name was corrected, the system proposes the corrected one the next time.)
+  await rows.nth(0).getByRole("textbox").first().fill("שם העובד");
   await dialog.getByRole("button", { name: /^הוספת 4 שדות לטופס$/ }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => page.locator("[data-stamp]").count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(5);

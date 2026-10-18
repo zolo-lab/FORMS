@@ -11,7 +11,7 @@ type Named = Pick<DetectedField, "id" | "label" | "type"> & { options?: { label:
 
 export async function refineWithClaude(
   fields: Named[],
-  opts: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch } = {},
+  opts: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; examples?: string[] } = {},
 ): Promise<Refinement[] | null> {
   const env = opts.env ?? process.env;
   const key = env.ANTHROPIC_API_KEY;
@@ -25,7 +25,7 @@ export async function refineWithClaude(
         max_tokens: 3000,
         tools: [REFINE_TOOL],
         tool_choice: { type: "tool", name: REFINE_TOOL.name },
-        messages: [{ role: "user", content: refinePrompt(fields) }],
+        messages: [{ role: "user", content: refinePrompt(fields, opts.examples) }],
       }),
       signal: AbortSignal.timeout(25_000),
     });

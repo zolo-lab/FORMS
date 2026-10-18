@@ -32,6 +32,9 @@ export interface DetectedField {
   /** repeating_table: one column per title (right to left) and the rows ruled under the titles. */
   columns?: DetectedColumn[];
   rows?: { y: number; height: number }[];
+  /** Set from earlier corrections (learn.ts): the proposal follows a person's decision; `skip` = they dropped it. */
+  learned?: boolean;
+  skip?: boolean;
 }
 export interface DetectedColumn { key: string; label: string; type: FieldType; x: number; width: number }
 

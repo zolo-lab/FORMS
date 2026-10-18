@@ -9,6 +9,7 @@ import { extractPageData } from "@/components/pdf/extract-page-data";
 import { guessOne, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import { detectFields, type DetectedField } from "@/lib/pdf/detect";
 import { applyRefinements, type Refinement } from "@/lib/pdf/refine";
+import { applyLearned, feedbackFrom, type Learned } from "@/lib/pdf/learn";
 import { DetectDialog } from "@/components/pdf/DetectDialog";
 import type { Match } from "@/lib/pdf/match";
 import { nanoid } from "nanoid";
@@ -31,7 +32,9 @@ export function PdfTab({
   pdf,
   onChange,
   onDefinitionChange,
+  templateId,
 }: {
+  templateId?: string;
   definition: FormDefinition;
   pdf: PdfState | null;
   onChange: (p: PdfState | null) => void;
@@ -59,6 +62,9 @@ export function PdfTab({
   const askAfterUpload = useRef(!!pdf && allFields(definition).length === 0 && pdf.mapping.stamps.length === 0);
   /** Fields the PDF seems to ask for, waiting for the admin's choice. */
   const [found, setFound] = useState<DetectedField[] | null>(null);
+  /** The proposals as the local detection read them, before memory and model: what the admin's decisions are about. */
+  const proposed = useRef<DetectedField[]>([]);
+  const offer = (list: DetectedField[], source: DetectedField[] = list) => { proposed.current = source; setFound(list); };
   /** Places to write the existing fields did not claim (offered after the placement question). */
   const [extra, setExtra] = useState<DetectedField[]>([]);
   const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
@@ -105,7 +111,8 @@ export function PdfTab({
       if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
       // A form with no fields yet: propose them from the document.
       if (allFields(defRef.current).length === 0) {
-        let detected = detectFields(pages);
+        const local = detectFields(pages);
+        let detected = local;
         if (detected.length === 0) { setGuessNote("לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך."); return; }
         try {
           const res = await fetch("/api/admin/pdf-detect", {
@@ -114,11 +121,14 @@ export function PdfTab({
             body: JSON.stringify({ fields: detected.map((f) => ({ id: f.id, label: f.label, type: f.type, options: f.options?.map((o) => ({ label: o.label })) })) }),
           });
           if (res.ok) {
-            const refinements = ((await res.json()) as { refinements: Refinement[] | null }).refinements;
-            if (refinements) detected = applyRefinements(detected, refinements);
+            const answer = (await res.json()) as { refinements: Refinement[] | null; learned?: Record<string, Learned> };
+            // People's earlier decisions first; the model only touches what nobody decided yet.
+            detected = applyLearned(detected, answer.learned ?? {});
+            const decided = new Set(detected.filter((f) => f.learned).map((f) => f.id));
+            if (answer.refinements) detected = applyRefinements(detected, answer.refinements.filter((r) => !decided.has(r.id)));
           }
         } catch { /* local detection stands */ }
-        setFound(detected);
+        offer(detected, local);
         return;
       }
       const targets = unplacedSimpleFields(defRef.current, pdf.mapping.stamps);
@@ -279,6 +289,11 @@ export function PdfTab({
         onClose={() => setFound(null)}
         onConfirm={(chosen, opts) => {
           if (!pdf) return;
+          // Remember what was kept, dropped and renamed, so the next PDF with the same labels starts from it.
+          const items = feedbackFrom(proposed.current, chosen);
+          if (items.length) {
+            void fetch("/api/admin/pdf-detect/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ templateId, items }) }).catch(() => {});
+          }
           const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), opts);
           changeDefinition(added.definition);
           onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...added.stamps] } });
@@ -305,7 +320,7 @@ export function PdfTab({
               </Button>
               <Button variant="outline" onClick={() => setGuess(null)}>אשבץ ידנית</Button>
               {extra.length > 0 && (
-                <Button variant="ghost" onClick={() => { setFound(extra); setGuess(null); }}>נמצאו עוד {extra.length} מקומות למילוי ללא שדה, להוסיף?</Button>
+                <Button variant="ghost" onClick={() => { offer(extra); setGuess(null); }}>נמצאו עוד {extra.length} מקומות למילוי ללא שדה, להוסיף?</Button>
               )}
             </div>
           </div>

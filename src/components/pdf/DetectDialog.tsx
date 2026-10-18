@@ -40,7 +40,7 @@ export function DetectDialog({
 }
 
 function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: DetectedField[]; pageCount: number; canSplit: boolean; onConfirm: (f: DetectedField[], o: { stepPerPage: boolean }) => void; onClose: () => void }) {
-  const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: true, label: f.label, type: f.type, key: f.key ?? "" })));
+  const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: !f.skip, label: f.label, type: f.type, key: f.key ?? "" })));
   const [split, setSplit] = useState(canSplit);
   const patch = (i: number, p: Partial<Row>) => setRows((r) => r.map((x, k) => (k === i ? { ...x, ...p } : x)));
   const chosen = rows.filter((r) => r.include && r.label.trim()).length;
@@ -57,7 +57,7 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        מצאנו <b className="text-foreground">{fields.length}</b> מקומות למילוי. בטלו סימון למה שאינו שדה, תקנו שם או סוג, והשדות יתווספו לטופס וימוקמו על המסמך (אפשר להזיז אחר כך).
+        מצאנו <b className="text-foreground">{fields.length}</b> מקומות למילוי. בטלו סימון למה שאינו שדה, תקנו שם, סוג או מזהה, והשדות יתווספו לטופס וימוקמו על המסמך (אפשר להזיז אחר כך). המערכת זוכרת את התיקונים ומציעה אותם בפעם הבאה.
       </p>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: true })))}>סימון הכול</Button>
@@ -95,6 +95,11 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
                 className="w-44 font-mono text-xs"
               />
               {pageCount > 1 && <span className="text-xs text-muted-foreground">עמוד {f.page + 1}</span>}
+              {f.learned && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary" title="לפי מה שבחרתם בפעם הקודמת שהופיעה התווית הזאת">
+                  {f.skip ? "בוטל בעבר" : "לפי תיקון קודם"}
+                </span>
+              )}
               {f.columns && f.rows && (
                 <span className="basis-full ps-7 text-xs text-muted-foreground">
                   עמודות: {f.columns.map((c) => c.label).join(" · ")} · {f.rows.length} שורות
