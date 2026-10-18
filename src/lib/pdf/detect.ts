@@ -287,7 +287,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     else if (area.kind === "line") box = { ...box, width: Math.min(box.width, 260) };
     if (area.kind === "line") {
       // A line sits inside its cell: do not run past the borders around it, nor up into the text above.
-      const { lo, hi } = cellSides(bs, box.x + box.width / 2, area.edge.y, area.edge.y + 6);
+      const { lo, hi } = cellSides(bs, area.edge.x + area.edge.width / 2, area.edge.y, area.edge.y + 6);
       const x1 = Math.max(box.x, lo !== null && lo < box.x + box.width ? lo + 1 : box.x);
       const x2 = Math.min(box.x + box.width, hi !== null && hi > x1 ? hi - 1 : box.x + box.width);
       if (x2 - x1 >= 15) box = { ...box, x: x1, width: x2 - x1 };
