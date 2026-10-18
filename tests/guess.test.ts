@@ -51,7 +51,7 @@ describe("geometry from a real pdf.js operator list", () => {
 
   it("reads thin filled bars as rules and ignores filled backgrounds and clip paths", () => {
     expect(extractShapes(ops(22, rect(100, 500, 120, 0.8)), OPS).lines).toEqual([{ x1: 100, x2: 220, y: 500.4 }]);
-    expect(extractShapes(ops(22, rect(100, 500, 120, 20)), OPS)).toEqual({ lines: [], boxes: [], checkboxes: [], combs: [] });
+    expect(extractShapes(ops(22, rect(100, 500, 120, 20)), OPS)).toEqual({ lines: [], boxes: [], checkboxes: [], combs: [], vlines: [] });
     expect(extractShapes(ops(29, rect(100, 500, 120, 20)), OPS).boxes).toEqual([]);
   });
   it("applies the current transform (translate and scale)", () => {

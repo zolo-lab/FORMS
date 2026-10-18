@@ -77,6 +77,42 @@ export function typeFromLabel(label: string): FieldType {
   return "short_text";
 }
 
+/** Cell borders on the page: ruled verticals plus the sides of drawn boxes and comb cells. */
+function borders(page: GuessPage): { x: number; y1: number; y2: number }[] {
+  const out = [...(page.shapes.vlines ?? [])];
+  for (const b of [...page.shapes.boxes, ...page.shapes.combs]) {
+    if (b.height < 8) continue;
+    out.push({ x: b.x, y1: b.y, y2: b.y + b.height }, { x: b.x + b.width, y1: b.y, y2: b.y + b.height });
+  }
+  return out;
+}
+
+/** The nearest borders left and right of `cx` that cross the band [yLo, yHi]; null where there is none. */
+function cellSides(bs: { x: number; y1: number; y2: number }[], cx: number, yLo: number, yHi: number): { lo: number | null; hi: number | null } {
+  let lo: number | null = null;
+  let hi: number | null = null;
+  for (const b of bs) {
+    if (b.y1 > yHi || b.y2 < yLo) continue;
+    if (b.x <= cx && (lo === null || b.x > lo)) lo = b.x;
+    if (b.x >= cx && (hi === null || b.x < hi)) hi = b.x;
+  }
+  return { lo, hi };
+}
+
+/** Lower the top of `box` so it stays under any text that sits inside its vertical span (except `own`). */
+function clipAbove(box: Rect, labels: PageLabel[], own: PageLabel | undefined, minHeight: number): Rect | null {
+  let top = box.y + box.height;
+  for (const l of labels) {
+    if (l === own || l.id === own?.id) continue;
+    if (l.x >= box.x + box.width - 1 || l.x + l.width <= box.x + 1) continue;
+    const bottom = l.y + l.height * 0.2;
+    if (bottom > box.y + 1 && bottom < top) top = bottom;
+  }
+  if (top >= box.y + box.height) return box;
+  const height = top - box.y - 0.5;
+  return height >= minHeight ? { ...box, height } : null;
+}
+
 interface Area { kind: "line" | "box" | "comb"; box: Rect; cells?: number; edge: Rect }
 interface Pair { area: Area; label: PageLabel; cost: number }
 
@@ -227,6 +263,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   }
 
   // 3. Places to write: each pairs with its closest unclaimed label, one label per area.
+  const bs = borders(page);
   const areas = textAreas(page, ruled);
   const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
   const pairs: Pair[] = [];
@@ -248,6 +285,16 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     if (type === "signature") box = { ...box, width: Math.min(box.width, 200), height: DEFAULT_SIZE.signature.height };
     else if (area.kind === "box" && box.height >= 30 && type === "short_text") type = "long_text";
     else if (area.kind === "line") box = { ...box, width: Math.min(box.width, 260) };
+    if (area.kind === "line") {
+      // A line sits inside its cell: do not run past the borders around it, nor up into the text above.
+      const { lo, hi } = cellSides(bs, area.edge.x + area.edge.width / 2, area.edge.y, area.edge.y + 6);
+      const x1 = Math.max(box.x, lo !== null && lo < box.x + box.width ? lo + 1 : box.x);
+      const x2 = Math.min(box.x + box.width, hi !== null && hi > x1 ? hi - 1 : box.x + box.width);
+      if (x2 - x1 >= 15) box = { ...box, x: x1, width: x2 - x1 };
+      const clipped = clipAbove(box, page.labels, label, type === "signature" ? 18 : 9);
+      if (!clipped) continue;
+      box = clipped;
+    }
     out.push({ label: text, type: type as FieldType, page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) }, ...(area.kind === "comb" ? { comb: area.cells } : {}) });
   }
 
@@ -267,13 +314,17 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     const leftNeighbour = labels
       .filter((o) => o !== label && Math.abs(o.y - label.y) <= 3 && o.x + o.width <= label.x + 2)
       .reduce((m, o) => Math.max(m, o.x + o.width), frame.x);
-    const x = Math.max(frame.x + 2, leftNeighbour + 4);
-    const width = Math.min(260, Math.max(50, right - x));
+    const side = cellSides(bs.filter((b) => b.x >= frame.x - 1 && b.x <= frame.x + frame.width + 1), cx, label.y - 20, label.y + label.height);
+    const cellLo = side.lo !== null && side.lo > frame.x + 1 ? side.lo : null;
+    const cellHi = side.hi !== null && side.hi < frame.x + frame.width - 1 ? side.hi : null;
+    const x = Math.max(frame.x + 2, leftNeighbour + 4, cellLo !== null ? cellLo + 2 : 0);
+    const rightEdge = cellHi !== null ? Math.min(right, cellHi - 2) : right;
+    const width = Math.min(260, Math.max(cellHi !== null || cellLo !== null ? 30 : 50, rightEdge - x));
     const y = Math.max(frame.y + 1, label.y - 20);
     const height = Math.min(DEFAULT_SIZE.text.height, label.y - 2 - y);
     if (height < 10) continue;
     usedLabels.add(label.id);
-    out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(right - width), y: round1(y), width: round1(width), height: round1(height) } });
+    out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(x), y: round1(y), width: round1(width), height: round1(height) } });
   }
   return out;
 }
@@ -312,13 +363,18 @@ function detectTables(page: GuessPage, claimed: Set<string>): FoundTable[] {
     }
     if (rules.length < 3) continue; // at least two rows
     // Columns: split the width halfway between neighbouring titles (all texts on the row count as neighbours).
+    const tb = borders(page).filter((b) => b.x >= first.x1 - 1 && b.x <= first.x2 + 1);
     const centres = inSpan.map((o) => o.x + o.width / 2).sort((a, b) => b - a);
     const keys = new Set<string>();
     const columns: DetectedColumn[] = titles.map((o, i) => {
       const c = o.x + o.width / 2;
       const k = centres.indexOf(c);
-      const hi = Math.min(first.x2, k > 0 ? (centres[k - 1]! + c) / 2 : first.x2);
-      const lo = Math.max(first.x1, k < centres.length - 1 ? (centres[k + 1]! + c) / 2 : first.x1);
+      let hi = Math.min(first.x2, k > 0 ? (centres[k - 1]! + c) / 2 : first.x2);
+      let lo = Math.max(first.x1, k < centres.length - 1 ? (centres[k + 1]! + c) / 2 : first.x1);
+      // Drawn column borders win over the halfway guess.
+      const side = cellSides(tb, c, rules[rules.length - 1]!.y, first.y);
+      if (side.hi !== null && side.hi > c && side.hi < hi) hi = side.hi;
+      if (side.lo !== null && side.lo < c && side.lo > lo) lo = side.lo;
       const label = cleanLabel(o.str);
       let key = labelKey(label) || `col${i + 1}`;
       for (let n = 2; keys.has(key); n++) key = `${labelKey(label) || "col"}${n}`;
