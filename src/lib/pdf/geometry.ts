@@ -30,10 +30,13 @@ export interface OpCodes {
 
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface HLine { x1: number; x2: number; y: number }
+export interface VLine { x: number; y1: number; y2: number }
 export interface Comb extends Rect { cells: number }
 export interface Shapes {
   /** Horizontal rules at least 15pt long (underlines to write on). */
   lines: HLine[];
+  /** Vertical rules at least 8pt long (cell borders). Optional: older callers and fixtures have none. */
+  vlines?: VLine[];
   /** Rectangles that could hold text. */
   boxes: Rect[];
   /** Small squares (checkboxes). */
@@ -107,6 +110,7 @@ export function extractShapes(ops: OpList, c: OpCodes): Shapes {
   let ctm: Matrix = IDENTITY;
   const stack: Matrix[] = [];
   const lines: HLine[] = [];
+  const vlines: VLine[] = [];
   const rects: Rect[] = [];
 
   for (let i = 0; i < ops.fnArray.length; i++) {
@@ -133,12 +137,16 @@ export function extractShapes(ops: OpList, c: OpCodes): Shapes {
         if (uniq.length === 2 && isStroke && near(uniq[0]![1], uniq[1]![1])) {
           const [x1, x2] = [Math.min(uniq[0]![0], uniq[1]![0]), Math.max(uniq[0]![0], uniq[1]![0])];
           if (x2 - x1 >= 15) lines.push({ x1, x2, y: (uniq[0]![1] + uniq[1]![1]) / 2 });
+        } else if (uniq.length === 2 && isStroke && near(uniq[0]![0], uniq[1]![0])) {
+          const [y1, y2] = [Math.min(uniq[0]![1], uniq[1]![1]), Math.max(uniq[0]![1], uniq[1]![1])];
+          if (y2 - y1 >= 8) vlines.push({ x: (uniq[0]![0] + uniq[1]![0]) / 2, y1, y2 });
         } else if (uniq.length === 4) {
           const xs = [...new Set(uniq.map((p) => Math.round(p[0] * 10) / 10))].sort((p, q) => p - q);
           const ys = [...new Set(uniq.map((p) => Math.round(p[1] * 10) / 10))].sort((p, q) => p - q);
           if (xs.length !== 2 || ys.length !== 2) continue;
           const r: Rect = { x: xs[0]!, y: ys[0]!, width: xs[1]! - xs[0]!, height: ys[1]! - ys[0]! };
           if (r.height <= 1.5 && r.width >= 15) lines.push({ x1: r.x, x2: r.x + r.width, y: r.y + r.height / 2 }); // a rule drawn as a thin bar
+          else if (r.width <= 1.5 && r.height >= 8) vlines.push({ x: r.x + r.width / 2, y1: r.y, y2: r.y + r.height });
           else if (isStroke && r.width >= 3 && r.height >= 3 && r.width <= 600 && r.height <= 120) rects.push(r);
           // Fill-only rectangles are backgrounds, not places to write.
         }
@@ -146,12 +154,18 @@ export function extractShapes(ops: OpList, c: OpCodes): Shapes {
     }
   }
 
-  return classify(dedupeLines(lines), dedupeRects(rects));
+  return { ...classify(dedupeLines(lines), dedupeRects(rects)), vlines: dedupeVLines(vlines) };
 }
 
 function dedupeLines(lines: HLine[]): HLine[] {
   const out: HLine[] = [];
   for (const l of lines) if (!out.some((o) => near(o.y, l.y, 0.6) && near(o.x1, l.x1, 1) && near(o.x2, l.x2, 1))) out.push(l);
+  return out;
+}
+
+function dedupeVLines(v: VLine[]): VLine[] {
+  const out: VLine[] = [];
+  for (const l of v) if (!out.some((o) => near(o.x, l.x, 0.6) && near(o.y1, l.y1, 1) && near(o.y2, l.y2, 1))) out.push(l);
   return out;
 }
 

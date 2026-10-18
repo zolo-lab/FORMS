@@ -176,6 +176,27 @@ describe("statements and signature lines", () => {
   });
 });
 
+describe("borders", () => {
+  it("keeps a signature line from growing up into the statement above it", () => {
+    const line = { x1: 90, x2: 290, y: 100 };
+    const text = label("p", "אני מצהיר כי הפרטים שמסרתי נכונים", 100, 125, 180);
+    const found = detectFields([page([text, label("s", "חתימת המבקש/ת", 150, 90, 70)], { lines: [line] })]);
+    const sig = found.find((f) => f.type === "signature")!;
+    expect(sig.box.y + sig.box.height).toBeLessThanOrEqual(125 + 11 * 0.2);
+  });
+  it("stops a line at the cell borders around it", () => {
+    const line = { x1: 100, x2: 400, y: 100 };
+    const found = detectFields([page([label("n", "שם", 380, 102, 15)], { lines: [line], vlines: [{ x: 250, y1: 90, y2: 120 }, { x: 410, y1: 90, y2: 120 }] })]);
+    const f = found.find((x) => x.label === "שם")!;
+    expect(f.box.x).toBeGreaterThanOrEqual(250);
+    expect(f.box.x + f.box.width).toBeLessThanOrEqual(410);
+  });
+  it("reads vertical rules", () => {
+    const v = extractShapes({ fnArray: [91], argsArray: [[OPS.stroke, [[0, 50, 10, 1, 50, 60]]]] } as never, OPS);
+    expect(v.vlines).toEqual([{ x: 50, y1: 10, y2: 60 }]);
+  });
+});
+
 describe("tables", () => {
   // A children table like form 101: three titles over 5 evenly ruled lines (4 rows).
   const titles = [label("t1", "שם", 483, 466, 11), label("t2", "מספר זהות", 379, 466, 37), label("t3", "תאריך לידה", 282, 466, 37)];
