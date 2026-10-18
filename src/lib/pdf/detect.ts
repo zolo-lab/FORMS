@@ -30,18 +30,19 @@ const overlapsX = (x1: number, x2: number, l: PageLabel) => x1 < l.x + l.width &
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Drop numbering, trailing colons, asterisks and underscores: "3. שם פרטי:*" → "שם פרטי". */
-export function cleanLabel(s: string): string {
+export function cleanLabel(s: string, keepLong = false): string {
   const t = s
     .replace(/^\s*(?:\d{1,2}|[א-ת])\s*[.)]\s+/, "")
     .replace(/[\s:：*_.\-–]+$/g, "")
-    .replace(/^[\s:：*_]+/g, "")
+    .replace(/^[\s:：*_)(\]\[}{]+/g, "")
+    .replace(/[\s/]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!/[A-Za-z֐-׿]/.test(t)) return ""; // "(1)", "9", "/": a mark, not a name
   const words = t.split(" ");
   if (words.length >= 3 && words.every((w) => w.length === 1)) return ""; // a letter-spaced heading
   // A sentence ending at the place to write: its last words name the field (the end sits closest to a Hebrew line).
-  return words.length > 7 ? words.slice(-6).join(" ") : t;
+  return !keepLong && words.length > 7 ? words.slice(-6).join(" ") : t;
 }
 
 /** Section headings ("ב. פרטי העובד…") and running prose are not the name of a field. */
@@ -58,7 +59,7 @@ export function typeFromLabel(label: string): FieldType {
   if (has(n, ["תאריך", "מתאריך", "עד תאריך"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
   if (has(n, ["טלפון", "נייד", "סלולרי", "פקס"])) return "phone";
-  if (has(n, ["סכום", "שכר", "שח"]) || label.includes("₪")) return "currency";
+  if (has(n, ["סכום", "שכר"]) || n.split(" ").includes("שח") || label.includes("₪")) return "currency";
   if (has(n, ["דרכון"])) return "short_text";
   if (has(n, ["כמות", "גיל", "מספר", "מיקוד"])) return "number";
   return "short_text";
@@ -102,6 +103,8 @@ function costOf(area: Area, label: PageLabel): number | null {
   // line
   if (Math.abs(e.y - label.y) <= Math.max(8, label.height) && right <= label.x + 3) return label.x - right + Math.abs(e.y - label.y) * 2;
   if (e.y < label.y - 2 && label.y - e.y <= 28 && overlapsX(e.x, right, label)) return 60 + (label.y - e.y) * 2;
+  // The name printed under the line ("חתימת המבקש/ת" under a signature line).
+  if (e.y >= label.y && e.y - label.y <= 14 && overlapsX(e.x, right, label)) return 40 + (e.y - label.y);
   return null;
 }
 
@@ -134,7 +137,7 @@ function checkGroups(boxes: Box[]): Box[][] {
     const chain: Box[] = [];
     for (const o of row) {
       const prev = chain[chain.length - 1];
-      if (!prev || prev.cb.x - (o.cb.x + o.cb.width) <= 160) chain.push(o);
+      if (!prev || prev.cb.x - (o.cb.x + o.cb.width) <= 90) chain.push(o);
       else break;
     }
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
@@ -170,10 +173,15 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     const l = optionLabel(b.cb, page.labels, claimed);
     if (l) { b.label = l; claimed.add(l.id); }
   }
-  for (const group of checkGroups(boxes.filter((b) => b.label))) {
+  // Short texts are options of one question; a long statement beside a square stands alone.
+  const labelled = boxes.filter((b) => b.label);
+  const isOption = (b: Box) => cleanLabel(b.label!.str).split(" ").length <= 4;
+  for (const group of [...checkGroups(labelled.filter(isOption)), ...labelled.filter((b) => !isOption(b)).map((b) => [b])]) {
     const rightmost = group[0]!;
     if (group.length === 1) {
-      out.push({ label: cleanLabel(rightmost.label!.str), type: "consent", page: page.index, box: rightmost.cb });
+      const statement = cleanLabel(rightmost.label!.str, true);
+      if (!statement) continue;
+      out.push({ label: statement, type: "consent", page: page.index, box: rightmost.cb });
       continue;
     }
     // The question: text just right of the first square on its row, else just above the group.
@@ -189,7 +197,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
       if (gap >= -3 && gap <= 120 && gap < bestGap) { question = l; bestGap = gap; }
     }
     if (question) claimed.add(question.id);
-    const text = question ? cleanLabel(question.str) : "בחירה";
+    const text = (question && cleanLabel(question.str)) || "בחירה";
     const options = group.map((g) => ({ label: cleanLabel(g.label!.str), box: g.cb }));
     const norm = options.map((o) => normalizeText(o.label)).sort().join("|");
     const yesNo = [normalizeText("כן"), normalizeText("לא")].sort().join("|");
@@ -231,7 +239,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     if (!text || text.length > 30 || text.split(" ").length > 4) continue;
     const cx = label.x + label.width / 2;
     const frame = frames
-      .filter((f) => cx >= f.x && cx <= f.x + f.width && label.y >= f.y && label.y + label.height <= f.y + f.height)
+      .filter((f) => cx >= f.x && cx <= f.x + f.width && label.y >= f.y && label.y + label.height * 0.5 <= f.y + f.height)
       .sort((a, b) => a.width * a.height - b.width * b.height)[0];
     if (!frame) continue;
     const right = label.x + label.width;

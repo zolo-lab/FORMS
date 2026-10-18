@@ -104,6 +104,10 @@ describe("labels that are not names", () => {
     expect(cleanLabel("ש נ ת ה מ ס")).toBe("");
     expect(cleanLabel("אני מצהיר שהפרטים שמסרתי בטופס זה מלאים ונכונים ואני מבקש תאריך לידה")).toBe("בטופס זה מלאים ונכונים ואני מבקש תאריך לידה".split(" ").slice(-6).join(" "));
   });
+  it("does not read a currency out of the middle of a word", () => {
+    expect(typeFromLabel("תעודת שחרור")).toBe("short_text");
+    expect(typeFromLabel("סכום בש\"ח")).toBe("currency");
+  });
   it("reads passports as text and zip codes as numbers", () => {
     expect(typeFromLabel("מספר דרכון")).toBe("short_text");
     expect(typeFromLabel("מיקוד")).toBe("number");
@@ -153,7 +157,21 @@ describe("table cells", () => {
     expect(found[0]!.box.x + found[0]!.box.width).toBeCloseTo(490, 0);
   });
   it("skips headings and instructions inside a frame", () => {
-    const f = detectFields([page([label("h", "ב. פרטי העובד יש לצרף צילום תעודת זהות", 100, 670, 400), label("i", "סמן את הילדים", 300, 660, 60), label("n", "שם", 480, 650, 20)], { boxes: [frame] })]);
+    const f = detectFields([page([label("h", "ב. פרטי העובד יש לצרף צילום תעודת זהות", 100, 680, 400), label("i", "סמן את הילדים", 300, 665, 60), label("n", "שם", 480, 670, 20)], { boxes: [{ ...frame, height: 60 }] })]);
     expect(f.map((x) => x.label)).toEqual(["שם"]);
+  });
+});
+
+describe("statements and signature lines", () => {
+  it("makes one consent per long statement even when they stand in a column", () => {
+    const labels = [label("a", "אני תושב/ת קבוע/ה בישוב מזכה לפי הרשימה", 300, 700, 200), label("b", "אני הורה במשפחה חד הורית ומקבל קצבה", 300, 670, 200)];
+    const found = detectFields([page(labels, { checkboxes: [sq(505, 700), sq(505, 670)] })]);
+    expect(found.map((f) => f.type)).toEqual(["consent", "consent"]);
+    expect(found[0]!.label).toBe("אני תושב/ת קבוע/ה בישוב מזכה לפי הרשימה");
+  });
+  it("takes the name printed under a line as its label", () => {
+    const line = { x1: 34, x2: 122, y: 186 };
+    const found = detectFields([page([label("s", "חתימת המבקש/ת", 49, 179, 60)], { lines: [line] })]);
+    expect(found.map((f) => [f.label, f.type])).toEqual([["חתימת המבקש/ת", "signature"]]);
   });
 });
