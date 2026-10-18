@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/input";
 import { listTemplates, requestCountsByTemplate } from "@/server/forms-store";
 import { DeleteFormButton } from "./DeleteFormButton";
-import { archiveFormAction, createFromTemplateAction, duplicateFormAction, importFormAction } from "./actions";
-import { FORM_TEMPLATES } from "@/lib/forms/templates";
+import { archiveFormAction, duplicateFormAction, importFormAction } from "./actions";
 import { NewFormFromPdf } from "./NewFormFromPdf";
 
 export const dynamic = "force-dynamic";
@@ -21,23 +20,6 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
       <h1 className="text-2xl font-bold">תבניות טפסים</h1>
       {/* Every form starts from a PDF: the system reads it and proposes the fields. */}
       <NewFormFromPdf />
-      <Card className="p-4">
-        <h2 className="font-semibold">התחלה מתבנית</h2>
-        <p className="mb-2 text-sm text-muted-foreground">השדות של התבנית יתווספו לטופס, ואז תעלו את ה-PDF ותשבצו אותם עליו.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {FORM_TEMPLATES.map((t) => (
-            <form key={t.id} action={createFromTemplateAction} className="flex flex-col gap-2 rounded-md border p-3">
-              <input type="hidden" name="template" value={t.id} />
-              <span className="font-medium">{t.name}</span>
-              <span className="text-sm text-muted-foreground">{t.description}</span>
-              <div className="mt-auto flex gap-2">
-                <Input name="title" placeholder={t.definition.title} aria-label={`שם הטופס מתבנית ${t.name}`} className="flex-1" />
-                <Button type="submit" variant="outline">יצירה מתבנית</Button>
-              </div>
-            </form>
-          ))}
-        </div>
-      </Card>
       {deleted && <p role="status" className="rounded-md bg-muted p-3 text-sm">הטופס נמחק.</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">הייבוא נכשל: {error === "json" ? "הקובץ אינו JSON תקין" : error === "template" ? "התבנית לא נמצאה" : "הגדרת הטופס אינה תקינה"}</p>}
 
