@@ -45,7 +45,6 @@ describe("table cell values", () => {
     expect(cellRef("firstName")).toBeNull();
   });
 });
-});
 
 describe("text stamps", () => {
   it("reads and writes plain values", () => {
