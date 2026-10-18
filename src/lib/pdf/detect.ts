@@ -108,8 +108,8 @@ function clipAbove(box: Rect, labels: PageLabel[], own: PageLabel | undefined, m
     const bottom = l.y + l.height * 0.2;
     if (bottom > box.y + 1 && bottom < top) top = bottom;
   }
+  if (top >= box.y + box.height) return box;
   const height = top - box.y - 0.5;
-  if (height >= box.height) return box;
   return height >= minHeight ? { ...box, height } : null;
 }
 

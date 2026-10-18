@@ -186,10 +186,10 @@ describe("borders", () => {
   });
   it("stops a line at the cell borders around it", () => {
     const line = { x1: 100, x2: 400, y: 100 };
-    const found = detectFields([page([label("n", "שם", 380, 102, 15)], { lines: [line], vlines: [{ x: 250, y1: 90, y2: 120 }, { x: 410, y1: 90, y2: 120 }] })]);
+    const found = detectFields([page([label("n", "שם", 420, 102, 15)], { lines: [line], vlines: [{ x: 250, y1: 90, y2: 120 }, { x: 405, y1: 90, y2: 120 }] })]);
     const f = found.find((x) => x.label === "שם")!;
     expect(f.box.x).toBeGreaterThanOrEqual(250);
-    expect(f.box.x + f.box.width).toBeLessThanOrEqual(410);
+    expect(f.box.x + f.box.width).toBeLessThanOrEqual(405);
   });
   it("reads vertical rules", () => {
     const v = extractShapes({ fnArray: [91], argsArray: [[OPS.stroke, [[0, 50, 10, 1, 50, 60]]]] } as never, OPS);
