@@ -36,11 +36,14 @@ export const REFINE_TOOL = {
 
 type Named = Pick<DetectedField, "id" | "label" | "type"> & { options?: { label: string }[] };
 
-export function refinePrompt(fields: Named[]): string {
+export function refinePrompt(fields: Named[], examples: string[] = []): string {
   return [
     "A Hebrew PDF form was scanned for places to write. Each detected field below has the label found next to it, a guessed type and, for choices, the option names.",
     "Improve only the label (short, natural Hebrew, no numbering, colons or underscores) and, for plain text fields, the type. Leave a field out when it is already right.",
     `Allowed types: ${REFINABLE_TYPES.join(", ")}. Choice fields keep their type. Answer only by calling report_fields. Use the ids exactly as given.`,
+    ...(examples.length
+      ? ["", "Corrections this organization's admins made to earlier proposals (follow the same style):", ...examples.map((e) => `- ${e}`)]
+      : []),
     "",
     "FIELDS:",
     ...fields.map((f) => `- ${f.id} | ${f.type} | ${f.label}${f.options?.length ? ` | options: ${f.options.map((o) => o.label).join(", ")}` : ""}`),

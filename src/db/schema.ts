@@ -558,3 +558,27 @@ export const exportTemplates = pgTable("export_templates", {
   template: jsonb("template").$type<ExportTemplate>().notNull(),
   ...timestamps,
 });
+
+/**
+ * What admins did with the fields the system proposed from a PDF (kept or dropped, the name, type and id they chose).
+ * The next detection applies the latest decision for the same label, and the model is shown recent ones as examples.
+ * See src/lib/pdf/learn.ts.
+ */
+export const detectFeedback = pgTable(
+  "detect_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The label as the local detection read it, and its normalized form (the lookup key). */
+    sourceLabel: text("source_label").notNull(),
+    sourceNorm: text("source_norm").notNull(),
+    detectedType: text("detected_type").notNull(),
+    kept: boolean("kept").notNull(),
+    finalLabel: text("final_label"),
+    finalType: text("final_type"),
+    finalKey: text("final_key"),
+    templateId: uuid("template_id"),
+    createdBy: uuid("created_by"),
+    ...timestamps,
+  },
+  (t) => [index("detect_feedback_norm_idx").on(t.sourceNorm, t.createdAt)],
+);

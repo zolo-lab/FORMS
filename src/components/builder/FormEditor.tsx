@@ -310,7 +310,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4"><PdfTab definition={def} pdf={pdf} onChange={setPdf} onDefinitionChange={commit} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} definition={def} pdf={pdf} onChange={setPdf} onDefinitionChange={commit} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">
