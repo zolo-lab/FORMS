@@ -68,13 +68,15 @@ export function NewFormFromPdf() {
                 type="file"
                 accept="application/pdf"
                 className="sr-only"
+                aria-invalid={!!error}
+                aria-describedby={error ? "new-form-error" : "new-form-pdf-help"}
                 onChange={(e) => { setFileName(e.target.files?.[0]?.name ?? ""); setError(null); }}
               />
             </label>
-            <p className="text-xs text-muted-foreground">PDF עם טקסט (לא סרוק), כדי שאפשר יהיה לזהות בו שדות.</p>
+            <p id="new-form-pdf-help" className="text-xs text-muted-foreground">PDF עם טקסט (לא סרוק), כדי שאפשר יהיה לזהות בו שדות.</p>
           </div>
         </div>
-        {error && <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
+        {error && <p id="new-form-error" role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={busy} className="min-h-11">{busy ? "מעלה ופותח את הטופס…" : "יצירת הטופס"}</Button>
       </form>
     </Card>

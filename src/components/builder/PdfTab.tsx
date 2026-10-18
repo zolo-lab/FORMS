@@ -275,6 +275,8 @@ export function PdfTab({
           onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...added.stamps] } });
           setFound(null);
           setExtra([]);
+          // Say what happened (silent success is easy to miss).
+          setGuessNote(`נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך. אפשר לעבור ללשונית העריכה כדי לראות אותם.`);
         }}
       />
       <Dialog open={!!guess} onClose={() => setGuess(null)} title="שיבוץ אוטומטי של השדות" className="w-[min(92vw,30rem)]">
