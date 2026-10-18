@@ -30,14 +30,24 @@ const overlapsX = (x1: number, x2: number, l: PageLabel) => x1 < l.x + l.width &
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Drop numbering, trailing colons, asterisks and underscores: "3. שם פרטי:*" → "שם פרטי". */
-export function cleanLabel(s: string): string {
-  return s
+export function cleanLabel(s: string, keepLong = false): string {
+  const t = s
     .replace(/^\s*(?:\d{1,2}|[א-ת])\s*[.)]\s+/, "")
     .replace(/[\s:：*_.\-–]+$/g, "")
-    .replace(/^[\s:：*_]+/g, "")
+    .replace(/^[\s:：*_)(\]\[}{]+/g, "")
+    .replace(/[\s/]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+  if (!/[A-Za-z֐-׿]/.test(t)) return ""; // "(1)", "9", "/": a mark, not a name
+  const words = t.split(" ");
+  if (words.length >= 2 && words.every((w) => w.length === 1)) return ""; // a letter-spaced heading
+  // A sentence ending at the place to write: its last words name the field (the end sits closest to a Hebrew line).
+  return !keepLong && words.length > 7 ? words.slice(-6).join(" ") : t;
 }
+
+/** Section headings ("ב. פרטי העובד…") and running prose are not the name of a field. */
+const isHeading = (str: string) => /^\s*[א-ת]\s*[.)]\s/.test(str) && str.length > 22;
+const isProse = (str: string) => str.trim().split(/\s+/).length > 12 || /סמן/.test(str);
 
 const has = (n: string, words: string[]) => words.some((w) => n.includes(normalizeText(w)));
 
@@ -47,19 +57,25 @@ export function typeFromLabel(label: string): FieldType {
   if (has(n, ["תעודת זהות", "מספר זהות", "מס זהות", "תז"])) return "id_number";
   if (has(n, ["חתימה", "חתימת", "חתום"])) return "signature";
   if (has(n, ["תאריך", "מתאריך", "עד תאריך"])) return "date";
-  if (has(n, ["מייל", "דואל", "אימייל", "email"])) return "email";
+  if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
   if (has(n, ["טלפון", "נייד", "סלולרי", "פקס"])) return "phone";
-  if (has(n, ["סכום", "שכר", "שח"]) || label.includes("₪")) return "currency";
-  if (has(n, ["כמות", "גיל", "מספר"])) return "number";
+  if (has(n, ["סכום", "שכר"]) || n.split(" ").includes("שח") || label.includes("₪")) return "currency";
+  if (has(n, ["דרכון"])) return "short_text";
+  if (has(n, ["כמות", "גיל", "מספר", "מיקוד"])) return "number";
   return "short_text";
 }
 
 interface Area { kind: "line" | "box" | "comb"; box: Rect; cells?: number; edge: Rect }
 interface Pair { area: Area; label: PageLabel; cost: number }
 
+/** A box with two or more labels inside is a table or a frame around a section, not a place to write. */
+const labelsInside = (b: Rect, labels: PageLabel[]) =>
+  labels.filter((l) => l.x + l.width / 2 >= b.x && l.x + l.width / 2 <= b.x + b.width && l.y + l.height / 2 >= b.y && l.y + l.height / 2 <= b.y + b.height);
+
 function textAreas(page: GuessPage): Area[] {
   const out: Area[] = [];
-  const { lines, boxes, combs } = page.shapes;
+  const { lines, combs } = page.shapes;
+  const boxes = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length < 2);
   for (const c of combs) out.push({ kind: "comb", box: c, cells: c.cells, edge: c });
   for (const b of boxes) out.push({ kind: "box", box: { x: b.x + 1, y: b.y + 1, width: Math.max(2, b.width - 2), height: Math.max(2, b.height - 2) }, edge: b });
   for (const l of lines) {
@@ -87,6 +103,8 @@ function costOf(area: Area, label: PageLabel): number | null {
   // line
   if (Math.abs(e.y - label.y) <= Math.max(8, label.height) && right <= label.x + 3) return label.x - right + Math.abs(e.y - label.y) * 2;
   if (e.y < label.y - 2 && label.y - e.y <= 28 && overlapsX(e.x, right, label)) return 60 + (label.y - e.y) * 2;
+  // The name printed under the line ("חתימת המבקש/ת" under a signature line).
+  if (e.y >= label.y && e.y - label.y <= 14 && overlapsX(e.x, right, label)) return 40 + (e.y - label.y);
   return null;
 }
 
@@ -119,7 +137,7 @@ function checkGroups(boxes: Box[]): Box[][] {
     const chain: Box[] = [];
     for (const o of row) {
       const prev = chain[chain.length - 1];
-      if (!prev || prev.cb.x - (o.cb.x + o.cb.width) <= 160) chain.push(o);
+      if (!prev || prev.cb.x - (o.cb.x + o.cb.width) <= 90) chain.push(o);
       else break;
     }
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
@@ -131,7 +149,7 @@ function checkGroups(boxes: Box[]): Box[][] {
     for (const o of byCol) {
       const last = chain[chain.length - 1]!;
       if (o === b || used.has(o) || chain.includes(o)) continue;
-      if (Math.abs(o.cb.x - b.cb.x) <= 2 && last.cb.y - (o.cb.y + o.cb.height) <= 30 && o.cb.y < last.cb.y) chain.push(o);
+      if (Math.abs(o.cb.x - b.cb.x) <= 5 && last.cb.y - (o.cb.y + o.cb.height) <= 30 && o.cb.y < last.cb.y) chain.push(o);
     }
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
   }
@@ -155,10 +173,15 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     const l = optionLabel(b.cb, page.labels, claimed);
     if (l) { b.label = l; claimed.add(l.id); }
   }
-  for (const group of checkGroups(boxes.filter((b) => b.label))) {
+  // Short texts are options of one question; a long statement beside a square stands alone.
+  const labelled = boxes.filter((b) => b.label);
+  const isOption = (b: Box) => cleanLabel(b.label!.str).split(" ").length <= 4;
+  for (const group of [...checkGroups(labelled.filter(isOption)), ...labelled.filter((b) => !isOption(b)).map((b) => [b])]) {
     const rightmost = group[0]!;
     if (group.length === 1) {
-      out.push({ label: cleanLabel(rightmost.label!.str), type: "consent", page: page.index, box: rightmost.cb });
+      const statement = cleanLabel(rightmost.label!.str, true);
+      if (!statement) continue;
+      out.push({ label: statement, type: "consent", page: page.index, box: rightmost.cb });
       continue;
     }
     // The question: text just right of the first square on its row, else just above the group.
@@ -170,11 +193,11 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     for (const l of page.labels) {
       if (claimed.has(l.id)) continue;
       const sameRow = Math.abs(l.y + l.height * 0.35 - (rightmost.cb.y + rightmost.cb.height / 2)) <= 8;
-      const gap = sameRow ? l.x - right : top < l.y && l.y - top <= 30 && overlapsX(left, right, l) ? 60 + (l.y - top) : Infinity;
+      const gap = sameRow ? l.x - right : top < l.y && l.y - top <= 30 && overlapsX(left - 12, right + 12, l) ? 60 + (l.y - top) : Infinity;
       if (gap >= -3 && gap <= 120 && gap < bestGap) { question = l; bestGap = gap; }
     }
     if (question) claimed.add(question.id);
-    const text = question ? cleanLabel(question.str) : "בחירה";
+    const text = (question && cleanLabel(question.str)) || "בחירה";
     const options = group.map((g) => ({ label: cleanLabel(g.label!.str), box: g.cb }));
     const norm = options.map((o) => normalizeText(o.label)).sort().join("|");
     const yesNo = [normalizeText("כן"), normalizeText("לא")].sort().join("|");
@@ -184,7 +207,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
 
   // 2. Places to write: each pairs with its closest unclaimed label, one label per area.
   const areas = textAreas(page);
-  const labels = page.labels.filter((l) => !claimed.has(l.id));
+  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l.str) && !isProse(l.str));
   const pairs: Pair[] = [];
   for (const area of areas) for (const label of labels) {
     const cost = costOf(area, label);
@@ -205,6 +228,31 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     else if (area.kind === "box" && box.height >= 30 && type === "short_text") type = "long_text";
     else if (area.kind === "line") box = { ...box, width: Math.min(box.width, 260) };
     out.push({ label: text, type: type as FieldType, page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) }, ...(area.kind === "comb" ? { comb: area.cells } : {}) });
+  }
+
+  // 3. Table cells: a short label inside a frame with nothing drawn to write on. The answer goes under it, in the
+  //    cell, which ends where the next label to its left begins.
+  const frames = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length >= 2);
+  for (const label of labels) {
+    if (usedLabels.has(label.id)) continue;
+    const text = cleanLabel(label.str);
+    if (!text || text.length > 30 || text.split(" ").length > 4) continue;
+    const cx = label.x + label.width / 2;
+    const frame = frames
+      .filter((f) => cx >= f.x && cx <= f.x + f.width && label.y >= f.y && label.y + label.height * 0.5 <= f.y + f.height)
+      .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+    if (!frame) continue;
+    const right = label.x + label.width;
+    const leftNeighbour = labels
+      .filter((o) => o !== label && Math.abs(o.y - label.y) <= 3 && o.x + o.width <= label.x + 2)
+      .reduce((m, o) => Math.max(m, o.x + o.width), frame.x);
+    const x = Math.max(frame.x + 2, leftNeighbour + 4);
+    const width = Math.min(260, Math.max(50, right - x));
+    const y = Math.max(frame.y + 1, label.y - 20);
+    const height = Math.min(DEFAULT_SIZE.text.height, label.y - 2 - y);
+    if (height < 10) continue;
+    usedLabels.add(label.id);
+    out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(right - width), y: round1(y), width: round1(width), height: round1(height) } });
   }
   return out;
 }

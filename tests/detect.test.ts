@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/guess-page.json";
 import { extractShapes, type OpCodes, type Shapes } from "@/lib/pdf/geometry";
-import { groupLabels, textItems, type PageLabel } from "@/lib/pdf/labels";
+import { groupLabels, splitGlyphs, textItems, type PageLabel } from "@/lib/pdf/labels";
 import { cleanLabel, detectFields, typeFromLabel } from "@/lib/pdf/detect";
 import type { GuessPage } from "@/lib/pdf/guess";
 
@@ -94,5 +94,84 @@ describe("detectFields on synthetic pages", () => {
     const a = page([label("l", "שם", 500, 400, 20)], { lines: [{ x1: 300, x2: 490, y: 398 }] });
     const b = { ...page([label("m", "טלפון", 500, 700, 30)], { lines: [{ x1: 300, x2: 480, y: 698 }] }), index: 1 };
     expect(detectFields([b, a]).map((f) => [f.page, f.label])).toEqual([[0, "שם"], [1, "טלפון"]]);
+  });
+});
+
+describe("labels that are not names", () => {
+  it("drops marks, letter-spaced headings, and keeps the end of a long sentence", () => {
+    expect(cleanLabel("(1)")).toBe("");
+    expect(cleanLabel("9")).toBe("");
+    expect(cleanLabel("ש נ ת ה מ ס")).toBe("");
+    expect(cleanLabel("אני מצהיר שהפרטים שמסרתי בטופס זה מלאים ונכונים ואני מבקש תאריך לידה")).toBe("בטופס זה מלאים ונכונים ואני מבקש תאריך לידה".split(" ").slice(-6).join(" "));
+  });
+  it("does not read a currency out of the middle of a word", () => {
+    expect(typeFromLabel("תעודת שחרור")).toBe("short_text");
+    expect(typeFromLabel("סכום בש\"ח")).toBe("currency");
+  });
+  it("reads passports as text and zip codes as numbers", () => {
+    expect(typeFromLabel("מספר דרכון")).toBe("short_text");
+    expect(typeFromLabel("מיקוד")).toBe("number");
+    expect(typeFromLabel("כתובת דואר אלקטרוני")).toBe("email");
+  });
+});
+
+describe("checkbox glyphs in the text", () => {
+  it("cuts a glyph out of its item and puts a square where it is drawn", () => {
+    const { items, squares } = splitGlyphs([{ str: "o זכר", x: 500, y: 553, width: 37, height: 11 }]);
+    expect(items.map((i) => i.str)).toEqual(["זכר"]);
+    expect(squares).toHaveLength(1);
+    // Hebrew reads right to left: the square sits at the right end, past the word.
+    expect(squares[0]!.x).toBeGreaterThan(items[0]!.x + items[0]!.width - 3);
+  });
+  it("makes one label per option when a glyph row is a single item", () => {
+    const { items, squares } = splitGlyphs([{ str: "o נקבה o אלמן/ה o פרוד/ה", x: 333, y: 540, width: 203, height: 11 }]);
+    expect(squares).toHaveLength(3);
+    expect(groupLabels(0, items).map((l) => l.str)).toEqual(["נקבה", "אלמן/ה", "פרוד/ה"]);
+  });
+  it("finds a radio question from glyph squares", () => {
+    const { items, squares } = splitGlyphs([
+      { str: "o זכר", x: 500, y: 553, width: 37, height: 11 },
+      { str: "o אשה", x: 500, y: 540, width: 37, height: 11 },
+      { str: "מין", x: 522, y: 567, width: 14, height: 10 },
+    ]);
+    const found = detectFields([page(groupLabels(0, items), { checkboxes: squares })]);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ label: "מין", type: "radio" });
+    expect(found[0]!.options!.map((o) => o.label).sort()).toEqual(["אשה", "זכר"]);
+  });
+});
+
+describe("table cells", () => {
+  const frame = { x: 30, y: 640, width: 500, height: 50 };
+  const labels = [label("a", "שם פרטי", 450, 670, 40), label("b", "שם משפחה", 330, 670, 45)];
+  const found = detectFields([page(labels, { boxes: [frame] })]);
+  it("proposes a field under each short label in a frame, and not the frame itself", () => {
+    expect(found.map((f) => f.label)).toEqual(["שם פרטי", "שם משפחה"]);
+    for (const f of found) {
+      expect(f.box.y + f.box.height).toBeLessThan(670);
+      expect(f.box.y).toBeGreaterThanOrEqual(frame.y);
+    }
+  });
+  it("ends each answer where the next label begins", () => {
+    expect(found[0]!.box.x).toBeGreaterThanOrEqual(375);
+    expect(found[0]!.box.x + found[0]!.box.width).toBeCloseTo(490, 0);
+  });
+  it("skips headings and instructions inside a frame", () => {
+    const f = detectFields([page([label("h", "ב. פרטי העובד יש לצרף צילום תעודת זהות", 100, 680, 400), label("i", "סמן את הילדים", 300, 665, 60), label("n", "שם", 480, 670, 20)], { boxes: [{ ...frame, height: 60 }] })]);
+    expect(f.map((x) => x.label)).toEqual(["שם"]);
+  });
+});
+
+describe("statements and signature lines", () => {
+  it("makes one consent per long statement even when they stand in a column", () => {
+    const labels = [label("a", "אני תושב/ת קבוע/ה בישוב מזכה לפי הרשימה", 300, 700, 200), label("b", "אני הורה במשפחה חד הורית ומקבל קצבה", 300, 670, 200)];
+    const found = detectFields([page(labels, { checkboxes: [sq(505, 700), sq(505, 670)] })]);
+    expect(found.map((f) => f.type)).toEqual(["consent", "consent"]);
+    expect(found[0]!.label).toBe("אני תושב/ת קבוע/ה בישוב מזכה לפי הרשימה");
+  });
+  it("takes the name printed under a line as its label", () => {
+    const line = { x1: 34, x2: 122, y: 186 };
+    const found = detectFields([page([label("s", "חתימת המבקש/ת", 49, 179, 60)], { lines: [line] })]);
+    expect(found.map((f) => [f.label, f.type])).toEqual([["חתימת המבקש/ת", "signature"]]);
   });
 });
