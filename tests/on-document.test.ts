@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coversAll, inputAttrs, isLockedOnDocument, tabOrder, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { cellRef, setStampValue, stampValue, coversAll, inputAttrs, isLockedOnDocument, tabOrder, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields } from "@/lib/forms/schema";
 import { sampleForm } from "./fixtures/sample-form";
@@ -21,8 +21,30 @@ describe("simpleStamps", () => {
   };
   it("keeps stamps of top-level fields present in the role's form", () => {
     const def = { ...sampleForm, pages: sampleForm.pages.map((p) => ({ ...p, fields: p.fields.filter((x) => x.id !== "salary") })) };
-    expect(simpleStamps(mapping, def).map((s) => s.id)).toEqual(["a", "d", "e"]);
+    expect(simpleStamps(mapping, def).map((s) => s.id)).toEqual(["a", "b", "d", "e"]);
   });
+  it("includes table-cell stamps only for existing columns and rows within maxRows", () => {
+    const m: PdfMapping = { ...mapping, stamps: [
+      { id: "r0", fieldId: "children[0].name", kind: "text", ...base },
+      { id: "r14", fieldId: "children[14].birthDate", kind: "text", ...base },
+      { id: "r15", fieldId: "children[15].name", kind: "text", ...base },
+      { id: "bad", fieldId: "children[0].nope", kind: "text", ...base },
+    ] };
+    expect(simpleStamps(m, sampleForm).map((s) => s.id)).toEqual(["r0", "r14"]);
+  });
+});
+
+describe("table cell values", () => {
+  it("reads and writes answers[table][row][col]", () => {
+    const st = { fieldId: "children[1].name" };
+    expect(stampValue({}, st)).toBeUndefined();
+    const a = setStampValue({}, st, "דנה");
+    expect(a).toEqual({ children: [{}, { name: "דנה" }] });
+    expect(stampValue(a, st)).toBe("דנה");
+    expect(setStampValue(a, st, undefined)).toEqual({});
+    expect(cellRef("firstName")).toBeNull();
+  });
+});
 });
 
 describe("text stamps", () => {

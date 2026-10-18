@@ -17,9 +17,56 @@ const NUMERIC = new Set(["number", "currency", "percent"]);
  */
 export const EDITABLE_KINDS: ReadonlySet<PdfStamp["kind"]> = new Set(["text", "comb", "initials", "check", "signature"]);
 
+/** "children[2].name" → { table: "children", row: 2, col: "name" }; null for an ordinary field id. */
+export function cellRef(fieldId: string): { table: string; row: number; col: string } | null {
+  const m = /^(.+)\[(\d+)\]\.(.+)$/.exec(fieldId);
+  return m ? { table: m[1]!, row: Number(m[2]), col: m[3]! } : null;
+}
+
+/** The field a stamp fills: the field itself, or the column field for a table-cell stamp. */
+export function stampField(def: FormDefinition, stamp: { fieldId: string }): FormField | undefined {
+  const cell = cellRef(stamp.fieldId);
+  const fields = allFields(def);
+  if (!cell) return fields.find((f) => f.id === stamp.fieldId);
+  const table = fields.find((f) => f.id === cell.table && f.type === "repeating_table");
+  if (!table) return undefined;
+  const max = Number(table.settings?.maxRows ?? Infinity);
+  if (cell.row >= max) return undefined;
+  return table.fields?.find((c) => c.id === cell.col);
+}
+
+/** Current value behind a stamp (a table cell reads answers[table][row][col]). */
+export function stampValue(answers: Answers, stamp: { fieldId: string }): unknown {
+  const cell = cellRef(stamp.fieldId);
+  if (!cell) return answers[stamp.fieldId];
+  const rows = answers[cell.table];
+  const row = Array.isArray(rows) ? (rows[cell.row] as Record<string, unknown> | undefined) : undefined;
+  return row?.[cell.col];
+}
+
+/** New answers with a stamp's value set (undefined clears it; empty trailing rows are dropped). */
+export function setStampValue(answers: Answers, stamp: { fieldId: string }, v: unknown): Answers {
+  const cell = cellRef(stamp.fieldId);
+  const next: Answers = { ...answers };
+  if (!cell) {
+    if (v === undefined) delete next[stamp.fieldId];
+    else next[stamp.fieldId] = v;
+    return next;
+  }
+  const rows: Record<string, unknown>[] = Array.isArray(answers[cell.table]) ? [...(answers[cell.table] as Record<string, unknown>[])] : [];
+  while (rows.length <= cell.row) rows.push({});
+  const row = { ...(rows[cell.row] ?? {}) };
+  if (v === undefined) delete row[cell.col];
+  else row[cell.col] = v;
+  rows[cell.row] = row;
+  while (rows.length && Object.keys(rows[rows.length - 1]!).length === 0) rows.pop();
+  if (rows.length) next[cell.table] = rows;
+  else delete next[cell.table];
+  return next;
+}
+
 export function simpleStamps(mapping: PdfMapping, def: FormDefinition): PdfStamp[] {
-  const ids = new Set(allFields(def).map((f) => f.id));
-  return tabOrder(mapping.stamps.filter((s) => EDITABLE_KINDS.has(s.kind) && ids.has(s.fieldId)));
+  return tabOrder(mapping.stamps.filter((s) => EDITABLE_KINDS.has(s.kind) && !!stampField(def, s)));
 }
 
 /**
@@ -99,7 +146,7 @@ export function writeCheck(field: FormField, current: unknown, stamp: StampLike,
 
 /** On-document mode is offered only when every answerable field of the role's form is placed on the PDF. */
 export function coversAll(mapping: PdfMapping, def: FormDefinition): boolean {
-  const placed = new Set(simpleStamps(mapping, def).map((s) => s.fieldId));
+  const placed = new Set(simpleStamps(mapping, def).map((s) => cellRef(s.fieldId)?.table ?? s.fieldId));
   return allFields(def)
     .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden" && !isComputedOrLocked(f))
     .every((f) => placed.has(f.id));

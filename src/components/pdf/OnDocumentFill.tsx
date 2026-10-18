@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Answers } from "@/lib/forms/conditions";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
-import { allFields, type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
 import { withDefaults } from "@/lib/forms/defaults";
-import { inputAttrs, isLockedOnDocument, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { cellRef, inputAttrs, isLockedOnDocument, readCheck, readText, setStampValue, simpleStamps, stampField, stampValue, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument } from "./usePdfDocument";
@@ -49,16 +49,13 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
   }, []);
 
   const stamps = useMemo(() => simpleStamps(pdf.mapping, rest.definition), [pdf.mapping, rest.definition]);
-  const fields = useMemo(() => new Map(allFields(rest.definition).map((f) => [f.id, f])), [rest.definition]);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Formula fields are shown computed (the server recomputes them on submit).
   const shown = useMemo(() => computeFormulas(rest.definition, rest.answers, today), [rest.definition, rest.answers, today]);
   const errorFields = new Set(Object.keys(rest.errors).map((k) => k.split(".")[0]));
 
-  function setField(id: string, v: unknown) {
-    const next = { ...rest.answers, [id]: v };
-    if (v === undefined) delete next[id];
-    rest.onChange(next);
+  function setField(stamp: { fieldId: string }, v: unknown) {
+    rest.onChange(setStampValue(rest.answers, stamp, v));
   }
 
   return (
@@ -75,31 +72,34 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
               {stamps
                 .filter((s) => s.page === pageIdx)
                 .map((s) => {
-                  const field = fields.get(s.fieldId)!;
+                  const field = stampField(rest.definition, s)!;
+                  const cell = cellRef(s.fieldId);
                   const b = pdfBoxToScreen(s, pg.height, scale);
-                  const value = shown[s.fieldId];
+                  const value = stampValue(shown, s);
                   const locked = isLockedOnDocument(field, shown);
                   if (!evaluateCondition(field.visibleIf, shown)) return null;
-                  const invalid = errorFields.has(s.fieldId);
-                  const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(10, Math.min(b.height * 0.7, 16)) } as const;
-                  const ring = cn("absolute rounded-sm border bg-primary/10 focus-visible:outline-2 focus-visible:outline-ring", invalid ? "border-destructive bg-destructive/10" : "border-primary/40");
-                  const label = `${field.label}${s.part ? ` – ${s.part}` : ""}`;
+                  if (cell && !evaluateCondition(rest.definition.pages.flatMap((p) => p.fields).find((f) => f.id === cell.table)?.visibleIf, shown)) return null;
+                  const invalid = cell ? Object.keys(rest.errors).includes(`${cell.table}.${cell.row}.${cell.col}`) : errorFields.has(s.fieldId);
+                  const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(9, Math.min(b.height * 0.6, 14)) } as const;
+                  const ring = cn("absolute min-w-0 rounded-sm border bg-primary/5 focus-visible:outline-2 focus-visible:outline-ring", invalid ? "border-destructive bg-destructive/10" : "border-primary/40");
+                  const label = `${cell ? `שורה ${cell.row + 1} – ` : ""}${field.label}${s.part ? ` – ${s.part}` : ""}`;
                   if (s.kind === "text" || s.kind === "comb" || s.kind === "initials") {
                     const attrs = inputAttrs(field);
+                    const narrow = attrs.type === "date" || attrs.type === "time" ? "[&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0" : "";
                     const comb = s.kind === "comb" ? { maxLength: s.comb?.cells, className: "tracking-[0.35em] text-center" } : { maxLength: undefined, className: "" };
                     const title = s.kind === "initials" ? `${label} (יוצג כראשי תיבות)` : label;
                     return s.multiline ? (
                       <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} className={cn(ring, "resize-none p-0.5")} style={style}
-                        value={readText(field, value, s)} onChange={(e) => setField(s.fieldId, writeText(field, value, s, e.target.value))} />
+                        value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     ) : (
-                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5", comb.className)} style={style}
-                        value={readText(field, value, s)} onChange={(e) => setField(s.fieldId, writeText(field, value, s, e.target.value))} />
+                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5", narrow, comb.className)} style={style}
+                        value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     );
                   }
                   if (s.kind === "check") {
                     return (
                       <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} type="checkbox" aria-label={label} disabled={locked} className={cn(ring, "accent-primary")} style={style}
-                        checked={readCheck(field, value, s)} onChange={(e) => setField(s.fieldId, writeCheck(field, value, s, e.target.checked))} />
+                        checked={readCheck(field, value, s)} onChange={(e) => setField(s, writeCheck(field, value, s, e.target.checked))} />
                     );
                   }
                   const image = (value as { image?: string } | undefined)?.image;
@@ -118,7 +118,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
           );
         })}
       <Dialog open={!!signing} onClose={() => setSigning(null)} title="חתימה" className="sm:w-[min(92vw,40rem)]">
-        {signing && <SignaturePicker onCancel={() => setSigning(null)} onSave={(v) => { setField(signing.field.id, v); setSigning(null); }} />}
+        {signing && <SignaturePicker onCancel={() => setSigning(null)} onSave={(v) => { setField(signing.stamp, v); setSigning(null); }} />}
       </Dialog>
     </div>
   );
@@ -134,9 +134,11 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
   const [busy, setBusy] = useState(false);
 
   function goNext() {
-    const firstId = Object.keys(result.errors)[0]?.split(".")[0];
-    if (!firstId) return;
-    const el = document.querySelector<HTMLElement>(`[data-field-id="${firstId}"]`);
+    const key = Object.keys(result.errors)[0];
+    if (!key) return;
+    const [firstId, row, col] = key.split(".");
+    const sel = row !== undefined && col !== undefined ? `[data-field-id="${firstId}[${row}].${col}"]` : `[data-field-id="${firstId}"]`;
+    const el = document.querySelector<HTMLElement>(sel) ?? document.querySelector<HTMLElement>(`[data-field-id^="${firstId}["]`) ?? document.querySelector<HTMLElement>(`[data-field-id="${firstId}"]`);
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
     el?.focus({ preventScroll: true });
     onErrors(result.errors);
