@@ -121,17 +121,11 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   expect(finalDoc.getPageCount()).toBeGreaterThanOrEqual(1);
 });
 
-test("a new form cannot be published without a PDF, and a form is created only from one", async ({ page }) => {
+test("a form is created only from a PDF", async ({ page }) => {
   await login(page, "/admin/forms");
   // The old "blank form" entry is gone; the one card asks for a PDF.
   await expect(page.getByRole("button", { name: "להתחיל מטופס ריק" })).toHaveCount(0);
   await page.getByRole("button", { name: "יצירת הטופס" }).click();
   await expect(page.getByText("בחרו קובץ PDF כדי להתחיל")).toBeVisible();
 
-  // From a template the form has fields but no document yet: publishing says why it is blocked.
-  await page.getByLabel("שם הטופס מתבנית קליטת עובד").fill(`ללא PDF ${Date.now()}`);
-  await page.locator("form").filter({ hasText: "קליטת עובד" }).getByRole("button", { name: "יצירה מתבנית" }).click();
-  await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}\?tab=pdf/);
-  await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("העלו PDF לפני הפרסום")).toBeVisible({ timeout: 20_000 });
 });

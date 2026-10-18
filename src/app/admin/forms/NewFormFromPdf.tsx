@@ -48,7 +48,7 @@ export function NewFormFromPdf() {
           <h2 className="font-semibold">טופס חדש</h2>
           <p className="text-sm text-muted-foreground">מעלים את המסמך והמערכת קוראת אותו ומציעה שדות. אותם שדות משמשים גם את הטופס הרספונסיבי (נוח בנייד) וגם את המילוי על המסמך.</p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid items-start gap-4 sm:grid-cols-[1fr_1fr_auto]">
           <div className="space-y-1">
             <label htmlFor="new-form-title" className="text-sm font-medium">שם הטופס</label>
             <Input id="new-form-title" placeholder="שם הטופס החדש" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
@@ -75,9 +75,9 @@ export function NewFormFromPdf() {
             </label>
             <p id="new-form-pdf-help" className="text-xs text-muted-foreground">PDF עם טקסט (לא סרוק), כדי שאפשר יהיה לזהות בו שדות.</p>
           </div>
+          <Button type="submit" disabled={busy} className="min-h-11 sm:mt-6">{busy ? "מעלה ופותח את הטופס…" : "יצירת הטופס"}</Button>
         </div>
         {error && <p id="new-form-error" role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={busy} className="min-h-11">{busy ? "מעלה ופותח את הטופס…" : "יצירת הטופס"}</Button>
       </form>
     </Card>
   );

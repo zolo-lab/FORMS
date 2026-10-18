@@ -100,7 +100,7 @@ function cellSides(bs: { x: number; y1: number; y2: number }[], cx: number, yLo:
 }
 
 /** Lower the top of `box` so it stays under any text that sits inside its vertical span (except `own`). */
-function clipAbove(box: Rect, labels: PageLabel[], own: PageLabel | undefined, minHeight: number): Rect | null {
+function clipAbove(box: Rect, labels: PageLabel[], own: PageLabel | undefined, minHeight: number): Rect {
   let top = box.y + box.height;
   for (const l of labels) {
     if (l === own || l.id === own?.id) continue;
@@ -109,8 +109,8 @@ function clipAbove(box: Rect, labels: PageLabel[], own: PageLabel | undefined, m
     if (bottom > box.y + 1 && bottom < top) top = bottom;
   }
   if (top >= box.y + box.height) return box;
-  const height = top - box.y - 0.5;
-  return height >= minHeight ? { ...box, height } : null;
+  // Never lose the field: when text crowds the line, keep the smallest usable box.
+  return { ...box, height: Math.max(minHeight, top - box.y - 0.5) };
 }
 
 interface Area { kind: "line" | "box" | "comb"; box: Rect; cells?: number; edge: Rect }
@@ -291,9 +291,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
       const x1 = Math.max(box.x, lo !== null && lo < box.x + box.width ? lo + 1 : box.x);
       const x2 = Math.min(box.x + box.width, hi !== null && hi > x1 ? hi - 1 : box.x + box.width);
       if (x2 - x1 >= 15) box = { ...box, x: x1, width: x2 - x1 };
-      const clipped = clipAbove(box, page.labels, label, type === "signature" ? 18 : 9);
-      if (!clipped) continue;
-      box = clipped;
+      box = clipAbove(box, page.labels, label, type === "signature" ? 18 : 10);
     }
     out.push({ label: text, type: type as FieldType, page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) }, ...(area.kind === "comb" ? { comb: area.cells } : {}) });
   }

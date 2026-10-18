@@ -39,17 +39,27 @@ export function feedbackFrom(proposed: Pick<DetectedField, "id" | "label" | "typ
     });
 }
 
-/** Rows (newest first) → the latest decision per label. A decision that changed nothing is still a decision (kept). */
+/**
+ * Rows (newest first) → the decision per label. Renames/types/ids follow the latest kept row. "Not a field" needs
+ * agreement: a label dropped more often than kept, and either dropped at least twice or long enough to be specific.
+ * One unticked "שם" must not hide every other "שם" on the form.
+ */
 export function latestDecisions(rows: (Feedback & { sourceNorm: string })[]): Map<string, Learned> {
+  const byLabel = new Map<string, (Feedback & { sourceNorm: string })[]>();
+  for (const r of rows) byLabel.set(r.sourceNorm, [...(byLabel.get(r.sourceNorm) ?? []), r].slice(0, 12));
   const out = new Map<string, Learned>();
-  for (const r of rows) {
-    if (out.has(r.sourceNorm)) continue;
-    if (!r.kept) { out.set(r.sourceNorm, { skip: true }); continue; }
+  for (const [norm, list] of byLabel) {
+    const drops = list.filter((r) => !r.kept).length;
+    const keeps = list.length - drops;
+    const specific = norm.split(" ").filter(Boolean).length >= 3;
+    if (drops > keeps && (drops >= 2 || specific)) { out.set(norm, { skip: true }); continue; }
+    const r = list.find((x) => x.kept);
+    if (!r) continue;
     const l: Learned = {};
     if (r.finalLabel && r.finalLabel !== r.sourceLabel) l.label = r.finalLabel;
     if (r.finalType && r.finalType !== r.detectedType && TEXT.has(r.finalType)) l.type = r.finalType as FieldType;
     if (r.finalKey && KEY.test(r.finalKey)) l.key = r.finalKey;
-    out.set(r.sourceNorm, l);
+    out.set(norm, l);
   }
   return out;
 }
