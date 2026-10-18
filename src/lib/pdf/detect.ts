@@ -379,7 +379,8 @@ export function detectFields(pages: GuessPage[]): DetectedField[] {
       const top = f.box.y + f.box.height;
       const above = heads.filter((x) => x.y >= top - 2).sort((a, b) => a.y - b.y);
       // Prefer the heading over the same part of the page (two sections side by side).
-      const h = above.find((x) => x.x < f.box.x + f.box.width + 20 && x.x + x.width > f.box.x - 20) ?? above[0];
+      const near = above[0];
+      const h = (near && above.find((x) => x.y - near.y < 40 && x.x < f.box.x + f.box.width + 20 && x.x + x.width > f.box.x - 20)) || near;
       return h ? { ...f, section: cleanLabel(h.str, true) } : f;
     });
   });
