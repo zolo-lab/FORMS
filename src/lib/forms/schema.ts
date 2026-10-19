@@ -84,6 +84,8 @@ export interface FormField {
   type: FieldType;
   label: string;
   description?: string;
+  /** Short help shown on demand (an "i" next to the label), for details that would clutter the form. */
+  hint?: string;
   placeholder?: string;
   required?: boolean;
   requiredIf?: Condition;
@@ -131,6 +133,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     type: z.enum(FIELD_TYPES),
     label: z.string(),
     description: z.string().optional(),
+    hint: z.string().max(300).optional(),
     placeholder: z.string().optional(),
     required: z.boolean().optional(),
     requiredIf: conditionSchema.optional(),

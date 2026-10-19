@@ -290,3 +290,12 @@ describe("renaming a field id updates every reference", () => {
     expect(publishIssues(broken).some((i) => i.message.includes("gone"))).toBe(true);
   });
 });
+
+describe("field hint", () => {
+  it("is accepted by the schema and bounded", async () => {
+    const { formDefinitionSchema } = await import("@/lib/forms/schema");
+    const base = { schemaVersion: 1 as const, title: "t", pages: [{ id: "p", title: "p", fields: [{ id: "a", type: "short_text" as const, label: "א", hint: "איפה מוצאים" }] }] };
+    expect(formDefinitionSchema.safeParse(base).success).toBe(true);
+    expect(formDefinitionSchema.safeParse({ ...base, pages: [{ ...base.pages[0], fields: [{ ...base.pages[0]!.fields[0], hint: "x".repeat(301) }] }] }).success).toBe(false);
+  });
+});
