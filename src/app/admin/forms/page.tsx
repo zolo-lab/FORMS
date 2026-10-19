@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
@@ -17,7 +18,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <h1 className="text-2xl font-bold">תבניות טפסים</h1>
+      <PageHeader title="תבניות טפסים" description="כל טופס מתחיל מ-PDF: המערכת קוראת אותו ומציעה את השדות, ואתם מתקנים בבונה." />
       {/* Every form starts from a PDF: the system reads it and proposes the fields. */}
       <NewFormFromPdf />
       {deleted && <p role="status" className="rounded-md bg-muted p-3 text-sm">הטופס נמחק.</p>}

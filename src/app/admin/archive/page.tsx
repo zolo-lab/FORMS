@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,10 +36,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold">נתונים וייצוא</h1>
-        <p className="text-sm text-muted-foreground">כל הערכים שמולאו, לפי סוג טופס (מסלול חתימה). המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.{isAdmin(me) && <> <Link href="/admin/settings/exports" className="underline">תבניות ייצוא</Link></>}</p>
-      </div>
+      <PageHeader title="נתונים וייצוא" description={<>כל הערכים שמולאו, לפי סוג טופס (מסלול חתימה). המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.{isAdmin(me) && <> <Link href="/admin/settings/exports" className="underline">תבניות ייצוא</Link></>}</>} />
 
       <form method="get" className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="סינון">
         <div className="space-y-1">

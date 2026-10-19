@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,13 +22,8 @@ export default async function ExportTemplatesPage({ searchParams }: { searchPara
   const [templates, packages] = await Promise.all([listExportTemplates(), listPackageSummaries()]);
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">תבניות ייצוא</h1>
-        <p className="text-sm text-muted-foreground">
-          מעלים את הקובץ שהמערכת השנייה מצפה לו (למשל תבנית ההעלאה לפריוריטי), מחברים כל עמודה פעם אחת לשדה בטופס, והייצוא מדף הבקשות יוצא
-          בדיוק בפורמט הזה.
-        </p>
-      </header>
+      <PageHeader title="תבניות ייצוא" description={<>מעלים את הקובץ שהמערכת השנייה מצפה לו (למשל תבנית ההעלאה לפריוריטי), מחברים כל עמודה פעם אחת לשדה בטופס, והייצוא מדף הבקשות יוצא
+          בדיוק בפורמט הזה.</>} />
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
 
       <Card className="p-4">
