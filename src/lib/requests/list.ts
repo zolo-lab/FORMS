@@ -23,6 +23,8 @@ export interface RequestFilters {
   createdBy?: string;
   /** Completed requests whose handling after signing is not finished ("עודכן בשכר" not ticked yet). */
   followUp?: "pending";
+  /** Campaign tag ("101 2027"). */
+  campaign?: string;
   page: number;
 }
 
@@ -51,6 +53,8 @@ export function parseFilters(sp: SearchParams): RequestFilters {
   if (first(sp.view) === "board") f.view = "board";
   if (first(sp.mine) === "1") f.mine = true;
   if (first(sp.followUp) === "pending") f.followUp = "pending";
+  const campaign = first(sp.campaign)?.trim();
+  if (campaign) f.campaign = campaign.slice(0, 60);
   const page = Number.parseInt(first(sp.page) ?? "1", 10);
   f.page = Number.isFinite(page) && page >= 1 ? page : 1;
   return f;
@@ -71,6 +75,7 @@ export function filtersToQuery(f: RequestFilters, override: Partial<RequestFilte
   if (m.view) p.set("view", m.view);
   if (m.mine) p.set("mine", "1");
   if (m.followUp) p.set("followUp", m.followUp);
+  if (m.campaign) p.set("campaign", m.campaign);
   if (m.page > 1) p.set("page", String(m.page));
   return p.toString();
 }

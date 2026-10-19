@@ -40,7 +40,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">מעקב חתימות</h1>
+        <h1 className="text-2xl font-bold">מעקב חתימות{filters.campaign ? ` – ${filters.campaign}` : ""}</h1>
         <p className="text-sm text-muted-foreground">מי ממתין, באיזה שלב וכמה זמן. אפשר לשלוח תזכורת – הקישור נשלח ישירות לממתין. תוכן הטפסים לא מוצג כאן.</p>
       </header>
 
@@ -83,6 +83,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
         </div>
         <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-5 lg:justify-end">
           {showAll && <input type="hidden" name="all" value="1" />}
+          {filters.campaign && <input type="hidden" name="campaign" value={filters.campaign} />}
           <Link href="/admin/track" className={buttonVariants({ variant: "ghost" })}>ניקוי</Link>
           <button type="submit" className={buttonVariants()}>סינון</button>
         </div>

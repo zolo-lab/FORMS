@@ -76,7 +76,7 @@ export async function checkImportAction(input: { packageId: string; rows: string
   return { ok: true, total: records.length, valid: good.length, errors: errors.slice(0, MAX_ERRORS_SHOWN), truncated: errors.length > MAX_ERRORS_SHOWN, records: good };
 }
 
-export async function startImportJobAction(input: { packageId: string; organizationId: string; projectId?: string; rowCount: number }): Promise<{ jobId: string } | { error: string }> {
+export async function startImportJobAction(input: { packageId: string; organizationId: string; projectId?: string; rowCount: number; campaign?: string }): Promise<{ jobId: string } | { error: string }> {
   if (!UUID.test(input.packageId) || !UUID.test(input.organizationId)) return { error: "נתונים לא תקינים" };
   if (!(await projectOk(input.organizationId, input.projectId))) return { error: "הפרויקט לא נמצא בעמותה הזו" };
   if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { error: "אין לך הרשאה לערכה, לארגון או לפרויקט האלה" };
@@ -90,7 +90,7 @@ export interface ChunkResult {
 }
 
 /** Step 3 (called repeatedly with small chunks so no single call times out). Everything is validated again here. */
-export async function createImportChunkAction(input: { jobId: string; packageId: string; organizationId: string; projectId?: string; records: ImportRecord[]; send: boolean; final: boolean }): Promise<ChunkResult> {
+export async function createImportChunkAction(input: { jobId: string; packageId: string; organizationId: string; projectId?: string; records: ImportRecord[]; send: boolean; final: boolean; campaign?: string }): Promise<ChunkResult> {
   const out: ChunkResult = { created: 0, errors: [] };
   if (!UUID.test(input.jobId) || !UUID.test(input.packageId) || !UUID.test(input.organizationId) || input.records.length > 25) {
     return { created: 0, errors: [{ row: 0, message: "בקשה לא תקינה" }] };
@@ -106,7 +106,7 @@ export async function createImportChunkAction(input: { jobId: string; packageId:
       continue;
     }
     try {
-      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, projectId: input.projectId, subject: rec.subject, requesterAnswers: rec.answers });
+      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, projectId: input.projectId, subject: rec.subject, requesterAnswers: rec.answers, campaign: input.campaign });
       if (input.send) await sendRequest(id);
       out.created++;
     } catch (e) {
