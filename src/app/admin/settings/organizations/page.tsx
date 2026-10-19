@@ -141,7 +141,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                     <Field label="כל (שעות)">
                       <Input name="everyHours" type="number" inputMode="numeric" min={1} defaultValue={rp.everyHours} />
                     </Field>
-                    <Field label="מקסימום תזכורות">
+                    <Field label="מקסימום תזכורות (0 = עד שחותמים)">
                       <Input name="maxCount" type="number" inputMode="numeric" min={0} max={10} defaultValue={rp.maxCount} />
                     </Field>
                     <Field label="לא לשלוח מהשעה">

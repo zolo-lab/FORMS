@@ -186,6 +186,17 @@ export function FieldSettings({
             <Switch checked={!!field.readOnly} onCheckedChange={(c) => onPatch({ readOnly: c || undefined })} label="לקריאה בלבד" />
             לקריאה בלבד (ערך ברירת המחדל או מה שמולא מראש לא ניתן לשינוי)
           </label>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch
+              checked={!!field.internal}
+              onCheckedChange={(c) => onPatch(c ? { internal: true, filledBy: "requester" } : { internal: undefined })}
+              label="שדה פנימי"
+            />
+            <span>
+              שדה פנימי – לצוות בלבד
+              <span className="block text-xs text-muted-foreground">ממלא הבקשה (או ה-API) ממלא אותו. החותמים האחרים לא רואים אותו, והוא לא מופיע ב-PDF ובמיילים. נשמר בנתונים ובייצוא.</span>
+            </span>
+          </label>
         </>
       )}
 

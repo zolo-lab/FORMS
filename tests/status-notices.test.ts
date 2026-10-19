@@ -33,3 +33,18 @@ describe("statusNotices", () => {
     expect(renderDefault("completed", { name: "דנה", org: "עמותה" }).body).not.toContain("{{");
   });
 });
+
+describe("watchers (secretariats)", () => {
+  it("hear when the employee step is done, not other steps, and never twice", () => {
+    const ctx2 = {
+      subject: { name: "דנה", email: "d@x.org" },
+      creator: { name: "מנהל", email: "m@x.org" },
+      stepName: () => "עובד",
+      stepRole: (id: string) => (id === "emp" ? "employee" : "approver"),
+      watchers: [{ name: "מזכירות", email: "s@x.org" }, { name: "מנהל", email: "M@x.org" }],
+    };
+    const n = statusNotices([{ type: "step_completed", stepId: "emp" }], ctx2);
+    expect(n.map((x) => x.to.email)).toEqual(["m@x.org", "s@x.org"]);
+    expect(statusNotices([{ type: "step_completed", stepId: "appr" }], ctx2).map((x) => x.to.email)).toEqual(["m@x.org"]);
+  });
+});

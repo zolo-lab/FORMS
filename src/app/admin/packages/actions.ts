@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseStepForm } from "@/lib/workflow/step-form";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
-import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage } from "@/server/packages-store";
+import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
+import { normalizeExpiryRule } from "@/lib/requests/expiry";
+import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests/follow-up";
+import { parseRecipients } from "@/lib/requests/recipients";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const back = (id: string, q = "") => redirect(`/admin/packages/${id}${q}`);
@@ -31,6 +34,31 @@ export async function savePackageAction(fd: FormData) {
   if (!name) back(id, "?error=name");
   const org = String(fd.get("organizationId") ?? "");
   await updatePackage(id, { name, description: String(fd.get("description") ?? "").trim() || null, organizationId: UUID.test(org) ? org : null });
+  revalidatePath(`/admin/packages/${id}`);
+  back(id, "?saved=1");
+}
+
+export async function savePackageSettingsAction(fd: FormData) {
+  await requireGrant("manageForms");
+  const id = pkgId(fd);
+  const data = await getPackage(id);
+  if (!data) redirect("/admin/packages");
+  const kind = String(fd.get("expiryKind") ?? "default");
+  const rule =
+    kind === "none" ? { kind: "none" }
+    : kind === "days" ? { kind: "days", days: Number(fd.get("expiryDays")) }
+    : kind === "dayOfNextMonth" ? { kind: "dayOfNextMonth", day: Number(fd.get("expiryDay")), dateFieldId: String(fd.get("expiryField") ?? "") }
+    : null;
+  const expiryRule = normalizeExpiryRule(rule);
+  if (kind !== "default" && !expiryRule) back(id, "?settingsError=expiry");
+  const recipients = parseRecipients(String(fd.get("recipients") ?? ""));
+  if (recipients.invalid.length) back(id, `?settingsError=${encodeURIComponent(recipients.invalid.join(", "))}`);
+  await updatePackageSettings(id, {
+    expiryRule,
+    completionRecipients: recipients.valid,
+    followUpStatuses: parseFollowUpStatuses(String(fd.get("followUp") ?? ""), normalizeFollowUpStatuses(data!.pkg.followUpStatuses)),
+    remindersEnabled: fd.get("remindersEnabled") === "on",
+  });
   revalidatePath(`/admin/packages/${id}`);
   back(id, "?saved=1");
 }

@@ -8,8 +8,10 @@ import { db, schema } from "@/db";
 import { emailHtml } from "@/lib/email-html";
 import { MAX_ATTEMPTS, afterAttempt } from "@/lib/notifications/templates";
 import { getSmsProvider } from "@/server/sms/provider";
+import { getFile } from "@/server/storage";
+import { COMPLETION_DOCS_KEY, pickAttachments } from "@/lib/notifications/completion";
 
-const { notifications, organizations } = schema;
+const { notifications, organizations, packageDocuments, formTemplateVersions, formTemplates } = schema;
 
 export interface EnqueueInput {
   organizationId: string;
@@ -75,12 +77,35 @@ async function senderFor(organizationId: string): Promise<Sender> {
   return { name: org?.senderName ?? org?.name ?? "", email: org?.senderEmail ?? fallback };
 }
 
-async function sendViaResend(apiKey: string, from: Sender, to: string, subject: string, text: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+type Attachment = { filename: string; content: string };
+
+const safeFileName = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "document";
+
+/** The signed PDFs of a completed request, as Resend attachments (base64), within the size limit. */
+async function completionAttachments(requestId: string): Promise<{ files: Attachment[]; skipped: number }> {
+  const docs = await db
+    .select({ fileId: packageDocuments.finalFileId, title: formTemplates.title })
+    .from(packageDocuments)
+    .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
+    .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+    .where(eq(packageDocuments.requestId, requestId))
+    .orderBy(asc(packageDocuments.order));
+  const loaded: { filename: string; bytes: Uint8Array; size: number }[] = [];
+  for (const d of docs) {
+    if (!d.fileId) continue;
+    const f = await getFile(d.fileId);
+    if (f) loaded.push({ filename: `${safeFileName(d.title)}.pdf`, bytes: f.bytes, size: f.bytes.length });
+  }
+  const { attached, skipped } = pickAttachments(loaded);
+  return { files: attached.map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes).toString("base64") })), skipped };
+}
+
+async function sendViaResend(apiKey: string, from: Sender, to: string, subject: string, text: string, attachments: Attachment[] = []): Promise<{ ok: boolean; id?: string; error?: string }> {
   const fromHeader = from.name ? `${from.name} <${from.email}>` : from.email;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: fromHeader, to: [to], subject, text, html: emailHtml(text, from.name) }),
+    body: JSON.stringify({ from: fromHeader, to: [to], subject, text, html: emailHtml(text, from.name), ...(attachments.length ? { attachments } : {}) }),
   });
   const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
   if (res.ok) return { ok: true, id: json.id };
@@ -119,7 +144,16 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
     } else {
       const from = await senderFor(n.organizationId);
       if (!from.email) result = { ok: false, error: "no sender email (set the organization sender or MAIL_FROM)" };
-      else result = await sendViaResend(apiKey!, from, n.to, n.subject ?? "", n.body).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+      else {
+        let body = n.body;
+        let attachments: Attachment[] = [];
+        if (n.templateKey === COMPLETION_DOCS_KEY && n.requestId) {
+          const a = await completionAttachments(n.requestId);
+          attachments = a.files;
+          if (a.skipped) body += `\n(${a.skipped} מסמכים גדולים מדי לצירוף – אפשר להוריד אותם מהמערכת.)`;
+        }
+        result = await sendViaResend(apiKey!, from, n.to, n.subject ?? "", body, attachments).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+      }
     }
     const next = afterAttempt(n.attempts, result.ok);
     await db

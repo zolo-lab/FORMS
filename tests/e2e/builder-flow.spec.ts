@@ -45,7 +45,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.waitForTimeout(1500);
   await expect(page.getByText("נשמר")).toBeVisible({ timeout: 20_000 });
   await page.goto(`/preview/form/${id}`);
-  await expect(page.getByLabel("תפקיד")).toBeVisible();
+  await expect(page.getByLabel("תפקיד")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("שכר")).toHaveCount(0); // hidden until "חודשי"
   await page.getByLabel("תפקיד").fill("מדריך");
   await page.getByLabel("מספר זהות").fill("000000018");

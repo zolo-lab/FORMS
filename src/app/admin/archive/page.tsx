@@ -10,7 +10,8 @@ import { listPackages } from "@/server/dashboard-store";
 import { listExportTemplates } from "@/server/export-templates-store";
 import { loadExport } from "@/server/export-store";
 import { listOrganizations } from "@/server/requests-store";
-import { hasGrant, isAdmin } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin, isTrackOnly } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
 import { currentUser, viewerScope } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
   const parsed = parseFilters(sp);
   const filters = { ...parsed, status: "completed" as const };
   const [orgs, packages, templates, scope, me] = await Promise.all([listOrganizations(), listPackages(), listExportTemplates(), viewerScope(), currentUser()]);
+  // The archive shows answers: never to tracking-only users.
+  if (isTrackOnly(me)) redirect("/admin/track");
   const canExport = hasGrant(me, "export");
   const pkg = packages.find((p) => p.id === filters.pkg);
   // Only the requests the viewer may see (their own, packages they view fully, the "sees all" grant, their organizations).

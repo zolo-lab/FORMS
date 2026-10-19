@@ -12,7 +12,12 @@ import { listContacts, listGroups } from "@/server/people-store";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
-import { archivePackageAction, documentAction, savePackageAction, stepAction } from "../actions";
+import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction, stepAction } from "../actions";
+import { getWizardPackage } from "@/server/packages-store";
+import { allFields } from "@/lib/forms/schema";
+import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
+import { formatRecipients } from "@/lib/requests/recipients";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +29,9 @@ const ACTION_LABELS: Record<(typeof STEP_ACTIONS)[number], string> = {
   view: "צפייה בלבד",
 };
 
-export default async function PackagePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; stepError?: string }> }) {
+export default async function PackagePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; stepError?: string; settingsError?: string }> }) {
   const { id } = await params;
-  const { saved, error, stepError } = await searchParams;
+  const { saved, error, stepError, settingsError } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await getPackage(id);
   if (!data) notFound();
@@ -37,6 +42,11 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
   const addable = forms.filter((f) => !inPackage.has(f.id));
   const problems = validateWorkflow(pkg.workflow);
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
+  // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
+  const wizard = await getWizardPackage(id);
+  const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
+  const rule = normalizeExpiryRule(pkg.expiryRule);
+  const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
@@ -203,6 +213,66 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
         <input type="hidden" name="archive" value={pkg.archivedAt ? "0" : "1"} />
         <Button type="submit" variant="ghost" className="text-destructive">{pkg.archivedAt ? "שחזור מהארכיון" : "העברה לארכיון"}</Button>
       </form>
+      <section className="space-y-2" aria-labelledby="settings-h">
+        <h2 id="settings-h" className="text-lg font-semibold">הגדרות התהליך</h2>
+        {settingsError && (
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {settingsError === "expiry" ? "יש לבחור יום ושדה תאריך לתפוגה" : `כתובות לא תקינות: ${settingsError}`}
+          </p>
+        )}
+        <Card className="p-4">
+          <form action={savePackageSettingsAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="id" value={pkg.id} />
+            <fieldset className="space-y-2 sm:col-span-2">
+              <legend className="text-sm font-medium">תוקף הקישורים</legend>
+              <p className="text-xs text-muted-foreground">כרגע: {describeExpiryRule(rule, (fid) => dateFields.find((f) => f.id === fid)?.label ?? fid)}. אפשר להאריך כל בקשה בנפרד.</p>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <Label htmlFor="ex-kind">סוג</Label>
+                  <Select id="ex-kind" name="expiryKind" defaultValue={rule?.kind ?? "default"}>
+                    <option value="default">ברירת מחדל (30 יום)</option>
+                    <option value="days">מספר ימים מהשליחה</option>
+                    <option value="dayOfNextMonth">יום בחודש שאחרי תאריך</option>
+                    <option value="none">ללא תפוגה</option>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ex-days">ימים</Label>
+                  <Input id="ex-days" name="expiryDays" type="number" min={1} max={365} inputMode="numeric" defaultValue={rule?.kind === "days" ? rule.days : 30} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ex-day">יום בחודש</Label>
+                  <Input id="ex-day" name="expiryDay" type="number" min={1} max={31} inputMode="numeric" defaultValue={rule?.kind === "dayOfNextMonth" ? rule.day : 7} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ex-field">אחרי התאריך בשדה</Label>
+                  <Select id="ex-field" name="expiryField" defaultValue={rule?.kind === "dayOfNextMonth" ? rule.dateFieldId : (dateFields[0]?.id ?? "")}>
+                    {dateFields.length === 0 && <option value="">אין שדה תאריך שממלא המבקש</option>}
+                    {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </Select>
+                </div>
+              </div>
+            </fieldset>
+            <div className="space-y-1">
+              <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
+              <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
+              <p className="text-xs text-muted-foreground">שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.</p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pk-followup">טיפול אחרי החתימה</Label>
+              <Textarea id="pk-followup" name="followUp" rows={3} defaultValue={followUps.map((f) => f.label).join("\n")} placeholder={"עודכן בשכר\nהוקם בפריוריטי"} />
+              <p className="text-xs text-muted-foreground">שורה לכל שלב. הצוות מסמן אותם בבקשה אחרי שכולם חתמו.</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
+              לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
+            </label>
+            <div className="sm:col-span-2">
+              <Button type="submit">שמירת ההגדרות</Button>
+            </div>
+          </form>
+        </Card>
+      </section>
     </main>
   );
 }

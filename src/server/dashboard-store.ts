@@ -1,4 +1,5 @@
 /** Read-side queries for the requests dashboard (list with filters, KPI strip). */
+import { normalizeFollowUpStatuses, pendingFollowUp } from "@/lib/requests/follow-up";
 import { and, asc, desc, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { PAGE_SIZE, daysSince, median, progress, type RequestFilters } from "@/lib/requests/list";
@@ -76,6 +77,11 @@ export function conditions(f: RequestFilters, now: Date, scope: Scope = null): S
       ),
     );
   }
+  if (f.mine && f.createdBy) c.push(eq(requests.createdBy, f.createdBy));
+  if (f.followUp === "pending") {
+    c.push(eq(requests.status, "completed"));
+    c.push(sql`exists (select 1 from package_templates pt, jsonb_array_elements(pt.follow_up_statuses) fs where pt.id = ${requests.packageTemplateId} and not jsonb_exists(${requests.followUp}, fs->>'key'))`);
+  }
   if (f.q) {
     const like = `%${escapeLike(f.q)}%`;
     c.push(or(ilike(requests.subjectName, like), ilike(requests.subjectIdNumber, like), ilike(requests.subjectEmail, like))!);
@@ -96,6 +102,8 @@ export interface RequestRow {
   daysInStep: number | null;
   progress: { done: number; total: number };
   overdue: boolean;
+  /** After signing: the first handling step not done yet (e.g. "עודכן בשכר"); null = none or all done. */
+  followUpPending?: string | null;
 }
 
 export async function queryRequests(f: RequestFilters, now = new Date(), pageSize = PAGE_SIZE, scope: Scope = null): Promise<{ rows: RequestRow[]; total: number; pageCount: number }> {
@@ -113,6 +121,8 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       dueAt: requests.dueAt,
       organizationName: sql<string>`${organizations.name} || coalesce(' – ' || ${projects.name}, '')`,
       packageName: packageTemplates.name,
+      followUpState: requests.followUp,
+      followUpStatuses: packageTemplates.followUpStatuses,
     })
     .from(requests)
     .innerJoin(organizations, eq(requests.organizationId, organizations.id))
@@ -132,7 +142,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
         .orderBy(asc(signingSteps.order))
     : [];
 
-  const rows = base.map<RequestRow>((r) => {
+  const rows = base.map<RequestRow>(({ followUpState, followUpStatuses, ...r }) => {
     const mine = steps.filter((s) => s.requestId === r.id);
     const open = mine.filter((s) => (OPEN_STEP as readonly string[]).includes(s.status));
     const since = open.map((s) => s.activatedAt).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0];
@@ -142,6 +152,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
       daysInStep: since ? daysSince(since, now) : null,
       progress: progress(mine),
       overdue: (IN_PROGRESS as readonly string[]).includes(r.status) && ((!!r.dueAt && r.dueAt < now) || (!!r.expiresAt && r.expiresAt < now)),
+      followUpPending: r.status === "completed" ? (pendingFollowUp(normalizeFollowUpStatuses(followUpStatuses), followUpState)?.label ?? null) : null,
     };
   });
   return { rows, total: n, pageCount };

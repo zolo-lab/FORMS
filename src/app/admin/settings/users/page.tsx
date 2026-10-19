@@ -11,11 +11,11 @@ import { listPackages } from "@/server/dashboard-store";
 import { currentUser, listAllOrgAccess, listAllPermissions, listAllProjectAccess, listUsers } from "@/server/users-store";
 import { isDemoAddress } from "@/lib/auth/password";
 import { Input } from "@/components/ui/input";
-import { createDemoUserAction, impersonateAction, savePermissionsAction, setPasswordAction, updateUserAction } from "./actions";
+import { createDemoUserAction, createPasswordUserAction, impersonateAction, savePermissionsAction, setPasswordAction, updateUserAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם, וסיסמה (אם יש) של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל הזה", orgs: "בחרת \"רק עמותות / עסקים מסוימים\" בלי לסמן אף אחד" };
+const ERRORS: Record<string, string> = { input: "קלט לא תקין", self: "אי אפשר להסיר מעצמך את הרשאת המנהל", demo: "משתמש הדגמה: מייל בדומיין שמור (למשל ruth@demo.test), שם, וסיסמה (אם יש) של 6 תווים לפחות", exists: "כבר קיים משתמש עם המייל או שם המשתמש הזה", user: "משתמש עם סיסמה: שם, שם משתמש באנגלית (3–30 תווים: אותיות, ספרות, נקודה, מקף), וסיסמה של 9 תווים לפחות עם אות וספרה", orgs: "בחרת \"רק עמותות / עסקים מסוימים\" בלי לסמן אף אחד" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; u?: string }> }) {
   const { error, saved, u } = await searchParams;
@@ -34,6 +34,24 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </header>
       {error && ERRORS[error] && <p role="alert" className="text-sm text-destructive">{ERRORS[error]}</p>}
       {saved && <p role="status" className="text-sm text-success">נשמר.</p>}
+
+      <Card className="space-y-3 p-4">
+        <h2 className="font-semibold">משתמש עם שם משתמש וסיסמה</h2>
+        <p className="text-sm text-muted-foreground">למשל חשבון משותף &quot;מזכירות ת&quot;ת&quot;. המייל לא חובה: בלי מייל המשתמש נכנס עם שם המשתמש, ולא נשלחים אליו מיילים. לחשבון מעקב סמנו אחר כך &quot;מעקב בלבד&quot; בהרשאות.</p>
+        <form action={createPasswordUserAction} className="grid gap-3 sm:grid-cols-6 sm:items-end">
+          <div className="space-y-1"><Label htmlFor="p-name">שם</Label><Input id="p-name" name="name" required /></div>
+          <div className="space-y-1"><Label htmlFor="p-login">שם משתמש</Label><Input id="p-login" name="login" dir="ltr" autoComplete="off" placeholder="mazkirut-tt" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" /></div>
+          <div className="space-y-1"><Label htmlFor="p-email">מייל (לא חובה)</Label><Input id="p-email" name="email" type="email" dir="ltr" /></div>
+          <div className="space-y-1"><Label htmlFor="p-pass">סיסמה</Label><Input id="p-pass" name="password" type="text" dir="ltr" minLength={9} required autoComplete="new-password" /></div>
+          <div className="space-y-1">
+            <Label htmlFor="p-role">תפקיד</Label>
+            <Select id="p-role" name="role" defaultValue="manager">
+              {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </Select>
+          </div>
+          <Button type="submit">יצירה</Button>
+        </form>
+      </Card>
 
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">משתמש הדגמה</h2>
@@ -68,7 +86,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <input type="hidden" name="id" value={user.id} />
               <div className="min-w-0 grow">
                 <div className="font-medium">{user.name}</div>
-                <div className="text-sm text-muted-foreground" dir="ltr">{user.email}</div>
+                <div className="text-sm text-muted-foreground" dir="ltr">{user.login ? `${user.login}${user.email.endsWith("@users.invalid") ? "" : ` · ${user.email}`}` : user.email}</div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`role-${user.id}`}>תפקיד</Label>

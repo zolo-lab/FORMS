@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { SESSION_COOKIE, sessionEmail } from "@/lib/auth/session";
-import { allowedOrgIds, resolveAccess, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
+import { allowedOrgIds, isTrackOnly, resolveAccess, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 
 const { users, packagePermissions, userOrganizations, userProjects, projects } = schema;
 
@@ -130,6 +130,18 @@ export async function setUserPermissions(userId: string, rows: PackagePermission
 
 /** Whether the viewer may open one request page (admins always). */
 export async function canSeeRequest(requestId: string): Promise<boolean> {
+  // Tracking-only users never reach a request's content (answers, files, PDFs, links, actions on it).
+  if (isTrackOnly(await currentUser())) return false;
+  return inScope(requestId);
+}
+
+/** The request is in the viewer's scope for tracking (status only): trackers and everyone who may see it. */
+export async function canTrackRequest(requestId: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) return false;
+  return inScope(requestId);
+}
+
+async function inScope(requestId: string): Promise<boolean> {
   const scope = await viewerScope();
   if (!scope) return true;
   const { scopeCondition } = await import("./dashboard-store");
@@ -138,4 +150,18 @@ export async function canSeeRequest(requestId: string): Promise<boolean> {
     .from(schema.requests)
     .where(and(eq(schema.requests.id, requestId), scopeCondition(scope)));
   return !!row;
+}
+
+/** Active tracking-only users who may see this organization (no limit rows = every organization), with a real e-mail. */
+export async function orgTrackers(organizationId: string): Promise<{ name: string; email: string }[]> {
+  const rows = await db.select().from(users).where(eq(users.active, true));
+  const trackers = rows.filter((u) => normalizeRole(u.role) !== "admin" && normalizeGrants(u.grants).trackOnly && !u.email.toLowerCase().endsWith("@users.invalid"));
+  if (!trackers.length) return [];
+  const limits = await db.select().from(userOrganizations).where(inArray(userOrganizations.userId, trackers.map((t) => t.id)));
+  return trackers
+    .filter((t) => {
+      const mine = limits.filter((l) => l.userId === t.id);
+      return mine.length === 0 || mine.some((l) => l.organizationId === organizationId);
+    })
+    .map((t) => ({ name: t.name, email: t.email }));
 }

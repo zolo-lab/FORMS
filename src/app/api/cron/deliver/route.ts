@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { deliverQueued } from "@/server/notifications";
 import { runReminders } from "@/server/reminders";
 import { expireOverdue } from "@/server/requests-store";
+import { runWeeklyDigest } from "@/server/digest";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
   // Expire first so nobody is reminded about a request that just ran out; deliver last so new reminders go out now.
   const expired = await expireOverdue();
   const reminders = await runReminders();
+  const digests = await runWeeklyDigest().catch((e) => { console.error("[digest] failed", e); return 0; });
   const delivered = await deliverQueued(50);
-  return NextResponse.json({ expired, reminders, delivered });
+  return NextResponse.json({ expired, reminders, digests, delivered });
 }

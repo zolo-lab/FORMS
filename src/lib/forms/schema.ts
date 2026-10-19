@@ -96,6 +96,11 @@ export interface FormField {
   prefill?: string;
   /** Which role in the signing chain fills this field. Default: employee. */
   filledBy?: FillerRole;
+  /**
+   * Staff only (e.g. cost centre): filled by the requester (or the API), never shown to any other step, never drawn on
+   * the PDF or put in e-mails; kept in the data, the export and the staff views. See src/lib/forms/internal.ts.
+   */
+  internal?: boolean;
   options?: FieldOption[];
   /** Option source instead of static options: "banks", "branches", "cities", "streets", "costCenters:1|2|3", "organizations". */
   optionsSource?: string;
@@ -135,6 +140,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     defaultValue: z.unknown().optional(),
     prefill: z.string().optional(),
     filledBy: z.enum(fillerRoles).optional(),
+    internal: z.boolean().optional(),
     options: z.array(optionSchema).optional(),
     optionsSource: z.string().optional(),
     allowOther: z.boolean().optional(),

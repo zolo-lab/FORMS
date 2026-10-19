@@ -31,6 +31,10 @@ import { renderDefault } from "@/lib/notifications/templates";
 import { peopleForWorkflow } from "./people-store";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
+import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { findOrCreateEmployee } from "./employees-store";
+import { orgTrackers } from "./users-store";
+import { COMPLETION_DOCS_KEY, completionMessage, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole, Workflow } from "@/lib/workflow/types";
 
@@ -38,7 +42,6 @@ const { requests, signingSteps, stepTokens, submissions, events, notifications, 
 
 type StepRow = typeof signingSteps.$inferSelect;
 
-const DEFAULT_EXPIRY_DAYS = 30;
 export const appUrl = () => process.env.APP_URL ?? "https://gybs-forms.vercel.app";
 
 export interface Subject {
@@ -109,7 +112,10 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
   }
 
   const id = crypto.randomUUID();
-  const expiresAt = input.expiresAt ?? new Date(Date.now() + (input.expiresInDays ?? DEFAULT_EXPIRY_DAYS) * 86_400_000);
+  // An explicit deadline (API / wizard) wins; otherwise the package's rule (e.g. the 4th of the month after the start date).
+  const expiresAt = input.expiresAt
+    ?? (input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86_400_000) : expiryFor(normalizeExpiryRule(pkg.expiryRule), input.requesterAnswers ?? {}, new Date()));
+  const employeeId = await findOrCreateEmployee({ idNumber: input.subject.idNumber, name: input.subject.name, email: input.subject.email, phone: input.subject.phone, organizationId: input.organizationId, projectId: input.projectId });
   await db.insert(requests).values({
     id,
     organizationId: input.organizationId,
@@ -121,6 +127,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     subjectEmail: input.subject.email,
     subjectPhone: input.subject.phone,
     createdBy: input.createdBy,
+    employeeId,
     expiresAt,
     apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}), ...(input.workflowOverride ? { workflowOverride: input.workflowOverride } : {}) },
   });
@@ -422,6 +429,7 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     try {
       const { finalizeRequest } = await import("./finalize");
       await finalizeRequest(row.requestId);
+      await enqueueCompletionDocs(row.requestId);
     } catch (e) {
       console.error("[finalize] failed", row.requestId, e);
     }
@@ -529,6 +537,8 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
     subject: { name: req.subjectName, email: req.subjectEmail, phone: req.subjectPhone },
     creator: creator ? { name: creator.name, email: creator.email } : null,
     stepName: (id) => ROLE_LABELS[(steps.find((x) => x.id === id)?.role ?? "employee") as StepRole],
+    stepRole: (id) => steps.find((x) => x.id === id)?.role,
+    watchers: evs.some((e) => e.type === "step_completed") ? await orgTrackers(req.organizationId) : [],
   });
   const rows = notices.flatMap((n) => {
     const msg = renderDefault(n.key, { ...n.vars, org: org?.name ?? "" });
@@ -546,4 +556,24 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
     await db.insert(notifications).values(rows);
     await kickDelivery();
   }
+}
+
+/** The package's fixed recipients (payroll, HR…) get the signed PDFs; attachments are added when the row is delivered. */
+export async function enqueueCompletionDocs(requestId: string) {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) return;
+  const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
+  const targets = completionTargets(pkg?.completionRecipients, [req.subjectEmail, creator?.email]);
+  if (!targets.length) return;
+  const already = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.requestId, requestId), eq(notifications.templateKey, COMPLETION_DOCS_KEY)));
+  if (already.length) return;
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
+  await db.insert(notifications).values(
+    targets.map((t) => {
+      const m = completionMessage({ name: t.name, subject: req.subjectName, packageName: pkg?.name ?? "", org: org?.name ?? "", link: `${appUrl()}/admin/requests/${requestId}` });
+      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: t.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.body };
+    }),
+  );
+  await kickDelivery();
 }

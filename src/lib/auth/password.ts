@@ -28,3 +28,17 @@ export function isDemoAddress(email: string): boolean {
 export function validDemoPassword(p: string): boolean {
   return p.length >= 6;
 }
+
+/** User name for password sign-in (no e-mail needed): 3–30 latin letters, digits, dot, dash, underscore. */
+export function normalizeLogin(raw: string): string | null {
+  const s = raw.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9._-]{2,29}$/.test(s) ? s : null;
+}
+
+/** Passwords of real (non-demo) users: at least 9 characters with a letter and a digit. */
+export function validUserPassword(p: string): boolean {
+  return p.length >= 9 && /[A-Za-z\u0590-\u05FF]/.test(p) && /\d/.test(p);
+}
+
+/** The stored address of a user created without e-mail (never mailed: see isPlaceholderEmail). */
+export const placeholderEmail = (login: string) => `${login}@users.invalid`;

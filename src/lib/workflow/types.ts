@@ -99,9 +99,10 @@ export interface ReminderPolicy {
 }
 
 export const DEFAULT_REMINDER_POLICY: ReminderPolicy = {
-  firstAfterHours: 24,
-  everyHours: 48,
-  maxCount: 3,
+  firstAfterHours: 72,
+  everyHours: 72,
+  /** 0 = no cap (remind until the step ends). */
+  maxCount: 0,
   quietFromHour: 21,
   quietToHour: 8,
   skipShabbat: true,

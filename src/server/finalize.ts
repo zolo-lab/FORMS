@@ -7,6 +7,7 @@ import { asc, eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { db, schema } from "@/db";
 import { stampPdf } from "@/lib/forms/pdf-mapping";
+import { internalFieldIds, omitInternalAnswers, stripInternalFields, stripInternalStamps } from "@/lib/forms/internal";
 import { appendCertificate } from "@/lib/pdf/certificate";
 import { summaryItems, summaryPdf } from "@/lib/pdf/summary";
 import { archivePdf, driveEnabled } from "./drive";
@@ -55,9 +56,12 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     // A form built on a PDF must never silently turn into the plain summary: fail so it is retried/fixed.
     if (version.pdfFileId && version.pdfMapping && !stored) throw new Error(`PDF template file missing for "${title}" (file ${version.pdfFileId})`);
     if (stored && version.pdfMapping) {
-      base = await stampPdf(stored.bytes, version.pdfMapping, version.definition, answers, { signedAt });
+      // The signed PDF goes to the employee and others: staff-only fields are never drawn.
+      const hidden = internalFieldIds(version.definition);
+      base = await stampPdf(stored.bytes, stripInternalStamps(version.pdfMapping, hidden), stripInternalFields(version.definition), omitInternalAnswers(answers, hidden), { signedAt });
     } else {
-      base = await (await summaryPdf(title, summaryItems(version.definition, answers))).save();
+      const hidden = internalFieldIds(version.definition);
+      base = await (await summaryPdf(title, summaryItems(stripInternalFields(version.definition), omitInternalAnswers(answers, hidden)))).save();
     }
 
     const doc = await PDFDocument.load(base);

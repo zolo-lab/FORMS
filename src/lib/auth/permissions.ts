@@ -55,9 +55,16 @@ export interface UserGrants {
   manageForms: boolean;
   /** May export to Excel / CSV and download the signed PDFs. */
   export: boolean;
+  /**
+   * Tracking only (e.g. a secretariat that chases signatures): sees who is waiting, at which step and for how long,
+   * and may send a reminder – but never the answers, files, PDFs or signing links. Overrides every other grant.
+   */
+  trackOnly: boolean;
+  /** May tick the handling steps after signing ("עודכן בשכר"). */
+  followUp: boolean;
 }
 
-export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "export"] as const satisfies readonly (keyof UserGrants)[];
+export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "export", "followUp", "trackOnly"] as const satisfies readonly (keyof UserGrants)[];
 
 export const GRANT_LABELS: Record<keyof UserGrants, string> = {
   viewAll: "רואה את כל הבקשות (לא רק את שלו)",
@@ -65,12 +72,14 @@ export const GRANT_LABELS: Record<keyof UserGrants, string> = {
   cancel: "יכול לבטל בקשות ולמחוק טיוטות",
   manageForms: "יכול לבנות טפסים וערכות",
   export: "רשאי לייצא דוחות (Excel / CSV / PDF חתומים)",
+  followUp: "מסמן טיפול אחרי חתימה (למשל \"עודכן בשכר\")",
+  trackOnly: "מעקב בלבד – רואה מי ממתין ושולח תזכורת, בלי גישה לתוכן הטפסים",
 };
 
 /** Stored JSON (possibly partial or junk) to a full set of booleans. */
 export function normalizeGrants(raw: unknown): UserGrants {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  return { viewAll: o.viewAll === true, openAll: o.openAll === true, cancel: o.cancel === true, manageForms: o.manageForms === true, export: o.export === true };
+  return { viewAll: o.viewAll === true, openAll: o.openAll === true, cancel: o.cancel === true, manageForms: o.manageForms === true, export: o.export === true, followUp: o.followUp === true, trackOnly: o.trackOnly === true };
 }
 
 export interface SessionUser {
@@ -84,7 +93,8 @@ export interface SessionUser {
 
 /** Admins (and open mode) have every grant; an inactive user none. */
 export function hasGrant(u: SessionUser | null | undefined, grant: keyof UserGrants): boolean {
-  if (isAdmin(u)) return true;
+  if (isAdmin(u)) return grant !== "trackOnly";
+  if (isTrackOnly(u)) return grant === "trackOnly";
   return u!.active && u!.grants?.[grant] === true;
 }
 
@@ -107,11 +117,20 @@ export function roleForNewUser(existingUsers: number): UserRole {
 
 export const isAdmin = (u: SessionUser | null | undefined): boolean => !u || u.role === "admin";
 
+/** A tracking-only user: sees status, never content (answers, files, PDFs, signing links). Admins never are. */
+export const isTrackOnly = (u: SessionUser | null | undefined): boolean => !!u && u.role !== "admin" && u.active && u.grants?.trackOnly === true;
+
+/** May the user see the content of requests they can see (answers, files, PDFs, links)? */
+export const canViewContent = (u: SessionUser | null | undefined): boolean => !isTrackOnly(u);
+
+/** May the user open the tracking screen? Admins, managers who see every request, and tracking-only users. */
+export const canTrack = (u: SessionUser | null | undefined): boolean => isAdmin(u) || (!!u && u.active && (u.grants?.viewAll === true || u.grants?.trackOnly === true));
+
 export type Ability = "open" | "view_all" | "edit_chain";
 
 export function can(u: SessionUser | null | undefined, perms: PackagePermission[], packageTemplateId: string, ability: Ability): boolean {
   if (isAdmin(u)) return true;
-  if (!u!.active) return false;
+  if (!u!.active || isTrackOnly(u)) return false;
   const p = perms.find((x) => x.packageTemplateId === packageTemplateId);
   const openAll = u!.grants?.openAll === true;
   switch (ability) {
@@ -127,7 +146,7 @@ export function can(u: SessionUser | null | undefined, perms: PackagePermission[
 /** Package ids a user may start requests of; `null` = all (admin). */
 export function openablePackageIds(u: SessionUser | null | undefined, perms: PackagePermission[]): string[] | null {
   if (isAdmin(u)) return null;
-  if (!u!.active) return [];
+  if (!u!.active || isTrackOnly(u)) return [];
   if (u!.grants?.openAll) return null;
   return perms.filter((p) => p.canOpen).map((p) => p.packageTemplateId);
 }
@@ -163,7 +182,7 @@ export function visibilityScope(u: SessionUser | null | undefined, perms: Packag
     userId: u!.id,
     email: u!.email.toLowerCase(),
     viewAllPackageIds: u!.active ? perms.filter((p) => p.canViewAll).map((p) => p.packageTemplateId) : [],
-    allRequests: u!.active && u!.grants?.viewAll === true,
+    allRequests: u!.active && (u!.grants?.viewAll === true || isTrackOnly(u)),
     access: allowedOrgIds(u, access),
   };
 }

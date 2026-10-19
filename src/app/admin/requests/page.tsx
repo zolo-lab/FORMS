@@ -8,7 +8,8 @@ import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
 import { currentUser, viewerScope } from "@/server/users-store";
-import { hasGrant, usableOrgIds } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin, isTrackOnly, usableOrgIds } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
 import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
@@ -39,6 +40,17 @@ function Kpi({ label, value, hint, href }: { label: string; value: string | numb
 export default async function RequestsPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
+  const me0 = await currentUser();
+  // Tracking-only users have their own screen, without content.
+  if (isTrackOnly(me0)) redirect("/admin/track");
+  // A manager who doesn't see every request starts with the requests they opened ("all" shows everything they may see).
+  const narrowByDefault = !!me0 && !isAdmin(me0) && !hasGrant(me0, "viewAll");
+  if (narrowByDefault && sp.all !== "1" && !filters.mine) filters.mine = true;
+  if (filters.mine && me0) filters.createdBy = me0.id;
+  const allLink = (() => {
+    const qs = filtersToQuery({ ...filters, mine: false, page: 1 });
+    return `/admin/requests?${qs ? `${qs}&` : ""}all=1`;
+  })();
   const cancelled = typeof sp.cancelled === "string" ? Number(sp.cancelled) : null;
   const skipped = typeof sp.skipped === "string" ? Number(sp.skipped) : 0;
   const scope = await viewerScope();
@@ -168,9 +180,20 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
       </form>
 
       {cancelled !== null && Number.isFinite(cancelled) && <p role="status" className="rounded-md bg-muted p-3 text-sm">בוטלו {cancelled} בקשות.{skipped > 0 && ` ${skipped} דולגו (כבר הסתיימו או בוטלו).`}</p>}
-      <p className="text-sm text-muted-foreground" aria-live="polite">
-        {result.total} בקשות
-      </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <p className="text-muted-foreground" aria-live="polite">{result.total} בקשות</p>
+        <nav aria-label="היקף" className="flex overflow-hidden rounded-md border">
+          <Link href={link({ mine: true, page: 1 })} aria-current={filters.mine ? "page" : undefined} className={`px-3 py-1.5 ${filters.mine ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>שפתחתי</Link>
+          <Link href={allLink} aria-current={!filters.mine ? "page" : undefined} className={`px-3 py-1.5 ${!filters.mine ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>הכול</Link>
+        </nav>
+        <Link
+          href={filters.followUp ? link({ followUp: undefined, page: 1 }) : link({ followUp: "pending", status: undefined, page: 1 })}
+          aria-pressed={!!filters.followUp}
+          className={`rounded-md border px-3 py-1.5 ${filters.followUp ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+        >
+          ממתינות לטיפול אחרי חתימה
+        </Link>
+      </div>
       {filters.view === "board" ? <Board rows={result.rows} /> : (
       <form id="bulk" method="get" action="/api/admin/requests/export" className="space-y-3">
         {[...new URLSearchParams(filtersToQuery(filters, { page: 1 })).entries()].map(([k, v]) => (
@@ -230,6 +253,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <td className="px-3 py-2">{r.packageName}</td>
                   <td className="px-3 py-2">
                     <Badge tone={tone}>{label}</Badge>
+                    {r.followUpPending && <span className="mt-1 block text-xs font-medium text-muted-foreground">ממתין: {r.followUpPending}</span>}
                   </td>
                   <td className="px-3 py-2">{r.waitingFor.length ? r.waitingFor.map((w) => `${ROLE_LABELS[w.role as StepRole] ?? w.role}${w.name ? ` (${w.name})` : ""}`).join(", ") : "—"}</td>
                   <td className="px-3 py-2">{r.daysInStep ?? "—"}</td>
