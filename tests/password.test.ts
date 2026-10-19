@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashPassword, isDemoAddress, validDemoPassword, verifyPassword } from "@/lib/auth/password";
+import { normalizeLogin, placeholderEmail, validUserPassword } from "@/lib/auth/password";
+import { isPlaceholderEmail, deliveryTargets } from "@/lib/notifications/channels";
 
 describe("password hashing", () => {
   it("verifies the right password only", () => {
@@ -30,5 +32,25 @@ describe("demo addresses and passwords", () => {
   it("needs 6+ characters", () => {
     expect(validDemoPassword("12345")).toBe(false);
     expect(validDemoPassword("123456")).toBe(true);
+  });
+});
+
+
+describe("user names without e-mail", () => {
+  it("normalizes logins", () => {
+    expect(normalizeLogin(" Mazkirut-TT ")).toBe("mazkirut-tt");
+    expect(normalizeLogin("ab")).toBeNull();
+    expect(normalizeLogin("מזכירות")).toBeNull();
+  });
+  it("requires 9+ chars with a letter and a digit", () => {
+    expect(validUserPassword("abcdefgh1")).toBe(true);
+    expect(validUserPassword("abcdefghi")).toBe(false);
+    expect(validUserPassword("12345678a")).toBe(true);
+    expect(validUserPassword("short1a")).toBe(false);
+  });
+  it("placeholder addresses are never mailed", () => {
+    const e = placeholderEmail("mazkirut-tt");
+    expect(isPlaceholderEmail(e)).toBe(true);
+    expect(deliveryTargets({ email: e })).toEqual([]);
   });
 });

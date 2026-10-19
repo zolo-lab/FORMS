@@ -25,7 +25,15 @@ export interface StatusNotice {
 
 export function statusNotices(
   events: StatusEvent[],
-  ctx: { subject: Recipient; creator?: Recipient | null; stepName: (stepId: string) => string },
+  ctx: {
+    subject: Recipient;
+    creator?: Recipient | null;
+    stepName: (stepId: string) => string;
+    /** Role of a step (to tell the person's own step apart). */
+    stepRole?: (stepId: string) => string | undefined;
+    /** Tracking users of the organization: told when the person finished their step. */
+    watchers?: Recipient[];
+  },
 ): StatusNotice[] {
   const out: StatusNotice[] = [];
   const completed = events.some((e) => e.type === "request_completed");
@@ -41,10 +49,16 @@ export function statusNotices(
   };
   if (completed) both("completed", {});
   else if (declined) both("declined", { reason });
-  else if (ctx.creator) {
+  else {
     for (const e of events) {
-      if (e.type === "step_completed" && e.stepId) {
-        out.push({ to: ctx.creator, key: "step_done", vars: { name: ctx.creator.name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId) } });
+      if (e.type !== "step_completed" || !e.stepId) continue;
+      if (ctx.creator) out.push({ to: ctx.creator, key: "step_done", vars: { name: ctx.creator.name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId) } });
+      // The secretariats that chase signatures hear when the person themselves finished their part.
+      if (ctx.stepRole?.(e.stepId) === "employee") {
+        for (const w of ctx.watchers ?? []) {
+          if (ctx.creator && same(w, ctx.creator)) continue;
+          out.push({ to: w, key: "step_done", vars: { name: w.name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId) } });
+        }
       }
     }
   }

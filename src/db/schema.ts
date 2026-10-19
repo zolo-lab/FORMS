@@ -25,6 +25,8 @@ import type { Condition } from "@/lib/forms/schema";
 import type { ReminderPolicy, Workflow } from "@/lib/workflow/types";
 import type { ExportTemplate } from "@/lib/export/template";
 import type { UserGrants } from "@/lib/auth/permissions";
+import type { ExpiryRule } from "@/lib/requests/expiry";
+import type { FollowUpStatus } from "@/lib/requests/follow-up";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -67,12 +69,17 @@ export const organizations = pgTable("organizations", {
   dateFormat: text("date_format").notNull().default("dd/MM/yyyy"),
   stampImageFileId: uuid("stamp_image_file_id"),
   reminderPolicy: jsonb("reminder_policy").$type<ReminderPolicy>(),
+  /** Weekly "waiting" summary to the organization's tracking users and admins. */
+  weeklyDigest: boolean("weekly_digest").notNull().default(true),
   ...timestamps,
 });
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Real address, or `<login>@users.invalid` for a user created without e-mail (never mailed, see `isMailable`). */
   email: text("email").notNull().unique(),
+  /** Sign-in name for password users (e.g. "mazkirut-tt"); null = sign in with the e-mail. */
+  login: text("login").unique(),
   name: text("name").notNull(),
   role: userRole("role").notNull(),
   /** scrypt hash for demo/test users who sign in with a password (Google users have none). */
@@ -245,6 +252,13 @@ export const packageTemplates = pgTable("package_templates", {
   name: text("name").notNull(),
   description: text("description"),
   workflow: jsonb("workflow").$type<Workflow>().notNull(),
+  /** When the links of a request expire (see src/lib/requests/expiry.ts); null = the default 30 days. */
+  expiryRule: jsonb("expiry_rule").$type<ExpiryRule>(),
+  /** Fixed people who get the completion e-mail with the signed PDFs attached. */
+  completionRecipients: jsonb("completion_recipients").$type<{ name: string; email: string }[]>().notNull().default([]),
+  /** Handling steps after signing, ticked by staff (e.g. "עודכן בשכר"). */
+  followUpStatuses: jsonb("follow_up_statuses").$type<FollowUpStatus[]>().notNull().default([]),
+  remindersEnabled: boolean("reminders_enabled").notNull().default(true),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   ...timestamps,
 });
@@ -286,6 +300,27 @@ export const packageTemplateItems = pgTable(
   (t) => [uniqueIndex("package_template_items_pkg_template_uq").on(t.packageTemplateId, t.templateId)],
 );
 
+/** A person requests are about (employee, supplier…), one row per ID number across organizations. */
+export const employees = pgTable("employees", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  idNumber: text("id_number").notNull().unique(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  ...timestamps,
+});
+
+export const employeeOrganizations = pgTable(
+  "employee_organizations",
+  {
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.employeeId, t.organizationId] })],
+);
+
 export const requests = pgTable(
   "requests",
   {
@@ -304,6 +339,10 @@ export const requests = pgTable(
     subjectIdNumber: text("subject_id_number"),
     subjectEmail: text("subject_email"),
     subjectPhone: text("subject_phone"),
+    /** The employee record of the person the request is about (matched by ID number when created). */
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** Handling steps done after signing: key → when and by whom. */
+    followUp: jsonb("follow_up").$type<Record<string, { at: string; byUserId?: string; byName?: string }>>().notNull().default({}),
     createdBy: uuid("created_by").references(() => users.id),
     status: requestStatus("status").notNull().default("draft"),
     /** `order` of the step(s) currently waiting for action. */

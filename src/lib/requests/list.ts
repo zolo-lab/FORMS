@@ -18,6 +18,11 @@ export interface RequestFilters {
   view?: "board";
   /** Requests with an open step addressed to this e-mail (the signed-in user's inbox; never read from the URL). */
   assigneeEmail?: string;
+  /** "My requests": the ones the signed-in user opened (the URL only says `mine=1`; the id is set on the server). */
+  mine?: boolean;
+  createdBy?: string;
+  /** Completed requests whose handling after signing is not finished ("עודכן בשכר" not ticked yet). */
+  followUp?: "pending";
   page: number;
 }
 
@@ -44,6 +49,8 @@ export function parseFilters(sp: SearchParams): RequestFilters {
   const q = first(sp.q)?.trim();
   if (q) f.q = q.slice(0, 80);
   if (first(sp.view) === "board") f.view = "board";
+  if (first(sp.mine) === "1") f.mine = true;
+  if (first(sp.followUp) === "pending") f.followUp = "pending";
   const page = Number.parseInt(first(sp.page) ?? "1", 10);
   f.page = Number.isFinite(page) && page >= 1 ? page : 1;
   return f;
@@ -62,6 +69,8 @@ export function filtersToQuery(f: RequestFilters, override: Partial<RequestFilte
   if (m.overdue) p.set("overdue", "1");
   if (m.q) p.set("q", m.q);
   if (m.view) p.set("view", m.view);
+  if (m.mine) p.set("mine", "1");
+  if (m.followUp) p.set("followUp", m.followUp);
   if (m.page > 1) p.set("page", String(m.page));
   return p.toString();
 }

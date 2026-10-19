@@ -34,7 +34,7 @@ describe("quiet hours and Shabbat", () => {
 describe("reminderDue with a fake clock", () => {
   const activatedAt = il("2026-10-11T09:00:00"); // Sunday morning
   it("sends exactly maxCount reminders, spaced by firstAfterHours then everyHours", () => {
-    const policy = { ...P, skipShabbat: false };
+    const policy = { ...P, firstAfterHours: 24, everyHours: 48, maxCount: 3, skipShabbat: false };
     let sent = 0;
     let last: Date | null = null;
     const log: string[] = [];
@@ -69,5 +69,22 @@ describe("reminderDue with a fake clock", () => {
   });
   it("never before the first delay", () => {
     expect(reminderDue({ activatedAt, sent: 0, lastSentAt: null }, P, il("2026-10-12T08:59:00"))).toBe(false);
+  });
+});
+
+describe("unlimited reminders (maxCount 0)", () => {
+  it("keeps reminding every interval until the step ends", () => {
+    const start = new Date("2026-10-11T06:00:00Z");
+    const policy = { ...P, firstAfterHours: 72, everyHours: 72, maxCount: 0, quietFromHour: 0, quietToHour: 0, skipShabbat: false };
+    let sent = 0;
+    let last: Date | null = null;
+    for (let t = start.getTime(); t < start.getTime() + 30 * 86_400_000; t += 3_600_000) {
+      const now = new Date(t);
+      if (reminderDue({ activatedAt: start, sent, lastSentAt: last }, policy, now)) { sent++; last = now; }
+    }
+    expect(sent).toBe(9);
+  });
+  it("the default is every 3 days with no cap", () => {
+    expect(P).toMatchObject({ firstAfterHours: 72, everyHours: 72, maxCount: 0 });
   });
 });

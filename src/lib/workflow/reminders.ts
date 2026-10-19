@@ -37,7 +37,8 @@ export interface ReminderState {
 
 /** True when a reminder should go out at `now`: not past the cap, the wait has elapsed and it isn't a quiet time. */
 export function reminderDue(state: ReminderState, policy: ReminderPolicy, now: Date): boolean {
-  if (state.sent >= policy.maxCount) return false;
+  // maxCount 0 = no cap: keep reminding until the step ends.
+  if (policy.maxCount > 0 && state.sent >= policy.maxCount) return false;
   const base = state.sent === 0 || !state.lastSentAt ? state.activatedAt.getTime() + policy.firstAfterHours * 3_600_000 : state.lastSentAt.getTime() + policy.everyHours * 3_600_000;
   if (now.getTime() < base) return false;
   return canSendReminderNow(now, policy);

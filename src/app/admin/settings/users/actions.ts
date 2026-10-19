@@ -1,12 +1,12 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { GRANT_KEYS, isAdmin, type PackagePermission, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 import { db, schema } from "@/db";
 import { listProjects } from "@/server/orgs-store";
-import { hashPassword, isDemoAddress, validDemoPassword } from "@/lib/auth/password";
+import { hashPassword, isDemoAddress, normalizeLogin, placeholderEmail, validDemoPassword, validUserPassword } from "@/lib/auth/password";
 import { RETURN_COOKIE, SESSION_COOKIE, SESSION_TTL_MS, createUserSessionToken, sessionEmail } from "@/lib/auth/session";
 import { currentUser, setUserGrants, setUserOrgAccess, setUserProjectAccess, setUserPermissions, updateUser } from "@/server/users-store";
 
@@ -81,12 +81,31 @@ export async function createDemoUserAction(fd: FormData) {
   redirect(`${PATH}?saved=1`);
 }
 
+/** A real user with a user name and password; the e-mail is optional (without it the user is never mailed). */
+export async function createPasswordUserAction(fd: FormData) {
+  await requireAdmin();
+  const name = String(fd.get("name") ?? "").trim();
+  const login = normalizeLogin(String(fd.get("login") ?? ""));
+  const emailRaw = String(fd.get("email") ?? "").trim().toLowerCase();
+  const password = String(fd.get("password") ?? "");
+  const role = String(fd.get("role") ?? "manager") as UserRole;
+  if (!name || !login || !validUserPassword(password) || !ROLES.includes(role)) redirect(`${PATH}?error=user`);
+  if (emailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) redirect(`${PATH}?error=user`);
+  const email = emailRaw || placeholderEmail(login!);
+  const taken = await db.select({ id: schema.users.id }).from(schema.users).where(or(eq(schema.users.email, email), eq(schema.users.login, login!)));
+  if (taken.length) redirect(`${PATH}?error=exists`);
+  const [row] = await db.insert(schema.users).values({ email, login, name, role, passwordHash: hashPassword(password) }).returning({ id: schema.users.id });
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=1&u=${row!.id}`);
+}
+
 export async function setPasswordAction(fd: FormData) {
   await requireAdmin();
   const id = String(fd.get("id") ?? "");
   const password = String(fd.get("password") ?? "");
   const [u] = UUID.test(id) ? await db.select().from(schema.users).where(eq(schema.users.id, id)) : [];
-  if (!u || !isDemoAddress(u.email) || !validDemoPassword(password)) redirect(`${PATH}?error=demo`);
+  const ok = !!u && (u.login ? validUserPassword(password) : isDemoAddress(u.email) && validDemoPassword(password));
+  if (!ok) redirect(`${PATH}?error=${u?.login ? "user" : "demo"}`);
   await db.update(schema.users).set({ passwordHash: hashPassword(password), updatedAt: new Date() }).where(eq(schema.users.id, id));
   redirect(`${PATH}?saved=1`);
 }

@@ -1,7 +1,7 @@
 /** Who may download a stored file: admins always; others only files tied to a request they may see. */
 import { and, eq, exists, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { hasGrant, isAdmin } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin, isTrackOnly } from "@/lib/auth/permissions";
 import { scopeCondition } from "./dashboard-store";
 import { currentUser, viewerScope } from "./users-store";
 
@@ -19,6 +19,8 @@ export async function canReadFile(fileId: string): Promise<boolean> {
     .where(or(eq(organizations.logoFileId, fileId), eq(organizations.stampImageFileId, fileId)))
     .limit(1);
   if (brand) return true;
+  // Tracking-only users never download request files.
+  if (isTrackOnly(user)) return false;
   const scope = await viewerScope();
   const tied = or(
     exists(db.select({ one: sql`1` }).from(packageDocuments).where(and(eq(packageDocuments.requestId, requests.id), eq(packageDocuments.finalFileId, fileId)))),

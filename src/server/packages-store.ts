@@ -5,6 +5,8 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { Workflow } from "@/lib/workflow/types";
 import { normalizeOrders } from "@/lib/workflow/validate-workflow";
+import type { ExpiryRule } from "@/lib/requests/expiry";
+import type { FollowUpStatus } from "@/lib/requests/follow-up";
 
 const { packageTemplates, packageTemplateItems, formTemplates, formTemplateVersions } = schema;
 
@@ -105,6 +107,16 @@ export async function createPackage(name: string): Promise<string> {
 }
 
 export async function updatePackage(id: string, patch: { name: string; description: string | null; organizationId: string | null }) {
+  await db.update(packageTemplates).set(patch).where(eq(packageTemplates.id, id));
+}
+
+/** Process settings of a package: link expiry, completion recipients, handling steps after signing, reminders. */
+export async function updatePackageSettings(id: string, patch: {
+  expiryRule: ExpiryRule | null;
+  completionRecipients: { name: string; email: string }[];
+  followUpStatuses: FollowUpStatus[];
+  remindersEnabled: boolean;
+}) {
   await db.update(packageTemplates).set(patch).where(eq(packageTemplates.id, id));
 }
 

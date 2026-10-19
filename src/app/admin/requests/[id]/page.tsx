@@ -14,6 +14,11 @@ import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/work
 import type { StepRole } from "@/lib/workflow/types";
 import { requestAnswerItems, uploadedFiles } from "@/server/dashboard-store";
 import { getRequest } from "@/server/requests-store";
+import { FollowUpCard } from "@/components/requests/FollowUpCard";
+import { RemindButton } from "@/components/requests/RemindButton";
+import { normalizeFollowUpStatuses, type FollowUpState } from "@/lib/requests/follow-up";
+import { db, schema } from "@/db";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +40,8 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const roleOf = (r: string) => ROLE_LABELS[r as StepRole] ?? r;
   const openSteps = steps.filter((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
   const live = request.status === "in_progress" || request.status === "returned";
+  const [pkg] = await db.select({ followUpStatuses: schema.packageTemplates.followUpStatuses }).from(schema.packageTemplates).where(eq(schema.packageTemplates.id, request.packageTemplateId));
+  const followUps = normalizeFollowUpStatuses(pkg?.followUpStatuses);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
@@ -72,7 +79,18 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
         )}
       </section>
 
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "send" ? "השליחה נכשלה. בדקו שהערכה מוגדרת ושכל הטפסים בה פורסמו." : "המחיקה נכשלה."}</p>}
+      {live && openSteps.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">ממתין ל{roleOf(openSteps[0]!.role)}:</span>
+          <RemindButton requestId={request.id} subject={request.subjectName} />
+        </div>
+      )}
+
+      {request.status === "completed" && followUps.length > 0 && (
+        <FollowUpCard requestId={request.id} statuses={followUps} state={(request.followUp ?? {}) as FollowUpState} canMark={hasGrant(me, "followUp")} />
+      )}
+
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "followup" ? "אין לך הרשאה לסמן טיפול אחרי חתימה." : error === "send" ? "השליחה נכשלה. בדקו שהערכה מוגדרת ושכל הטפסים בה פורסמו." : "המחיקה נכשלה."}</p>}
 
       {request.status === "draft" && (
         <section className="space-y-2" aria-label="טיוטה">

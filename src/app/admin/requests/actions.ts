@@ -8,10 +8,10 @@ import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { getWizardPackage } from "@/server/packages-store";
-import { can, orgAllowed } from "@/lib/auth/permissions";
+import { can, hasGrant, orgAllowed } from "@/lib/auth/permissions";
 import { checkChain } from "@/lib/workflow/chain";
 import type { Workflow } from "@/lib/workflow/types";
-import { canSeeRequest, viewer } from "@/server/users-store";
+import { canSeeRequest, currentUser, viewer } from "@/server/users-store";
 import { mayGrant, requireGrant, requireRequest } from "@/server/guards";
 import { listProjects } from "@/server/orgs-store";
 import { appUrl, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
@@ -236,4 +236,16 @@ export async function discardDraftAction(formData: FormData) {
   }
   revalidatePath("/admin/requests");
   redirect("/admin/requests");
+}
+
+/** Tick / untick a handling step after signing ("עודכן בשכר"). */
+export async function followUpAction(fd: FormData) {
+  const requestId = String(fd.get("requestId") ?? "");
+  await requireRequest(requestId);
+  const me = await currentUser();
+  if (!hasGrant(me, "followUp")) redirect(`/admin/requests/${requestId}?error=followup`);
+  const { markFollowUp } = await import("@/server/follow-up-store");
+  await markFollowUp(requestId, String(fd.get("key") ?? ""), fd.get("done") === "1", { id: me?.id, name: me?.name ?? "מנהל" });
+  revalidatePath(`/admin/requests/${requestId}`);
+  redirect(`/admin/requests/${requestId}`);
 }

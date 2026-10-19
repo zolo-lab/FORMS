@@ -4,6 +4,7 @@
  */
 import type { Answers } from "./conditions";
 import { allFields, type FillerRole, type FormDefinition, type FormPage } from "./schema";
+import { stripInternalFields } from "./internal";
 
 export interface PackageDoc {
   title: string;
@@ -11,7 +12,9 @@ export interface PackageDoc {
 }
 
 /** One form to fill the whole package at a signing step. Fields of other roles are read-only. */
-export function mergedDefinitionForStep(docs: PackageDoc[], role: FillerRole): FormDefinition {
+export function mergedDefinitionForStep(docsIn: PackageDoc[], role: FillerRole): FormDefinition {
+  // Internal (staff-only) fields exist only for the requester.
+  const docs = role === "requester" ? docsIn : docsIn.map((d) => ({ ...d, definition: stripInternalFields(d.definition) }));
   const seen = new Set<string>();
   const pages: FormPage[] = [];
   const docOfPage: number[] = [];

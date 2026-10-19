@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedOrgIds, can, hasGrant, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, projectLimit, resolveAccess, roleForNewUser, usableOrgIds, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
+import { allowedOrgIds, can, canTrack, canViewContent, hasGrant, isTrackOnly, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, projectLimit, resolveAccess, roleForNewUser, usableOrgIds, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
 
 const admin: SessionUser = { id: "a", email: "a@x.org", name: "A", role: "admin", active: true };
 const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "manager", active: true };
@@ -93,8 +93,8 @@ describe("organization and project access", () => {
 
 describe("grants (iForms-style extra permissions)", () => {
   it("normalizes stored JSON", () => {
-    expect(normalizeGrants(null)).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: false });
-    expect(normalizeGrants({ export: true, cancel: "yes", junk: 1 })).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: true });
+    expect(normalizeGrants(null)).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: false, followUp: false, trackOnly: false });
+    expect(normalizeGrants({ export: true, cancel: "yes", junk: 1 })).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: true, followUp: false, trackOnly: false });
   });
   it("admin and open mode have every grant; a manager only what was ticked", () => {
     expect(hasGrant(admin, "export")).toBe(true);
@@ -115,5 +115,31 @@ describe("grants (iForms-style extra permissions)", () => {
     expect(can(u, [], "p9", "view_all")).toBe(true);
     expect(visibilityScope(u, perms, { orgs: ["o1"], projects: [] })).toMatchObject({ allRequests: true, access: { orgs: ["o1"], projects: [] } });
     expect(visibilityScope({ ...u, active: false }, perms)?.allRequests).toBe(false);
+  });
+});
+
+describe("tracking-only users", () => {
+  const tracker: SessionUser = { id: "t", email: "t@users.invalid", name: "מזכירות", role: "manager", active: true, grants: { trackOnly: true, viewAll: true, export: true, openAll: true } };
+  it("sees status but no content, opens and exports nothing", () => {
+    expect(isTrackOnly(tracker)).toBe(true);
+    expect(canViewContent(tracker)).toBe(false);
+    expect(canTrack(tracker)).toBe(true);
+    expect(hasGrant(tracker, "export")).toBe(false);
+    expect(hasGrant(tracker, "viewAll")).toBe(false);
+    expect(hasGrant(tracker, "trackOnly")).toBe(true);
+    expect(can(tracker, [{ packageTemplateId: "p", canOpen: true, canViewAll: true, canEditChain: true }], "p", "open")).toBe(false);
+    expect(openablePackageIds(tracker, [])).toEqual([]);
+    expect(visibilityScope(tracker, [])?.allRequests).toBe(true);
+  });
+  it("admins are never tracking-only", () => {
+    const admin: SessionUser = { id: "a", email: "a@x", name: "a", role: "admin", active: true, grants: { trackOnly: true } };
+    expect(isTrackOnly(admin)).toBe(false);
+    expect(canViewContent(admin)).toBe(true);
+    expect(hasGrant(admin, "trackOnly")).toBe(false);
+  });
+  it("an ordinary manager may not track unless they see every request", () => {
+    const m: SessionUser = { id: "m", email: "m@x", name: "m", role: "manager", active: true, grants: {} };
+    expect(canTrack(m)).toBe(false);
+    expect(canTrack({ ...m, grants: { viewAll: true } })).toBe(true);
   });
 });
