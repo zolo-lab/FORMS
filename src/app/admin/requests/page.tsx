@@ -231,7 +231,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <th key={h} scope="col" aria-sort={state} className="px-1 py-1 text-start font-medium">
                     <Link
                       href={link({ ...nextSort(filters, key), page: 1 })}
-                      className={`inline-flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring ${state !== "none" ? "text-foreground" : ""}`}
+                      className={`relative inline-flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring ${state !== "none" ? "text-foreground" : ""}`}
                     >
                       {h}
                       <span aria-hidden="true" className={state === "none" ? "opacity-30" : ""}>{state === "ascending" ? "▲" : state === "descending" ? "▼" : "↕"}</span>
