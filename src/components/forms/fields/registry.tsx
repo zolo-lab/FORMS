@@ -83,6 +83,7 @@ export function FieldRow({ field, scope, rootAnswers, onField, prefix, parentDis
         domId={domId}
         label={ctx.pipe(field.label, condScope)}
         description={field.description ? ctx.pipe(field.description, condScope) : undefined}
+        hint={field.hint}
         required={fieldIsRequired(field, condScope)}
         error={error}
         hideLabel={field.type === "consent"}

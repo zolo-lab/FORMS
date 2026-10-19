@@ -171,6 +171,11 @@ export function FieldSettings({
       {field.type !== "divider" && field.type !== "info_text" && (
         <Row label="הסבר (אופציונלי)"><Input value={field.description ?? ""} onChange={(e) => onPatch({ description: e.target.value || undefined })} /></Row>
       )}
+      {meta.hasAnswer && (
+        <Row label="הסבר מורחב (כפתור i ליד התווית)" hint="לפרטים שלא צריכים להופיע תמיד, למשל איפה מוצאים את המספר">
+          <Input value={field.hint ?? ""} maxLength={300} onChange={(e) => onPatch({ hint: e.target.value || undefined })} />
+        </Row>
+      )}
       {TEXT_TYPES.includes(field.type) && (
         <Row label="טקסט רמז (placeholder)"><Input value={field.placeholder ?? ""} onChange={(e) => onPatch({ placeholder: e.target.value || undefined })} /></Row>
       )}
