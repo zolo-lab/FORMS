@@ -3,7 +3,7 @@ import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PAGE_SIZE, filtersToQuery, parseFilters } from "@/lib/requests/list";
+import { PAGE_SIZE, ariaSort, filtersToQuery, nextSort, parseFilters, type SortKey } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { listPackages, queryRequests, requestKpis } from "@/server/dashboard-store";
@@ -64,7 +64,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
     const qs = filtersToQuery(filters, over);
     return `/admin/requests${qs ? `?${qs}` : ""}`;
   };
-  const hasFilters = Object.keys(filters).some((k) => k !== "page");
+  const hasFilters = Object.keys(filters).some((k) => k !== "page" && k !== "sort" && k !== "dir");
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
@@ -219,16 +219,27 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
             <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
           </span>}
         </div>
-      <Card className="overflow-x-auto">
+      <Card className="relative overflow-x-auto">
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
               <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
-              {["עובד", "ארגון", "ערכה", "סטטוס", "ממתין ל", "ימים בשלב", "התקדמות", "נוצרה", "יעד"].map((h) => (
-                <th key={h} scope="col" className="px-3 py-2 text-start font-medium">
-                  {h}
-                </th>
-              ))}
+              {([["עובד", "name"], ["ארגון", "org"], ["ערכה", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["יעד", "due"]] as [string, SortKey?][]).map(([h, key]) => {
+                if (!key) return <th key={h} scope="col" className="px-3 py-2 text-start font-medium">{h}</th>;
+                const state = ariaSort(filters, key);
+                return (
+                  <th key={h} scope="col" aria-sort={state} className="px-1 py-1 text-start font-medium">
+                    <Link
+                      href={link({ ...nextSort(filters, key), page: 1 })}
+                      className={`relative inline-flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring ${state !== "none" ? "text-foreground" : ""}`}
+                    >
+                      {h}
+                      <span aria-hidden="true" className={state === "none" ? "opacity-30" : ""}>{state === "ascending" ? "▲" : state === "descending" ? "▼" : "↕"}</span>
+                      <span className="sr-only">{state === "ascending" ? "(ממוין עולה)" : state === "descending" ? "(ממוין יורד)" : "(לחץ למיון)"}</span>
+                    </Link>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y">
