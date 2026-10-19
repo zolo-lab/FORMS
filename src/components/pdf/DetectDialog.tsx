@@ -42,6 +42,17 @@ export function DetectDialog({
 function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: DetectedField[]; pageCount: number; canSplit: boolean; onConfirm: (f: DetectedField[], o: { stepPerPage: boolean }) => void; onClose: () => void }) {
   const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: !f.skip, label: f.label, type: f.type, key: f.key ?? "" })));
   const [split, setSplit] = useState(canSplit);
+  const [q, setQ] = useState("");
+  const [onlyOff, setOnlyOff] = useState(false);
+  const needle = q.trim().toLowerCase();
+  const visible = fields.flatMap((f, i) => {
+    const r = rows[i]!;
+    if (onlyOff && r.include) return [];
+    if (needle && !`${r.label} ${f.label} ${r.key}`.toLowerCase().includes(needle)) return [];
+    return [i];
+  });
+  const pages = [...new Set(visible.map((i) => fields[i]!.page))].sort((a, b) => a - b);
+  const setVisible = (include: boolean) => setRows((r) => r.map((x, i) => (visible.includes(i) ? { ...x, include } : x)));
   const patch = (i: number, p: Partial<Row>) => setRows((r) => r.map((x, k) => (k === i ? { ...x, ...p } : x)));
   const chosen = rows.filter((r) => r.include && r.label.trim()).length;
   const badKey = rows.some((r) => r.include && r.key.trim() && !KEY.test(r.key.trim()));
@@ -65,12 +76,31 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
           <Button size="sm" variant="outline" onClick={() => setRows((r) => r.map((x, i) => (fields[i]!.skip ? { ...x, include: true } : x)))}>סימון גם אותן</Button>
         </p>
       )}
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: true })))}>סימון הכול</Button>
-        <Button size="sm" variant="ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: false })))}>ניקוי הכול</Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש שדה…" aria-label="חיפוש בשדות שזוהו" className="min-w-40 flex-1" />
+        <label className="flex min-h-9 items-center gap-2">
+          <Checkbox checked={onlyOff} onChange={(e) => setOnlyOff(e.target.checked)} />
+          <span>רק לא מסומנים</span>
+        </label>
       </div>
-      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pe-1" aria-label="רשימת השדות שזוהו">
-        {fields.map((f, i) => {
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setVisible(true)}>{needle || onlyOff ? `סימון ${visible.length} המוצגים` : "סימון הכול"}</Button>
+        <Button size="sm" variant="ghost" onClick={() => setVisible(false)}>{needle || onlyOff ? "ניקוי המוצגים" : "ניקוי הכול"}</Button>
+        <span className="ms-auto text-xs text-muted-foreground" aria-live="polite">{chosen} מסומנים מתוך {fields.length}</span>
+      </div>
+      {visible.length === 0 && (
+        <p role="status" className="rounded-md bg-muted p-3 text-muted-foreground">
+          אין שדות שתואמים לסינון.{" "}
+          <button type="button" className="underline" onClick={() => { setQ(""); setOnlyOff(false); }}>הצגת הכול</button>
+        </p>
+      )}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">
+       {pages.map((pg) => (
+       <section key={pg} aria-label={pageCount > 1 ? `עמוד ${pg + 1}` : undefined}>
+        {pageCount > 1 && <h3 className="sticky top-0 z-10 bg-card py-1 text-xs font-semibold text-muted-foreground">עמוד {pg + 1} · {visible.filter((i) => fields[i]!.page === pg).length} שדות</h3>}
+      <ul className="space-y-2" aria-label="רשימת השדות שזוהו">
+        {visible.filter((i) => fields[i]!.page === pg).map((i) => {
+          const f = fields[i]!;
           const r = rows[i]!;
           return (
             <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-md border bg-background p-2">
@@ -100,7 +130,6 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
                 disabled={!r.include}
                 className="w-44 font-mono text-xs"
               />
-              {pageCount > 1 && <span className="text-xs text-muted-foreground">עמוד {f.page + 1}</span>}
               {f.learned && (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary" title="לפי מה שבחרתם בפעם הקודמת שהופיעה התווית הזאת">
                   {f.skip ? "בוטל בעבר" : "לפי תיקון קודם"}
@@ -116,6 +145,9 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
           );
         })}
       </ul>
+       </section>
+       ))}
+      </div>
       {canSplit && (
         <label className="flex items-center gap-2">
           <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} />
