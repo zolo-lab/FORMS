@@ -6,7 +6,7 @@ describe("follow-up statuses", () => {
     const first = parseFollowUpStatuses("עודכן בשכר\n\nהוקם בפריוריטי\nעודכן בשכר");
     expect(first.map((s) => s.label)).toEqual(["עודכן בשכר", "הוקם בפריוריטי"]);
     const again = parseFollowUpStatuses("הוקם בפריוריטי\nנשלח למנהל", first);
-    expect(again[0].key).toBe(first[1].key);
+    expect(again[0]!.key).toBe(first[1]!.key);
     expect(new Set(again.map((s) => s.key)).size).toBe(2);
   });
   it("pending = first not done; tick and untick", () => {

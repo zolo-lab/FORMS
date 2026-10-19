@@ -25,9 +25,9 @@ export function endOfDayIsrael(y: number, m: number, d: number): Date {
 function parseDate(v: unknown): { y: number; m: number; d: number } | null {
   if (typeof v !== "string") return null;
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  if (iso) return { y: +iso[1], m: +iso[2], d: +iso[3] };
+  if (iso) return { y: +iso[1]!, m: +iso[2]!, d: +iso[3]! };
   const il = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(v.trim());
-  if (il) return { y: +il[3], m: +il[2], d: +il[1] };
+  if (il) return { y: +il[3]!, m: +il[2]!, d: +il[1]! };
   return null;
 }
 
