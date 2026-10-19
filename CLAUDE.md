@@ -3,9 +3,9 @@
 Internal HR system for 5 Israeli nonprofits: dynamic forms (builder), PDF stamping,
 sequential e-signature chains, dashboard, Priority payroll export. Replaces iForms + Google Sheets.
 
-**Current focus:** `docs/builder-plan.md` part 5 (tasks 5.1–5.6, run them back to back without stopping, one PR each; see "אופן ביצוע" there). For every UI task, run the `ui-ux-pro-max` skill first and adopt all its recommendations (hard rules below still win).
+**Current focus:** `docs/build-plan-v4.md` (active plan from 19.10.2026: one system instead of iForms + Make + Sheets). Do the next unfinished task there, one PR per task, **never merge** – report branch + PR number and wait for "מזג". For every UI task, run the `ui-ux-pro-max` skill first and adopt all its recommendations (hard rules below still win). `builder-plan.md` part 5 is paused unless Israel says otherwise.
 
-**Read before any work:** `docs/build-plan-v3.md` (active plan: tasks, acceptance criteria; `build-plan.md` §1 holds the base decisions) and
+**Read before any work:** `docs/build-plan-v4.md` (tasks, acceptance criteria; `build-plan-v3.md` §1–2 and `build-plan.md` §1 hold the base decisions) and
 `docs/HANDOFF.md` (environment quirks, dev loop, current state). Do the next unfinished phase only.
 
 ## Hard rules
@@ -20,4 +20,4 @@ sequential e-signature chains, dashboard, Priority payroll export. Replaces iFor
 - No secrets in the repo (it is public). Env vars live in Vercel / `.env.local`.
 - No real emails from non-production. Never touch production DB without explicit user approval.
 - TDD for logic (vitest, `tests/`). Run CI and read results before claiming done.
-- Commits: small, English messages. Work on a branch, open a PR, merge when CI is green.
+- Commits: small, English messages. Work on a branch, open a PR, wait for CI; merge only when Israel says "מזג".
