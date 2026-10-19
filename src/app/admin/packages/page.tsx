@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,14 +17,16 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   const orgName = new Map(orgs.map((o) => [o.id, o.name]));
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">מסלולי חתימה</h1>
-        <form action={createPackageAction} className="flex gap-2">
-          <Input name="name" placeholder="שם הערכה החדשה" className="w-56" aria-label="שם הערכה החדשה" />
-          <Button type="submit">ערכה חדשה</Button>
-        </form>
-      </div>
-      <p className="text-sm text-muted-foreground">ערכה היא קבוצת טפסים ומסלול חתימות (מי ממלא, מי חותם, מי מאשר). בקשה חדשה נוצרת מערכה.</p>
+      <PageHeader
+        title="מסלולי חתימה"
+        description="ערכה היא קבוצת טפסים ומסלול חתימות (מי ממלא, מי חותם, מי מאשר). בקשה חדשה נוצרת מערכה."
+        actions={
+          <form action={createPackageAction} className="flex gap-2">
+            <Input name="name" placeholder="שם הערכה החדשה" className="w-56" aria-label="שם הערכה החדשה" />
+            <Button type="submit">ערכה חדשה</Button>
+          </form>
+        }
+      />
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש להזין שם לערכה</p>}
       <Card className="divide-y">
         {packages.length === 0 && <p className="p-6 text-center text-muted-foreground">עדיין אין ערכות. צרו את הראשונה למעלה.</p>}

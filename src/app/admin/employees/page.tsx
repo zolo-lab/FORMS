@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,10 +20,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const rows = await listEmployees(q, usableOrgIds(scope?.access ?? null));
   return (
     <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">עובדים</h1>
-        <p className="text-sm text-muted-foreground">כל אדם מופיע פעם אחת לפי תעודת זהות, עם כל הבקשות והמסמכים שלו. רשומה נוצרת אוטומטית כשנפתחת בקשה.</p>
-      </header>
+      <PageHeader title="עובדים" description={<>כל אדם מופיע פעם אחת לפי תעודת זהות, עם כל הבקשות והמסמכים שלו. רשומה נוצרת אוטומטית כשנפתחת בקשה.</>} />
       <form method="get" className="flex flex-wrap items-end gap-2" role="search">
         <div className="min-w-60 flex-1 space-y-1">
           <Label htmlFor="q">חיפוש לפי שם או ת&quot;ז</Label>

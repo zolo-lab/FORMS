@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -39,10 +40,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">מעקב חתימות{filters.campaign ? ` – ${filters.campaign}` : ""}</h1>
-        <p className="text-sm text-muted-foreground">מי ממתין, באיזה שלב וכמה זמן. אפשר לשלוח תזכורת – הקישור נשלח ישירות לממתין. תוכן הטפסים לא מוצג כאן.</p>
-      </header>
+      <PageHeader title={<>מעקב חתימות{filters.campaign ? ` – ${filters.campaign}` : ""}</>} description={<>מי ממתין, באיזה שלב וכמה זמן. אפשר לשלוח תזכורת – הקישור נשלח ישירות לממתין. תוכן הטפסים לא מוצג כאן.</>} />
 
       <section aria-label="סיכום" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card className="p-3">

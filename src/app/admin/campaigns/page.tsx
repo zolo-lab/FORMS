@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { percent, summarizeCampaigns } from "@/lib/requests/campaign";
 import { campaignCounts } from "@/server/dashboard-store";
 import { viewerScope } from "@/server/users-store";
@@ -12,10 +13,7 @@ export default async function CampaignsPage() {
   const campaigns = summarizeCampaigns(await campaignCounts(scope));
   return (
     <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">קמפיינים</h1>
-        <p className="text-sm text-muted-foreground">שליחה המונית מקובץ עם שם קמפיין (למשל 101 שנתי) מרכזת כאן את ההתקדמות לכל עמותה.</p>
-      </header>
+      <PageHeader title="קמפיינים" description={<>שליחה המונית מקובץ עם שם קמפיין (למשל 101 שנתי) מרכזת כאן את ההתקדמות לכל עמותה.</>} />
       {campaigns.length === 0 ? (
         <Card className="p-6 text-center text-muted-foreground">
           עדיין אין קמפיינים. ב<Link href="/admin/requests/bulk" className="text-primary underline">שליחה מקובץ</Link> אפשר לתת שם קמפיין לכל הבקשות מהקובץ.

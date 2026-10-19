@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -68,9 +69,11 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">בקשות</h1>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title="בקשות"
+        description="כל הבקשות שאתה רשאי לראות: מי ממתין, כמה זמן ומה הושלם. לחיצה על כותרת עמודה ממיינת."
+        actions={
+          <>
           <nav aria-label="תצוגה" className="flex overflow-hidden rounded-md border text-sm">
             <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`px-3 py-1.5 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
             <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`px-3 py-1.5 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
@@ -81,8 +84,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <Link href="/admin/requests/new" className={buttonVariants()}>
             בקשה חדשה
           </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <section aria-label="מדדים" className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Kpi label="פעילות" value={kpis.active} href={link({ status: "in_progress", page: 1 })} />

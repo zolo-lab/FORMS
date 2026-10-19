@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/input";
@@ -25,13 +26,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">משתמשים והרשאות</h1>
-        <p className="text-sm text-muted-foreground">
-          שני תפקידים: אדמין רואה ומנהל הכול. מנהל רואה את הבקשות שפתח ואת אלה שהוא שלב בהן, פותח בקשות רק מהערכות שסומנו לו,
-          ואפשר להגביל אותו לחלק מהעמותות והעסקים. משתמש נוצר אוטומטית בכניסה הראשונה עם Google (רק כתובות שמותרות ב-ADMIN_EMAILS).
-        </p>
-      </header>
+      <PageHeader title="משתמשים והרשאות" description={<>שני תפקידים: אדמין רואה ומנהל הכול. מנהל רואה את הבקשות שפתח ואת אלה שהוא שלב בהן, פותח בקשות רק מהערכות שסומנו לו,
+          ואפשר להגביל אותו לחלק מהעמותות והעסקים. משתמש נוצר אוטומטית בכניסה הראשונה עם Google (רק כתובות שמותרות ב-ADMIN_EMAILS).</>} />
       {error && ERRORS[error] && <p role="alert" className="text-sm text-destructive">{ERRORS[error]}</p>}
       {saved && <p role="status" className="text-sm text-success">נשמר.</p>}
 

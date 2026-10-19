@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,10 +34,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
   const [orgs, projects] = await Promise.all([listOrgs(), listProjects()]);
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">עמותות ועסקים</h1>
-        <p className="text-sm text-muted-foreground">לכל עמותה או עסק שם וח&quot;פ אחד, ומתחתיה הפרויקטים שלה, כל אחד בשם משלו. במסך המשתמשים אפשר להגביל מנהל לחלק מהעמותות.</p>
-      </header>
+      <PageHeader title="עמותות ועסקים" description={<>לכל עמותה או עסק שם וח&quot;פ אחד, ומתחתיה הפרויקטים שלה, כל אחד בשם משלו. במסך המשתמשים אפשר להגביל מנהל לחלק מהעמותות.</>} />
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
       {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
 
