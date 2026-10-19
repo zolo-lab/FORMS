@@ -15,6 +15,10 @@ export interface ExportRequest {
   answers: Answers;
   /** Definitions of the forms in the request (order matters for column order). */
   definitions: FormDefinition[];
+  /** Campaign tag ("101 2027"), when the request came from a tagged mass send. */
+  campaign?: string | null;
+  /** Handling steps after signing of the request's package, with the date each was ticked (null = not yet). */
+  followUp?: { label: string; at: Date | null }[];
 }
 
 const day = (d: Date | null) => (d ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d) : "");
@@ -88,6 +92,15 @@ export function buildExportTable(requests: ExportRequest[]): string[][] {
       }
     }
   }
+  // Trailing columns: campaign (only when some request has one) and one date column per handling step after signing.
+  const hasCampaign = requests.some((r) => !!r.campaign);
+  const followLabels: string[] = [];
+  for (const r of requests) for (const f of r.followUp ?? []) if (!followLabels.includes(f.label)) followLabels.push(f.label);
+  const tail = (r: ExportRequest) => [
+    ...(hasCampaign ? [r.campaign ?? ""] : []),
+    ...followLabels.map((l) => day(r.followUp?.find((f) => f.label === l)?.at ?? null)),
+  ];
+  const tailHeaders = [...(hasCampaign ? ["קמפיין"] : []), ...followLabels.map((l) => `${l} – תאריך`)];
   const rows = requests.map((r) => [
     r.id,
     r.subjectName,
@@ -98,6 +111,7 @@ export function buildExportTable(requests: ExportRequest[]): string[][] {
     day(r.createdAt),
     day(r.expiresAt),
     ...columns.map((c) => c.value(r)),
+    ...tail(r),
   ]);
-  return [[...FIXED_HEADERS, ...columns.map((c) => c.title)], ...rows];
+  return [[...FIXED_HEADERS, ...columns.map((c) => c.title), ...tailHeaders], ...rows];
 }

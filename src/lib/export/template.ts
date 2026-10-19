@@ -17,6 +17,7 @@ export const FIXED_SOURCES = {
   package: "ערכה",
   status: "סטטוס",
   createdAt: "תאריך יצירה",
+  campaign: "קמפיין",
 } as const;
 export type FixedSource = keyof typeof FIXED_SOURCES;
 
