@@ -25,7 +25,28 @@ export interface RequestFilters {
   followUp?: "pending";
   /** Campaign tag ("101 2027"). */
   campaign?: string;
+  /** Sort column and direction; unset = newest first. */
+  sort?: SortKey;
+  dir?: "asc" | "desc";
   page: number;
+}
+
+export const SORT_KEYS = ["name", "org", "pkg", "status", "created", "due"] as const;
+export type SortKey = (typeof SORT_KEYS)[number];
+
+/** The sort a header link should apply: same column flips the direction, a new column starts ascending (dates descending). */
+export function nextSort(f: Pick<RequestFilters, "sort" | "dir">, key: SortKey): { sort: SortKey; dir: "asc" | "desc" } {
+  const cur = f.sort ?? "created";
+  const curDir = f.dir ?? (f.sort ? "asc" : "desc");
+  if (cur === key) return { sort: key, dir: curDir === "asc" ? "desc" : "asc" };
+  return { sort: key, dir: key === "created" || key === "due" ? "desc" : "asc" };
+}
+
+/** aria-sort value for a header. */
+export function ariaSort(f: Pick<RequestFilters, "sort" | "dir">, key: SortKey): "ascending" | "descending" | "none" {
+  const cur = f.sort ?? "created";
+  if (cur !== key) return "none";
+  return (f.dir ?? (f.sort ? "asc" : "desc")) === "asc" ? "ascending" : "descending";
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,6 +76,10 @@ export function parseFilters(sp: SearchParams): RequestFilters {
   if (first(sp.followUp) === "pending") f.followUp = "pending";
   const campaign = first(sp.campaign)?.trim();
   if (campaign) f.campaign = campaign.slice(0, 60);
+  const sort = first(sp.sort);
+  if (sort && (SORT_KEYS as readonly string[]).includes(sort)) f.sort = sort as SortKey;
+  const dir = first(sp.dir);
+  if (f.sort && (dir === "asc" || dir === "desc")) f.dir = dir;
   const page = Number.parseInt(first(sp.page) ?? "1", 10);
   f.page = Number.isFinite(page) && page >= 1 ? page : 1;
   return f;
@@ -76,6 +101,8 @@ export function filtersToQuery(f: RequestFilters, override: Partial<RequestFilte
   if (m.mine) p.set("mine", "1");
   if (m.followUp) p.set("followUp", m.followUp);
   if (m.campaign) p.set("campaign", m.campaign);
+  if (m.sort) p.set("sort", m.sort);
+  if (m.sort && m.dir) p.set("dir", m.dir);
   if (m.page > 1) p.set("page", String(m.page));
   return p.toString();
 }
