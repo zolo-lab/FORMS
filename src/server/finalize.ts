@@ -41,7 +41,7 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
       if (!d.driveFileId && driveEnabled()) {
         try {
           const existing = await getFile(d.finalFileId);
-          const archived = existing && (await archivePdf({ organization: org?.name ?? "", formTitle: title, subject: req.subjectName, requestId, signedAt, bytes: existing.bytes }));
+          const archived = existing && (await archivePdf({ organization: org?.name ?? "", formTitle: title, subject: req.subjectName, subjectIdNumber: req.subjectIdNumber, requestId, signedAt, bytes: existing.bytes }));
           if (archived) await db.update(packageDocuments).set(archived).where(eq(packageDocuments.id, d.id));
         } catch (err) {
           console.error("drive archive failed", { requestId, doc: d.id, error: err instanceof Error ? err.message : String(err) });
@@ -84,7 +84,7 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     // Archive copy in Drive. Never blocks or fails the signing flow: the stored file above is the source of truth,
     // and a failed or unconfigured archive is simply retried the next time the request is finalized with `force`.
     try {
-      const archived = await archivePdf({ organization: org?.name ?? "", formTitle: title, subject: req.subjectName, requestId, signedAt, bytes });
+      const archived = await archivePdf({ organization: org?.name ?? "", formTitle: title, subject: req.subjectName, subjectIdNumber: req.subjectIdNumber, requestId, signedAt, bytes });
       if (archived) await db.update(packageDocuments).set(archived).where(eq(packageDocuments.id, d.id));
     } catch (err) {
       console.error("drive archive failed", { requestId, doc: d.id, error: err instanceof Error ? err.message : String(err) });

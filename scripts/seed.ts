@@ -8,6 +8,7 @@ import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../src/db";
 import type { Workflow } from "../src/lib/workflow/types";
+import { termsChangeRequest, termsChangeWorkflow } from "../tests/fixtures/package-terms-change";
 
 const ORGS = [
   { name: "שיבת ציון לרגבי אדמתה", registrationNumber: "580556306", slug: "shivat-zion" },
@@ -63,6 +64,29 @@ async function main() {
 
   // Same engine, different documents: attach the termination forms to this package under /admin/packages.
   await ensurePackage("סיום העסקה", "מבקש ממלא פרטי סיום → העובד חותם → חשבות שכר מאשרת", TERMINATION_WORKFLOW);
+
+  // v4 test package "שינוי תנאים (בדיקה)": the request form with two internal fields, employee → approver from the
+  // "manager" field → payroll, expiry on the 4th of the month after the start date. Left alone once it exists.
+  const testName = "שינוי תנאים (בדיקה)";
+  if ((await db.select().from(schema.packageTemplates).where(eq(schema.packageTemplates.name, testName))).length === 0) {
+    const slug = "terms-change-test";
+    let [tpl] = await db.select().from(schema.formTemplates).where(eq(schema.formTemplates.slug, slug));
+    if (!tpl) {
+      [tpl] = await db.insert(schema.formTemplates).values({ slug, title: "שינוי תנאים – בקשה (בדיקה)", status: "active", publishedVersion: 1 }).returning();
+      await db.insert(schema.formTemplateVersions).values({ templateId: tpl!.id, version: 1, definition: termsChangeRequest, publishedAt: new Date() });
+    }
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({
+        name: testName,
+        description: "ערכת בדיקה של v4: שדות פנימיים, תוקף מחושב, מאשר משדה, טיפול אחרי חתימה",
+        workflow: termsChangeWorkflow,
+        expiryRule: { kind: "dayOfNextMonth", day: 4, dateFieldId: "start_work_date" },
+        followUpStatuses: [{ key: "payroll", label: "עודכן בשכר" }],
+      })
+      .returning();
+    await db.insert(schema.packageTemplateItems).values({ packageTemplateId: pkg!.id, templateId: tpl!.id, order: 1 });
+  }
 
   const orgs = await db.select().from(schema.organizations);
   const pkgs = await db.select().from(schema.packageTemplates);
