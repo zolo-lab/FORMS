@@ -1,4 +1,5 @@
 /** Loads requests (by filter or by ids) for CSV/XLSX export and the signed-PDF ZIP. */
+import { normalizeFollowUpStatuses, type FollowUpState } from "@/lib/requests/follow-up";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { ExportRequest } from "@/lib/export/rows";
@@ -36,7 +37,7 @@ export async function loadExport(sel: ExportSelection): Promise<ExportRequest[]>
   if (ids.length === 0) return [];
   const [reqs, docs, subs] = await Promise.all([
     db
-      .select({ r: requests, org: organizations.name, pkg: packageTemplates.name })
+      .select({ r: requests, org: organizations.name, pkg: packageTemplates.name, followUpStatuses: packageTemplates.followUpStatuses })
       .from(requests)
       .innerJoin(organizations, eq(requests.organizationId, organizations.id))
       .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
@@ -53,7 +54,7 @@ export async function loadExport(sel: ExportSelection): Promise<ExportRequest[]>
   return ids
     .map((id) => byId.get(id))
     .filter((x): x is NonNullable<typeof x> => !!x)
-    .map(({ r, org, pkg }) => {
+    .map(({ r, org, pkg, followUpStatuses }) => {
       const answers: Answers = { ...((r.apiParams as { requesterAnswers?: Answers } | null)?.requesterAnswers ?? {}) };
       for (const s of subs) if (s.requestId === r.id) Object.assign(answers, s.answers);
       return {
@@ -67,6 +68,11 @@ export async function loadExport(sel: ExportSelection): Promise<ExportRequest[]>
         expiresAt: r.expiresAt,
         answers,
         definitions: docs.filter((d) => d.requestId === r.id).map((d) => d.definition),
+        campaign: r.campaign,
+        followUp: normalizeFollowUpStatuses(followUpStatuses).map((s) => {
+          const done = (r.followUp as FollowUpState | null)?.[s.key];
+          return { label: s.label, at: done ? new Date(done.at) : null };
+        }),
       };
     });
 }
