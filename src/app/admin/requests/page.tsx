@@ -219,7 +219,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
             <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
           </span>}
         </div>
-      <Card className="overflow-x-auto">
+      <Card className="relative overflow-x-auto">
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
