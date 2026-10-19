@@ -353,6 +353,8 @@ export const requests = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
     externalRef: text("external_ref"),
+    /** Campaign tag for mass sends (e.g. "101 2027"): groups requests on the campaigns screen. */
+    campaign: text("campaign"),
     apiParams: jsonb("api_params").$type<Record<string, unknown>>(),
     redirectUrl: text("redirect_url"),
     ...timestamps,
@@ -360,6 +362,7 @@ export const requests = pgTable(
   (t) => [
     index("requests_org_status_idx").on(t.organizationId, t.status),
     index("requests_due_idx").on(t.dueAt),
+    index("requests_campaign_idx").on(t.campaign),
   ],
 );
 

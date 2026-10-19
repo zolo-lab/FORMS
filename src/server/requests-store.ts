@@ -32,6 +32,7 @@ import { peopleForWorkflow } from "./people-store";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
 import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { normalizeCampaign } from "@/lib/requests/campaign";
 import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
 import { COMPLETION_DOCS_KEY, completionMessage, completionTargets } from "@/lib/notifications/completion";
@@ -67,6 +68,8 @@ export interface CreateRequestInput {
   extra?: { redirectUrl?: string; custom?: Record<string, unknown> };
   /** An edited copy of the package chain for this request only (6.15b); null/undefined = the package's own. */
   workflowOverride?: Workflow | null;
+  /** Campaign tag for mass sends (e.g. "101 2027"). */
+  campaign?: string | null;
 }
 
 function toEngine(r: StepRow): EngineStep {
@@ -127,6 +130,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     subjectEmail: input.subject.email,
     subjectPhone: input.subject.phone,
     createdBy: input.createdBy,
+    campaign: normalizeCampaign(input.campaign),
     employeeId,
     expiresAt,
     apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}), ...(input.workflowOverride ? { workflowOverride: input.workflowOverride } : {}) },

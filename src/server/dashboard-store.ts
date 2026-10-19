@@ -78,6 +78,7 @@ export function conditions(f: RequestFilters, now: Date, scope: Scope = null): S
     );
   }
   if (f.mine && f.createdBy) c.push(eq(requests.createdBy, f.createdBy));
+  if (f.campaign) c.push(eq(requests.campaign, f.campaign));
   if (f.followUp === "pending") {
     c.push(eq(requests.status, "completed"));
     c.push(sql`exists (select 1 from package_templates pt, jsonb_array_elements(pt.follow_up_statuses) fs where pt.id = ${requests.packageTemplateId} and not jsonb_exists(${requests.followUp}, fs->>'key'))`);
@@ -236,4 +237,16 @@ export async function uploadedFiles(requestId: string): Promise<{ name: string; 
     }
   }
   return out;
+}
+
+/** Counts per campaign × organization × status (for the campaigns screen); only tagged requests. */
+export async function campaignCounts(scope: Scope = null): Promise<{ campaign: string; organization: string; status: string; count: number }[]> {
+  const sc = scopeCondition(scope);
+  const rows = await db
+    .select({ campaign: requests.campaign, organization: organizations.name, status: requests.status, count: sql<number>`count(*)::int` })
+    .from(requests)
+    .innerJoin(organizations, eq(requests.organizationId, organizations.id))
+    .where(and(sql`${requests.campaign} is not null`, sc))
+    .groupBy(requests.campaign, organizations.name, requests.status);
+  return rows.map((r) => ({ campaign: r.campaign!, organization: r.organization, status: r.status, count: r.count }));
 }

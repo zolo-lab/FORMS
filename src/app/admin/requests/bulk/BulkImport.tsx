@@ -17,6 +17,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
   const [projectId, setProjectId] = useState(orgs[0]?.projectRequired ? (orgs[0].projects[0]?.id ?? "") : "");
   const currentOrg = orgs.find((o) => o.id === organizationId);
   const [send, setSend] = useState(false);
+  const [campaign, setCampaign] = useState("");
   const [phase, setPhase] = useState<Phase>("upload");
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<string[][]>([]);
@@ -58,7 +59,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
     setPhase("running");
     setError(null);
     start(async () => {
-      const job = await startImportJobAction({ packageId, organizationId, projectId: projectId || undefined, rowCount: records.length });
+      const job = await startImportJobAction({ packageId, organizationId, projectId: projectId || undefined, rowCount: records.length, campaign: campaign.trim() || undefined });
       if ("error" in job) {
         setError(job.error);
         return setPhase("checked");
@@ -67,7 +68,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
       const failed: RowError[] = [...errors];
       for (let i = 0; i < records.length; i += CHUNK) {
         const chunk = records.slice(i, i + CHUNK);
-        const res = await createImportChunkAction({ jobId: job.jobId, packageId, organizationId, projectId: projectId || undefined, records: chunk, send, final: i + CHUNK >= records.length });
+        const res = await createImportChunkAction({ jobId: job.jobId, packageId, organizationId, projectId: projectId || undefined, records: chunk, send, final: i + CHUNK >= records.length, campaign: campaign.trim() || undefined });
         ok += res.created;
         failed.push(...res.errors);
         setCreated(ok);
@@ -124,6 +125,11 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
               </Select>
             </div>
           )}
+        </div>
+        <div className="space-y-1 sm:max-w-sm">
+          <Label htmlFor="bulk-campaign">שם קמפיין (לא חובה)</Label>
+          <Input id="bulk-campaign" value={campaign} maxLength={60} placeholder='למשל "101 2027"' disabled={phase === "running" || phase === "done"} onChange={(e) => setCampaign(e.target.value)} />
+          <p className="text-xs text-muted-foreground">כל הבקשות מהקובץ יסומנו בשם הזה ויופיעו יחד במסך &quot;קמפיינים&quot;, עם אחוז החתומים לכל עמותה.</p>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={send} disabled={phase === "running" || phase === "done"} onChange={(e) => setSend(e.target.checked)} />
