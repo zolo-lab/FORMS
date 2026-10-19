@@ -90,6 +90,20 @@ export function conditions(f: RequestFilters, now: Date, scope: Scope = null): S
   return c;
 }
 
+function orderFor(f: RequestFilters) {
+  const col = {
+    name: requests.subjectName,
+    org: organizations.name,
+    pkg: packageTemplates.name,
+    status: requests.status,
+    created: requests.createdAt,
+    due: requests.expiresAt,
+  }[f.sort ?? "created"];
+  const dir = f.dir ?? (f.sort ? "asc" : "desc");
+  const main = dir === "asc" ? sql`${col} asc nulls last` : sql`${col} desc nulls last`;
+  return [main, desc(requests.createdAt), asc(requests.id)];
+}
+
 export interface RequestRow {
   id: string;
   subjectName: string;
@@ -130,7 +144,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
     .innerJoin(packageTemplates, eq(requests.packageTemplateId, packageTemplates.id))
     .leftJoin(projects, eq(requests.projectId, projects.id))
     .where(where)
-    .orderBy(desc(requests.createdAt))
+    .orderBy(...orderFor(f))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
