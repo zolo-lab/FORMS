@@ -249,4 +249,7 @@ Plan: `docs/build-plan-v4.md`. Built in PR #156 (branch `v4`):
 - **Follow-up after signing** (`followUpStatuses` / `requests.followUp`, grant `followUp`), filter "ממתינות לטיפול אחרי חתימה".
 - **Employees** (`/admin/employees`), created/linked on request creation by ID number.
 - **Users without e-mail**: user name + password (`users.login`, placeholder `<login>@users.invalid`, never mailed).
-Not done (needs Israel): Drive credentials/folder layout, Priority sample file, SMS provider, Blob, production smoke run, building the real packages.
+- **Later PRs:** #159 payroll Drive layout (`GOOGLE_DRIVE_LAYOUT=payroll`), `docs/smoke-v4.md`, seeded test package "שינוי תנאים (בדיקה)" (`pnpm seed`); #160 campaigns (`requests.campaign`, `/admin/campaigns`, campaign name in bulk import, `campaign` filter); #161 field `hint`.
+- **Dev DB after a schema change:** apply the SQL to dev with the Neon MCP *and* insert the generated migration name into `schema_migrations` there (the migrate script is not idempotent). Production needs nothing: the build applies it.
+- **Not done (needs Israel):** Drive service account + root folder, Priority sample file (task 17), SMS provider, Blob, the production smoke run (`docs/smoke-v4.md`), building the real packages.
+- **Deferred by choice:** builder properties panel in tabs; review items 2/10/11 (detect dialog search, list-page headers, requests sorting).
