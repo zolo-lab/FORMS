@@ -4,7 +4,7 @@
  * Disabled (returns null) when either variable is missing, so dev, CI and unconfigured deploys are unaffected.
  */
 import { createSign } from "node:crypto";
-import { archiveFileName, archiveFolders, type ArchiveInput } from "@/lib/drive/archive-path";
+import { archiveLayoutFromEnv, archiveTarget, type ArchiveInput } from "@/lib/drive/archive-path";
 
 const SCOPE = "https://www.googleapis.com/auth/drive";
 const FOLDER = "application/vnd.google-apps.folder";
@@ -95,11 +95,12 @@ export async function archivePdf(input: ArchiveInput & { bytes: Uint8Array }): P
   const acc = readAccount();
   const root = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
   if (!acc || !root) return null;
+  const target = archiveTarget(input, archiveLayoutFromEnv(process.env.GOOGLE_DRIVE_LAYOUT));
   let parent = root;
-  for (const name of archiveFolders(input)) parent = await childFolder(acc, parent, name);
+  for (const name of target.folders) parent = await childFolder(acc, parent, name);
 
   const boundary = `b${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-  const meta = JSON.stringify({ name: archiveFileName(input), parents: [parent], mimeType: "application/pdf" });
+  const meta = JSON.stringify({ name: target.fileName, parents: [parent], mimeType: "application/pdf" });
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\ncontent-type: application/pdf\r\n\r\n`),
     Buffer.from(input.bytes),

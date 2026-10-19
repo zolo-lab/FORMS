@@ -74,9 +74,9 @@ organizations:    + weeklyDigest boolean default true
 
 **1. סכמה ומיגרציה. ✅ בוצע (PR #156).** קבצים: `src/db/schema.ts`, `src/lib/forms/schema.ts` (`internal`), `src/lib/auth/permissions.ts` (`track`, `followUp` ב-`GRANT_KEYS` + תוויות), `drizzle/`. כל סעיף 3. ל-`users.login` ברירת מחדל = המייל הקיים (מיגרציה `update users set login = email`). **בוצע כאשר:** typecheck ירוק; המיגרציה נוצרה ב-CI והוחלה על dev; `normalizeGrants` מחזיר את שני המפתחות החדשים. **בדיקות:** `tests/permissions.test.ts` – `hasGrant(u,"track")`.
 
-**2. ערכת בדיקה "שינוי תנאים" בריפו. ✅ בוצע (PR #156).** קבצים: `tests/fixtures/package-terms-change.ts` (FormDefinition של טופס הבקשה עם 19 השדות של iForms – `fname, lname, id_number, mobile, email_address, salary, salary_interval, travels, job_scope, work_time, start_work_date, boss_name, company_name, Organization_name, job_main_description, additional_conditions, contract_number, manager` + שדות פנימיים `cost_center`, `department`; מסלול: requester → employee → approver מ-`manager` → payroll), `tests/fixtures/terms-change.pdf` (PDF ריק של 2 עמודים שנוצר ב-pdf-lib, בלי נתונים אישיים), `scripts/seed.ts` (מוסיף את הערכה ל-dev). **בוצע כאשר:** `pnpm seed` יוצר את הערכה; Playwright `tests/e2e/terms-change.spec.ts` פותח בקשה, העובד ממלא, המאשר מאשר, חשבות מסיימת, ו-PDF נוצר. **בדיקות:** ה-e2e הזה הוא הבסיס לכל המשימות הבאות.
+**2. ✅ (PR #159) ערכת בדיקה "שינוי תנאים" בריפו. ✅ בוצע (PR #156).** קבצים: `tests/fixtures/package-terms-change.ts` (FormDefinition של טופס הבקשה עם 19 השדות של iForms – `fname, lname, id_number, mobile, email_address, salary, salary_interval, travels, job_scope, work_time, start_work_date, boss_name, company_name, Organization_name, job_main_description, additional_conditions, contract_number, manager` + שדות פנימיים `cost_center`, `department`; מסלול: requester → employee → approver מ-`manager` → payroll), `tests/fixtures/terms-change.pdf` (PDF ריק של 2 עמודים שנוצר ב-pdf-lib, בלי נתונים אישיים), `scripts/seed.ts` (מוסיף את הערכה ל-dev). **בוצע כאשר:** `pnpm seed` יוצר את הערכה; Playwright `tests/e2e/terms-change.spec.ts` פותח בקשה, העובד ממלא, המאשר מאשר, חשבות מסיימת, ו-PDF נוצר. **בדיקות:** ה-e2e הזה הוא הבסיס לכל המשימות הבאות.
 
-**3. ריצת עשן בייצור (ישראל + Sonnet).** Sonnet מכין צ'קליסט ב-`docs/smoke-v4.md`: בקשה מערכה קיימת → עובד → מאשר → חשבות → PDF → מייל. ישראל מריץ בפרודקשן ומדווח. **בוצע כאשר:** הצ'קליסט מסומן, וכל כשל נרשם כמשימה חדשה לפני המשך.
+**3. ריצת עשן בייצור (ישראל + Sonnet). צ'קליסט מוכן: `docs/smoke-v4.md` (PR #159).** Sonnet מכין צ'קליסט ב-`docs/smoke-v4.md`: בקשה מערכה קיימת → עובד → מאשר → חשבות → PDF → מייל. ישראל מריץ בפרודקשן ומדווח. **בוצע כאשר:** הצ'קליסט מסומן, וכל כשל נרשם כמשימה חדשה לפני המשך.
 
 ### שלב ב – "שינוי תנאים" מקצה לקצה · ~שבוע
 
@@ -116,7 +116,7 @@ organizations:    + weeklyDigest boolean default true
 
 ### שלב ד – שאר התרחישים · לפי תזמון ישראל
 
-**18. תיוק בדרייב.** הקוד קיים (`src/server/drive.ts`, `src/lib/drive/archive-path.ts`). ישראל: חשבון שירות, שיתוף תיקיית שורש, `GOOGLE_DRIVE_ROOT_FOLDER_ID`. Sonnet: התאמת `archivePath` למבנה הקיים (`שכר <עמותה>/<שנה>/101_<שנה>`, `מסמכי עובדים/<סוג>`), שמות קבצים `<סוג> - <שם> <ת"ז>`, כל מסמך בערכה כקובץ נפרד, תיעוד החתימה (עמוד האסמכתא) נשמר יחד. **בוצע כאשר:** בדיקות ל-`archive-path`; בייצור קובץ אחד מתויק נכון באישור ישראל.
+**18. תיוק בדרייב. קוד ✅ (PR #159: `GOOGLE_DRIVE_LAYOUT=payroll`); ממתין לחשבון שירות.** הקוד קיים (`src/server/drive.ts`, `src/lib/drive/archive-path.ts`). ישראל: חשבון שירות, שיתוף תיקיית שורש, `GOOGLE_DRIVE_ROOT_FOLDER_ID`. Sonnet: התאמת `archivePath` למבנה הקיים (`שכר <עמותה>/<שנה>/101_<שנה>`, `מסמכי עובדים/<סוג>`), שמות קבצים `<סוג> - <שם> <ת"ז>`, כל מסמך בערכה כקובץ נפרד, תיעוד החתימה (עמוד האסמכתא) נשמר יחד. **בוצע כאשר:** בדיקות ל-`archive-path`; בייצור קובץ אחד מתויק נכון באישור ישראל.
 
 **19. ערכות קליטה / זמני / הוספת משרה / סיום העסקה (ישראל בונה; Sonnet משלים פערים בבונה).** כולל 101 מפוצל למסמכים, טבלת ילדים, פרטי בנק.
 
