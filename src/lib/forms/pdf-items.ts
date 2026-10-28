@@ -142,7 +142,7 @@ export function guessRowPitch(all: PdfStamp[], selected: PdfStamp[]): number {
 
 /** The top-level field a stamp belongs to (`kids[0].name` → `kids`); stamp-only marks have no field. */
 export function stampFieldId(s: PdfStamp): string | null {
-  if (s.kind === "date_signed" || s.kind === "stamp_image") return null;
+  if (s.fieldId.startsWith("_")) return null; // a mark of the document itself (old forms), not of a field
   return s.fieldId.replace(/\[\d+\]\..*$/, "");
 }
 
