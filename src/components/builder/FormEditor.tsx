@@ -12,6 +12,7 @@ import {
   addField, addPage, duplicateField, findLocation, moveField, movePage, publishIssues, removeField, removePage,
   renameFieldId, updateField, updatePage,
 } from "@/lib/forms/builder";
+import { fieldsLeftWithoutStamps, pruneStamps } from "@/lib/forms/pdf-items";
 import { orderByPdf } from "@/lib/forms/pdf-draw";
 import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/field-dictionary";
 import { buildXlsx } from "@/lib/export/xlsx";
@@ -26,6 +27,7 @@ import { FormTestFill } from "@/components/forms/FormTestFill";
 import { PdfTab, type PdfState } from "./PdfTab";
 
 type TabId = "edit" | "preview" | "pdf" | "json";
+type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
 export interface FormEditorProps {
@@ -43,14 +45,18 @@ export interface FormEditorProps {
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [] }: FormEditorProps) {
   const [def, setDef] = useState(initial);
-  const [past, setPast] = useState<FormDefinition[]>([]);
-  const [future, setFuture] = useState<FormDefinition[]>([]);
+  // One history for the form and its boxes on the PDF: undoing a delete brings back the field and its boxes together.
+  const [past, setPast] = useState<HistoryEntry[]>([]);
+  const [future, setFuture] = useState<HistoryEntry[]>([]);
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
   const [tab, setTab] = useState<TabId>(initialTab);
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
-  const [pdf, setPdf] = useState<PdfState | null>(initialPdf);
+  const [pdf, setPdfState] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
+  // The latest boxes, for handlers that run before React re-renders (kept in step with every write below).
+  const pdfRef = useRef(pdf);
+  const setPdf = useCallback((next: PdfState | null) => { pdfRef.current = next; setPdfState(next); }, []);
   const [issues, setIssues] = useState<string[]>([]);
   const [previewAnswers, setPreviewAnswers] = useState<Answers>({});
   const [jsonText, setJsonText] = useState("");
@@ -83,8 +89,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       next = r.def;
       stamps = renameStamps(stamps, from, to);
     }
-    commit(next);
-    if (pdf) setPdf({ ...pdf, mapping: { ...pdf.mapping, stamps } });
+    commit(next, pdf && { ...pdf, mapping: { ...pdf.mapping, stamps } });
     setNote(`${pairs.length} שדות קיבלו שם מזהה.`);
   }
 
@@ -98,25 +103,41 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  /** All edits go through here so undo/redo and autosave see them. */
-  const commit = useCallback((next: FormDefinition) => {
-    setPast((p) => [...p.slice(-49), def]);
+  /**
+   * All edits go through here so undo/redo and autosave see them. The PDF boxes follow the form: a field that is
+   * gone takes its boxes along (`nextPdf` when the caller already changed them).
+   */
+  const commit = useCallback((next: FormDefinition, nextPdf?: PdfState | null) => {
+    const cur = pdfRef.current;
+    const target = nextPdf !== undefined ? nextPdf : cur;
+    const synced = target && { ...target, mapping: { ...target.mapping, stamps: pruneStamps(next, target.mapping.stamps) } };
+    const stampsChanged = !!cur && !!synced && synced.mapping.stamps !== cur.mapping.stamps;
+    setPast((p) => [...p.slice(-49), { def, pdf: stampsChanged ? cur : undefined }]);
     setFuture([]);
     setDef(next);
-  }, [def]);
+    if (stampsChanged || nextPdf !== undefined) setPdf(synced);
+  }, [def, setPdf]);
 
-  const undo = () => setPast((p) => {
-    if (!p.length) return p;
-    setFuture((f) => [def, ...f]);
-    setDef(p.at(-1)!);
-    return p.slice(0, -1);
-  });
-  const redo = () => setFuture((f) => {
-    if (!f.length) return f;
-    setPast((p) => [...p, def]);
-    setDef(f[0]!);
-    return f.slice(1);
-  });
+  /** Box edits on the PDF. Deleting the last box of a field deletes the field (one undo step for both). */
+  const changePdf = useCallback((next: PdfState | null) => {
+    const cur = pdfRef.current;
+    const lost = cur && next && cur.file.id === next.file.id ? fieldsLeftWithoutStamps(cur.mapping.stamps, next.mapping.stamps) : [];
+    if (!lost.length) { setPdf(next); return; }
+    commit(lost.reduce((d, id) => removeField(d, id), def), next);
+    setSelection(null);
+  }, [commit, def, setPdf]);
+
+  const step = (from: HistoryEntry[], to: (f: (h: HistoryEntry[]) => HistoryEntry[]) => void, take: "last" | "first") => {
+    if (!from.length) return from;
+    const entry = take === "last" ? from.at(-1)! : from[0]!;
+    const cur = pdfRef.current;
+    to((h) => (take === "last" ? [{ def, pdf: entry.pdf ? cur : undefined }, ...h] : [...h, { def, pdf: entry.pdf ? cur : undefined }]));
+    setDef(entry.def);
+    if (entry.pdf !== undefined) setPdf(entry.pdf);
+    return take === "last" ? from.slice(0, -1) : from.slice(1);
+  };
+  const undo = () => setPast((p) => step(p, setFuture, "last"));
+  const redo = () => setFuture((f) => step(f, setPast, "first"));
 
   // Debounced autosave of the draft.
   useEffect(() => {
@@ -284,9 +305,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   onRename={(to) => {
                     const r = renameFieldId(def, selectedField.id, to);
                     if (r.error) return r.error;
-                    commit(r.def);
                     // The places on the document follow the new id.
-                    if (pdf) setPdf({ ...pdf, mapping: { ...pdf.mapping, stamps: renameStamps(pdf.mapping.stamps, selectedField.id, to) } });
+                    commit(r.def, pdf && { ...pdf, mapping: { ...pdf.mapping, stamps: renameStamps(pdf.mapping.stamps, selectedField.id, to) } });
                     setSelection({ kind: "field", id: to });
                   }}
                 />
@@ -310,7 +330,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} definition={def} pdf={pdf} onChange={setPdf} onDefinitionChange={commit} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">
