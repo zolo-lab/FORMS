@@ -53,9 +53,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
-  const [pdf, setPdf] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
+  const [pdf, setPdfState] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
+  // The latest boxes, for handlers that run before React re-renders (kept in step with every write below).
   const pdfRef = useRef(pdf);
-  pdfRef.current = pdf;
+  const setPdf = useCallback((next: PdfState | null) => { pdfRef.current = next; setPdfState(next); }, []);
   const [issues, setIssues] = useState<string[]>([]);
   const [previewAnswers, setPreviewAnswers] = useState<Answers>({});
   const [jsonText, setJsonText] = useState("");
@@ -115,7 +116,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setFuture([]);
     setDef(next);
     if (stampsChanged || nextPdf !== undefined) setPdf(synced);
-  }, [def]);
+  }, [def, setPdf]);
 
   /** Box edits on the PDF. Deleting the last box of a field deletes the field (one undo step for both). */
   const changePdf = useCallback((next: PdfState | null) => {
@@ -124,7 +125,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     if (!lost.length) { setPdf(next); return; }
     commit(lost.reduce((d, id) => removeField(d, id), def), next);
     setSelection(null);
-  }, [commit, def]);
+  }, [commit, def, setPdf]);
 
   const step = (from: HistoryEntry[], to: (f: (h: HistoryEntry[]) => HistoryEntry[]) => void, take: "last" | "first") => {
     if (!from.length) return from;
