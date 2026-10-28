@@ -66,7 +66,7 @@ const has = (n: string, words: string[]) => words.some((w) => n.includes(normali
 /** The type for text typed in a box/line, from its label. */
 export function typeFromLabel(label: string): FieldType {
   const n = normalizeText(label);
-  if (has(n, ["תעודת זהות", "מספר זהות", "מס זהות", "תז"])) return "id_number";
+  if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"])) return "id_number";
   if (has(n, ["חתימה", "חתימת", "חתום"])) return "signature";
   if (has(n, ["תאריך", "מתאריך", "עד תאריך"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";

@@ -30,7 +30,7 @@ describe("AcroForm import", () => {
   it("imports text, comb, checkbox, radio and dropdown fields with positions and pages", async () => {
     const imp = await importAcroForm(await fillablePdf());
     expect(imp.acroImported).toBe(true);
-    expect(imp.fields.map((f) => f.type)).toEqual(["short_text", "short_text", "consent", "radio", "dropdown"]);
+    expect(imp.fields.map((f) => f.type)).toEqual(["short_text", "id_number", "consent", "radio", "dropdown"]);
     const byField = (id: string) => imp.stamps.filter((s) => s.fieldId === id);
     const first = byField("acro_1")[0]!;
     expect(first).toMatchObject({ kind: "text", page: 0 });
@@ -70,5 +70,18 @@ describe("AcroForm import", () => {
     doc.addPage();
     const imp = await importAcroForm(await doc.save());
     expect(imp).toEqual({ fields: [], stamps: [], acroImported: false });
+  });
+});
+
+describe("AcroForm text field types", () => {
+  it("reads the type from the comb and the field name", async () => {
+    const { textType } = await import("@/lib/pdf/acroform");
+    expect(textType("anything", false, 9)).toBe("id_number");
+    expect(textType("מספר זהות", false, 0)).toBe("id_number");
+    expect(textType("ת.ז. העובד", false, 0)).toBe("id_number");
+    expect(textType("id_number", false, 0)).toBe("id_number");
+    expect(textType("טלפון נייד", false, 0)).toBe("phone");
+    expect(textType("חתימת העובד", false, 0)).toBe("short_text");
+    expect(textType("הערות", true, 0)).toBe("long_text");
   });
 });

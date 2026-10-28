@@ -15,6 +15,8 @@ import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { allFields } from "@/lib/forms/schema";
 import { insertFieldByPosition, readingOrder } from "@/lib/forms/pdf-draw";
+import { SWITCHABLE_TYPES } from "@/lib/forms/builder";
+import { typeFromLabel } from "./detect";
 
 export interface AcroImport {
   fields: FormField[];
@@ -60,7 +62,7 @@ export async function importAcroForm(bytes: Uint8Array): Promise<AcroImport> {
     if (pdfField instanceof PDFTextField) {
       const combed = pdfField.isCombed() && (pdfField.getMaxLength() ?? 0) > 0;
       const multiline = pdfField.isMultiline();
-      fields.push({ id, type: multiline ? "long_text" : "short_text", label, settings: { acroName: label } });
+      fields.push({ id, type: textType(label, multiline, combed ? pdfField.getMaxLength()! : 0), label, settings: { acroName: label } });
       ws.forEach((w, i) =>
         stamps.push({
           ...base,
@@ -128,4 +130,17 @@ export function mergeAcroImport(def: FormDefinition, imp: AcroImport, existing: 
     placed.push(...stamps.filter((x) => x.fieldId === f.id));
   }
   return { definition, stamps };
+}
+
+const TEXT_LIKE = new Set<string>(SWITCHABLE_TYPES);
+
+/**
+ * The type of an imported text box: 9 comb cells are an Israeli ID; otherwise the field's name says it
+ * ("מספר זהות", "id_number", "טלפון"…), so the answer is validated (an ID must pass the check digit).
+ */
+export function textType(name: string, multiline: boolean, combCells: number): FormField["type"] {
+  if (multiline) return "long_text";
+  if (combCells === 9) return "id_number";
+  const t = typeFromLabel(name);
+  return TEXT_LIKE.has(t) ? t : "short_text";
 }

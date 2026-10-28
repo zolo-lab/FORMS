@@ -134,3 +134,17 @@ describe("pickerLabels", () => {
     expect(m.get("d")).toBe("d");
   });
 });
+
+describe("switching a field's type", () => {
+  it("turns a short text into an ID and swaps type-specific settings", async () => {
+    const { typeChangePatch } = await import("@/lib/forms/builder");
+    expect(typeChangePatch({ id: "a", type: "short_text", label: "ת\"ז" }, "id_number")).toEqual({ type: "id_number", settings: undefined });
+    expect(typeChangePatch({ id: "a", type: "long_text", label: "x", settings: { rows: 4, acroName: "x" } }, "id_number")).toEqual({ type: "id_number", settings: { acroName: "x" } });
+    expect(typeChangePatch({ id: "a", type: "short_text", label: "x" }, "currency")).toEqual({ type: "currency", settings: { currency: "ILS" } });
+  });
+  it("refuses types whose answer is not one string", async () => {
+    const { typeChangePatch } = await import("@/lib/forms/builder");
+    expect(typeChangePatch({ id: "a", type: "short_text", label: "x" }, "radio")).toBeNull();
+    expect(typeChangePatch({ id: "a", type: "signature", label: "x" }, "short_text")).toBeNull();
+  });
+});
