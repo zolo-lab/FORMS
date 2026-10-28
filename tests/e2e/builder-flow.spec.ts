@@ -27,7 +27,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await add("תאריך", "תאריך התחלה");
   await add("סכום (₪)", "שכר");
   await add("כן / לא", "רכב צמוד?");
-  await add("שם מלא", "שם העובד");
+  await add("תשובה קצרה", "שם העובד");
   await add("חתימה", "חתימת העובד");
   await page.getByRole("switch", { name: "שדה חובה" }).click();
 
@@ -54,8 +54,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByLabel("שכר").fill("12000");
   await page.getByLabel("תאריך התחלה").fill("2026-11-01");
   await page.getByRole("radiogroup").filter({ hasText: "כן" }).last().getByLabel("כן", { exact: true }).check();
-  await page.getByLabel("שם פרטי").fill("דנה");
-  await page.getByLabel("שם משפחה").fill("כהן");
+  await page.getByLabel("שם העובד").fill("דנה כהן");
   await page.getByRole("button", { name: "חתימה", exact: true }).click();
   await page.getByRole("tab", { name: "הקלדה" }).click();
   await page.getByPlaceholder("הקלידו את שמכם").fill("דנה כהן");

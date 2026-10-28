@@ -40,6 +40,8 @@ export const FIELD_TYPES = [
   "address",
   // Advanced
   "signature",
+  "stamp",
+  "date_signed",
   "consent",
   "repeating_table",
   "grid",
@@ -125,6 +127,8 @@ export const FIELD_TYPE_META: Record<FieldType, FieldTypeMeta> = {
   },
 
   signature: { label: "חתימה", category: "advanced", icon: "Signature", hasAnswer: true, hasOptions: false, pdf: "signature" },
+  stamp: { label: "חותמת", category: "advanced", icon: "Stamp", hasAnswer: true, hasOptions: false, pdf: "signature" },
+  date_signed: { label: "תאריך חתימה", category: "advanced", icon: "CalendarCheck", hasAnswer: false, hasOptions: false, pdf: "text" },
   consent: { label: "הצהרה / אישור", category: "advanced", icon: "BadgeCheck", hasAnswer: true, hasOptions: false, pdf: "check" },
   repeating_table: { label: "טבלה חוזרת", category: "advanced", icon: "Table", hasAnswer: true, hasOptions: false, pdf: "text", defaultSettings: { minRows: 0, maxRows: 20, addLabel: "הוספת שורה" } },
   grid: {
@@ -147,6 +151,28 @@ export const FIELD_CATEGORY_LABELS: Record<FieldCategory, string> = {
   advanced: "מתקדם",
   layout: "עיצוב ותוכן",
 };
+
+/**
+ * The field types a form is built from. The same list, names and order in the PDF tab and in the responsive
+ * editor: every field is a box on the document and a row in the responsive form. Composite answers (name, bank,
+ * address), grids and hidden fields are not offered (old forms that have them still work).
+ */
+export const FORM_FIELD_TYPES: readonly FieldType[] = [
+  "short_text", "long_text", "radio", "checkboxes", "dropdown", "linear_scale", "rating", "date", "time",
+  "number", "currency", "percent", "email", "yes_no",
+  "phone", "id_number",
+  "signature", "stamp", "date_signed", "consent", "file_upload", "repeating_table",
+];
+
+/** Display blocks of the responsive form (not fields: no answer, not on the document). */
+export const LAYOUT_TYPES: readonly FieldType[] = FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].category === "layout");
+
+/** `FORM_FIELD_TYPES` by category, in the order of the categories. */
+export function formFieldTypesByCategory(): { category: FieldCategory; label: string; types: FieldType[] }[] {
+  return (["google", "israeli", "advanced"] as const)
+    .map((category) => ({ category, label: FIELD_CATEGORY_LABELS[category], types: FORM_FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].category === category) }))
+    .filter((g) => g.types.length);
+}
 
 export function fieldTypesByCategory(): Record<FieldCategory, FieldType[]> {
   const out: Record<FieldCategory, FieldType[]> = { google: [], israeli: [], advanced: [], layout: [] };

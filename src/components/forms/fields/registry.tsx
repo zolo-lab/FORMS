@@ -37,6 +37,8 @@ function Control(props: FieldProps & { renderChild: Parameters<typeof RepeatingT
     case "bank_account": return <BankAccountInput {...props} />;
     case "address": return <AddressInput {...props} />;
     case "signature": return <SignatureInput {...props} />;
+    case "stamp": return <SignatureInput {...props} stamp />;
+    case "date_signed": return <p id={props.domId} className="text-sm text-muted-foreground">יתמלא אוטומטית בעת החתימה</p>;
     case "file_upload": return <FileUploadInput {...props} />;
     case "repeating_table": return <RepeatingTableInput {...props} renderChild={props.renderChild} />;
     case "hidden": return null;
