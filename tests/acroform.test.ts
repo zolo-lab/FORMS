@@ -30,7 +30,7 @@ describe("AcroForm import", () => {
   it("imports text, comb, checkbox, radio and dropdown fields with positions and pages", async () => {
     const imp = await importAcroForm(await fillablePdf());
     expect(imp.acroImported).toBe(true);
-    expect(imp.fields.map((f) => f.type)).toEqual(["short_text", "short_text", "consent", "radio", "dropdown"]);
+    expect(imp.fields.map((f) => f.type)).toEqual(["short_text", "id_number", "consent", "radio", "dropdown"]);
     const byField = (id: string) => imp.stamps.filter((s) => s.fieldId === id);
     const first = byField("acro_1")[0]!;
     expect(first).toMatchObject({ kind: "text", page: 0 });
