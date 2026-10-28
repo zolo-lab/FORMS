@@ -302,3 +302,18 @@ describe("addDetectedFields with tables and keys", () => {
     expect(parseFormDefinition(definition).success).toBe(true);
   });
 });
+
+describe("PDF palette uses the responsive editor's field types", () => {
+  it("names every field element like the field type, grouped by the same categories", async () => {
+    const { pdfPaletteGroups, pdfPaletteEntry } = await import("@/lib/forms/pdf-draw");
+    const { FIELD_TYPE_META, FIELD_CATEGORY_LABELS } = await import("@/lib/forms/field-types");
+    const groups = pdfPaletteGroups();
+    const fieldEntries = groups.flatMap((g) => g.entries).filter((e) => e.fieldType);
+    for (const e of fieldEntries) expect(e.label).toBe(FIELD_TYPE_META[e.fieldType!].label);
+    expect(groups.map((g) => g.label)).toContain(FIELD_CATEGORY_LABELS.israeli);
+    expect(pdfPaletteEntry("id")?.stamp).toMatchObject({ kind: "comb", comb: { cells: 9 } });
+    expect(pdfPaletteEntry("time")?.fieldType).toBe("time");
+    expect(fieldEntries.some((e) => e.fieldType === "heading" || e.fieldType === "file_upload")).toBe(false);
+    expect(groups.at(-1)!.entries.map((e) => e.id)).toEqual(["initials", "date_signed", "stamp"]);
+  });
+});

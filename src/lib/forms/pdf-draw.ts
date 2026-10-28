@@ -6,7 +6,7 @@
  */
 import type { PdfStamp } from "./pdf-mapping";
 import { DEFAULT_SIZE } from "./pdf-items";
-import { FIELD_TYPE_META, type FieldType } from "./field-types";
+import { FIELD_CATEGORY_LABELS, FIELD_TYPE_META, fieldTypesByCategory, type FieldType } from "./field-types";
 import { allFields, type FormDefinition, type FormField } from "./schema";
 import { uniqueId } from "./builder";
 import type { DetectedField } from "@/lib/pdf/detect";
@@ -40,6 +40,47 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "dropdown", label: "רשימה נפתחת", fieldType: "dropdown", fieldLabel: "רשימה", stamp: { kind: "text" } },
   { id: "stamp", label: "חותמת (תמונה)", fieldType: null, stamp: { kind: "stamp_image" }, size: { width: 90, height: 90 } },
 ];
+
+/**
+ * Field types that can sit in one box on the document. Composite answers (name, bank, address), grids, tables,
+ * uploads, hidden fields and layout items stay in the responsive editor only.
+ */
+const PLACEABLE: readonly FieldType[] = [
+  "short_text", "long_text", "radio", "checkboxes", "dropdown", "linear_scale", "rating", "date", "time", "number", "currency",
+  "percent", "email", "yes_no", "phone", "id_number", "signature", "consent",
+];
+
+/** Stamps on the document that are not questions (nothing to fill in, or a mark of a field). */
+const DOCUMENT_MARKS = ["initials", "date_signed", "stamp"];
+
+/** The element for one field type: the stamp the old palette used for it, or a plain text box. */
+function entryForType(type: FieldType): PaletteEntry {
+  const known = PDF_PALETTE.find((e) => e.fieldType === type && e.id !== "initials");
+  const stamp: PaletteEntry["stamp"] = known?.stamp ?? (type === "yes_no" ? { kind: "check", whenValue: "yes" } : { kind: "text" });
+  return { id: known?.id ?? type, label: FIELD_TYPE_META[type].label, fieldType: type, fieldLabel: FIELD_TYPE_META[type].label, stamp, ...(known?.size ? { size: known.size } : {}) };
+}
+
+export interface PaletteGroup { label: string; entries: PaletteEntry[] }
+
+/**
+ * The PDF tab's palette: the same field types, names and categories as the responsive editor, plus the document
+ * marks. A field added here is an ordinary form field, so it shows in the responsive editor too.
+ */
+export function pdfPaletteGroups(): PaletteGroup[] {
+  const groups: PaletteGroup[] = [];
+  const byCat = fieldTypesByCategory();
+  for (const cat of Object.keys(byCat) as (keyof typeof byCat)[]) {
+    const entries = byCat[cat].filter((t) => PLACEABLE.includes(t)).map(entryForType);
+    if (entries.length) groups.push({ label: FIELD_CATEGORY_LABELS[cat], entries });
+  }
+  groups.push({ label: "סימונים על המסמך", entries: DOCUMENT_MARKS.map((id) => PDF_PALETTE.find((e) => e.id === id)!) });
+  return groups;
+}
+
+/** Every element of the PDF palette, by id (drag and drop carries the id). */
+export function pdfPaletteEntry(id: string): PaletteEntry | undefined {
+  return pdfPaletteGroups().flatMap((g) => g.entries).find((e) => e.id === id);
+}
 
 type Box = { page: number; x: number; y: number; width: number; height: number };
 
