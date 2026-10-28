@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { newField, parseOptionsText } from "@/lib/forms/builder";
+import { SWITCHABLE_TYPES, canSwitchType, newField, parseOptionsText, typeChangePatch } from "@/lib/forms/builder";
 import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { GRID_CELL_LABELS, GRID_CELL_TYPES, gridColumns, gridRows, type GridCellType, type GridColumn } from "@/lib/forms/grid";
 import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
@@ -154,7 +154,15 @@ export function FieldSettings({
 
   return (
     <div className="space-y-4">
-      <div className="text-sm text-muted-foreground">סוג: {meta.label}</div>
+      {canSwitchType(field.type) ? (
+        <Row label="סוג השדה" hint={field.type === "id_number" ? "מתקבל רק מספר זהות תקין (9 ספרות עם ספרת ביקורת)" : undefined}>
+          <Select aria-label="סוג השדה" value={field.type} onChange={(e) => { const p = typeChangePatch(field, e.target.value as FieldType); if (p) onPatch(p); }}>
+            {SWITCHABLE_TYPES.map((t) => <option key={t} value={t}>{FIELD_TYPE_META[t].label}</option>)}
+          </Select>
+        </Row>
+      ) : (
+        <div className="text-sm text-muted-foreground">סוג: {meta.label}</div>
+      )}
 
       <Row label={field.type === "info_text" ? "הטקסט" : "תווית"}>
         {field.type === "info_text" ? (

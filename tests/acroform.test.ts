@@ -72,3 +72,16 @@ describe("AcroForm import", () => {
     expect(imp).toEqual({ fields: [], stamps: [], acroImported: false });
   });
 });
+
+describe("AcroForm text field types", () => {
+  it("reads the type from the comb and the field name", async () => {
+    const { textType } = await import("@/lib/pdf/acroform");
+    expect(textType("anything", false, 9)).toBe("id_number");
+    expect(textType("מספר זהות", false, 0)).toBe("id_number");
+    expect(textType("ת.ז. העובד", false, 0)).toBe("id_number");
+    expect(textType("id_number", false, 0)).toBe("id_number");
+    expect(textType("טלפון נייד", false, 0)).toBe("phone");
+    expect(textType("חתימת העובד", false, 0)).toBe("short_text");
+    expect(textType("הערות", true, 0)).toBe("long_text");
+  });
+});

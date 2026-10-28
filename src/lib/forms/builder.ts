@@ -101,6 +101,24 @@ export function updateField(def: FormDefinition, id: string, patch: Partial<Form
   return next;
 }
 
+/**
+ * Text-like types a field can switch between: the answer stays one string and its place on the PDF stays valid.
+ * Switching e.g. "תשובה קצרה" to "תעודת זהות" makes the server accept only a valid Israeli ID.
+ */
+export const SWITCHABLE_TYPES = ["short_text", "long_text", "number", "currency", "percent", "date", "time", "email", "phone", "id_number"] as const satisfies readonly FieldType[];
+const SWITCHABLE = new Set<FieldType>(SWITCHABLE_TYPES);
+
+export const canSwitchType = (type: FieldType) => SWITCHABLE.has(type);
+
+/** The patch that turns `field` into `type`: the old type's default settings go, the new type's come in. */
+export function typeChangePatch(field: FormField, type: FieldType): Partial<FormField> | null {
+  if (field.type === type || !SWITCHABLE.has(field.type) || !SWITCHABLE.has(type)) return null;
+  const settings: Record<string, unknown> = { ...(field.settings ?? {}) };
+  for (const k of Object.keys(FIELD_TYPE_META[field.type].defaultSettings ?? {})) delete settings[k];
+  Object.assign(settings, FIELD_TYPE_META[type].defaultSettings ?? {});
+  return { type, settings: Object.keys(settings).length ? settings : undefined };
+}
+
 // ---------- Renaming ids keeps conditions pointing at the right field ----------
 
 function renameInCondition(c: Condition | undefined, from: string, to: string): Condition | undefined {
