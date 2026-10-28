@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { orphanStamps, placeableItems, splitPlacement, stampKey } from "@/lib/forms/pdf-items";
 import { sampleForm } from "./fixtures/sample-form";
+import { parseFormDefinition } from "@/lib/forms/schema";
+import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 
 describe("pdf placeable items", () => {
   const items = placeableItems(sampleForm, { children: 2 });
@@ -59,5 +61,33 @@ describe("pending vs placed", () => {
     const r = splitPlacement(groups, new Set(multi[1].slice(1).map((i) => i.key)));
     expect(r.pending.map((g) => g[0])).toContain(multi[0]);
     expect(r.placed.map((g) => g[0])).not.toContain(multi[0]);
+  });
+});
+
+describe("the form and its PDF boxes stay one", () => {
+  const box = { page: 0, x: 0, y: 0, width: 10, height: 10 };
+  const def = parseFormDefinition({ schemaVersion: 1, title: "t", pages: [{ id: "p", title: "", fields: [
+    { id: "name", type: "short_text", label: "שם" },
+    { id: "kids", type: "repeating_table", label: "ילדים", fields: [{ id: "n", type: "short_text", label: "שם" }] },
+  ] }] }).data!;
+  it("drops the boxes of a field that was deleted, keeps document marks", async () => {
+    const { pruneStamps } = await import("@/lib/forms/pdf-items");
+    const stamps = [
+      { id: "1", fieldId: "name", kind: "text", ...box },
+      { id: "2", fieldId: "gone", kind: "text", ...box },
+      { id: "3", fieldId: "kids[1].n", kind: "text", ...box },
+      { id: "4", fieldId: "_date_signed", kind: "date_signed", ...box },
+    ] as PdfStamp[];
+    expect(pruneStamps(def, stamps).map((s) => s.id)).toEqual(["1", "3", "4"]);
+  });
+  it("reports fields whose last box was deleted", async () => {
+    const { fieldsLeftWithoutStamps } = await import("@/lib/forms/pdf-items");
+    const a = { id: "1", fieldId: "name", kind: "text", ...box } as PdfStamp;
+    const b = { id: "2", fieldId: "name", kind: "text", ...box } as PdfStamp;
+    const c = { id: "3", fieldId: "kids[0].n", kind: "text", ...box } as PdfStamp;
+    const d = { id: "4", fieldId: "kids[1].n", kind: "text", ...box } as PdfStamp;
+    expect(fieldsLeftWithoutStamps([a, b, c, d], [a, c])).toEqual([]);
+    expect(fieldsLeftWithoutStamps([a, b, c, d], [c, d])).toEqual(["name"]);
+    expect(fieldsLeftWithoutStamps([a, c], [a])).toEqual(["kids"]);
   });
 });

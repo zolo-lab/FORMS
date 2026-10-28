@@ -139,3 +139,22 @@ export function guessRowPitch(all: PdfStamp[], selected: PdfStamp[]): number {
   }
   return Math.max(...selected.map((s) => s.height)) + 6;
 }
+
+/** The top-level field a stamp belongs to (`kids[0].name` → `kids`); stamp-only marks have no field. */
+export function stampFieldId(s: PdfStamp): string | null {
+  if (s.kind === "date_signed" || s.kind === "stamp_image") return null;
+  return s.fieldId.replace(/\[\d+\]\..*$/, "");
+}
+
+/** Stamps of fields that are not in the form any more are dropped (a field deleted in the editor takes its boxes along). */
+export function pruneStamps(def: FormDefinition, stamps: PdfStamp[]): PdfStamp[] {
+  const orphans = new Set(orphanStamps(def, stamps));
+  return orphans.size ? stamps.filter((s) => !orphans.has(s)) : stamps;
+}
+
+/** Fields that had at least one box before and have none after: deleting the last box deletes the field. */
+export function fieldsLeftWithoutStamps(before: PdfStamp[], after: PdfStamp[]): string[] {
+  const has = (list: PdfStamp[]) => new Set(list.map(stampFieldId).filter((x): x is string => !!x));
+  const now = has(after);
+  return [...has(before)].filter((id) => !now.has(id));
+}
