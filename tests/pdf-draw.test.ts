@@ -308,7 +308,7 @@ describe("PDF palette uses the responsive editor's field types", () => {
     const { pdfPaletteGroups, pdfPaletteEntry } = await import("@/lib/forms/pdf-draw");
     const { FIELD_TYPE_META, FIELD_CATEGORY_LABELS } = await import("@/lib/forms/field-types");
     const groups = pdfPaletteGroups();
-    const fieldEntries = groups.flatMap((g) => g.entries).filter((e) => e.fieldType);
+    const fieldEntries = groups.slice(0, -1).flatMap((g) => g.entries);
     for (const e of fieldEntries) expect(e.label).toBe(FIELD_TYPE_META[e.fieldType!].label);
     expect(groups.map((g) => g.label)).toContain(FIELD_CATEGORY_LABELS.israeli);
     expect(pdfPaletteEntry("id")?.stamp).toMatchObject({ kind: "comb", comb: { cells: 9 } });

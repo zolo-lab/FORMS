@@ -16,7 +16,7 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "סוגי שדות" })).toBeVisible();
 
   // Adding a type puts a stamp on the page.
-  await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
 
@@ -42,7 +42,7 @@ test("draws elements straight onto the PDF and styles them", async ({ page }) =>
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; kind: string; bold?: boolean; color?: string; comb?: { cells: number }; dateFormat?: string }[];
 
-  for (const label of ['ת"ז בתאים', "תאריך חתימה", "חתימה", "טקסט", "ראשי תיבות"]) {
+  for (const label of ["תעודת זהות", "תאריך חתימה", "חתימה", "תשובה קצרה", "ראשי תיבות"]) {
     await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   }
   const stamps = await mapping();
@@ -67,7 +67,7 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { id: string; x: number; y: number; width: number }[];
 
-  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
   expect(await mapping()).toHaveLength(3);
   // All three were dropped at the same spot; spread them by dragging two away.
   const boxes = page.locator("[data-stamp]");
@@ -108,7 +108,7 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
 test("colours stamps by role and shows a legend", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "הוספת טקסט", exact: true }).click();
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
   await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
   await page.getByLabel("מי ממלא").selectOption("approver");
   await expect(page.getByLabel("מקרא תפקידים")).toContainText("מאשר");

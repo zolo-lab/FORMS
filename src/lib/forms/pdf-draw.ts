@@ -57,7 +57,7 @@ const DOCUMENT_MARKS = ["initials", "date_signed", "stamp"];
 function entryForType(type: FieldType): PaletteEntry {
   const known = PDF_PALETTE.find((e) => e.fieldType === type && e.id !== "initials");
   const stamp: PaletteEntry["stamp"] = known?.stamp ?? (type === "yes_no" ? { kind: "check", whenValue: "yes" } : { kind: "text" });
-  return { id: known?.id ?? type, label: FIELD_TYPE_META[type].label, fieldType: type, fieldLabel: FIELD_TYPE_META[type].label, stamp, ...(known?.size ? { size: known.size } : {}) };
+  return { id: known?.id ?? type, label: FIELD_TYPE_META[type].label, fieldType: type, fieldLabel: known?.fieldLabel ?? FIELD_TYPE_META[type].label, stamp, ...(known?.size ? { size: known.size } : {}) };
 }
 
 export interface PaletteGroup { label: string; entries: PaletteEntry[] }

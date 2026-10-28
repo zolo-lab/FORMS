@@ -26,7 +26,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
 
   // Five elements from the palette; each lands on its own spot.
-  for (const label of ["טקסט", 'ת"ז בתאים', "תאריך", "תיבת סימון", "חתימה"]) {
+  for (const label of ["תשובה קצרה", "תעודת זהות", "תאריך", "הצהרה / אישור", "חתימה"]) {
     await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   }
   const stamps = page.locator("[data-stamp]");
