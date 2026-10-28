@@ -6,7 +6,7 @@
  */
 import type { PdfStamp } from "./pdf-mapping";
 import { DEFAULT_SIZE } from "./pdf-items";
-import { FIELD_TYPE_META, type FieldType } from "./field-types";
+import { FIELD_TYPE_META, formFieldTypesByCategory, type FieldType } from "./field-types";
 import { allFields, type FormDefinition, type FormField } from "./schema";
 import { uniqueId } from "./builder";
 import type { DetectedField } from "@/lib/pdf/detect";
@@ -40,6 +40,42 @@ export const PDF_PALETTE: PaletteEntry[] = [
   { id: "dropdown", label: "רשימה נפתחת", fieldType: "dropdown", fieldLabel: "רשימה", stamp: { kind: "text" } },
   { id: "stamp", label: "חותמת (תמונה)", fieldType: null, stamp: { kind: "stamp_image" }, size: { width: 90, height: 90 } },
 ];
+
+/** How each field type is drawn when it is added on the document (types not listed get a text box). */
+const STAMP_FOR: Partial<Record<FieldType, Pick<PaletteEntry, "stamp" | "size">>> = {
+  yes_no: { stamp: { kind: "check", whenValue: "yes" } },
+  stamp: { stamp: { kind: "signature" }, size: { width: 90, height: 90 } },
+  date_signed: { stamp: { kind: "date_signed", align: "center" } },
+  file_upload: { stamp: { kind: "check" }, size: { width: 16, height: 16 } },
+  time: { stamp: { kind: "text", align: "center" }, size: { width: 50, height: 16 } },
+  currency: { stamp: { kind: "text", align: "center" }, size: { width: 70, height: 16 } },
+  percent: { stamp: { kind: "text", align: "center" }, size: { width: 40, height: 16 } },
+  repeating_table: { stamp: { kind: "text" } },
+};
+
+/** The element for one field type: the stamp the PDF palette always used for it, or the one above, or a text box. */
+function entryForType(type: FieldType): PaletteEntry {
+  const known = PDF_PALETTE.find((e) => e.fieldType === type && e.id !== "initials");
+  const own = STAMP_FOR[type];
+  const stamp: PaletteEntry["stamp"] = known?.stamp ?? own?.stamp ?? { kind: "text" };
+  const size = known?.size ?? own?.size;
+  return { id: known?.id ?? type, label: FIELD_TYPE_META[type].label, fieldType: type, fieldLabel: known?.fieldLabel ?? FIELD_TYPE_META[type].label, stamp, ...(size ? { size } : {}) };
+}
+
+export interface PaletteGroup { label: string; entries: PaletteEntry[] }
+
+/**
+ * The PDF tab's palette: exactly the field types of the responsive editor (`FORM_FIELD_TYPES`), same names,
+ * categories and order. A field added here is an ordinary form field, so it shows in the responsive editor too.
+ */
+export function pdfPaletteGroups(): PaletteGroup[] {
+  return formFieldTypesByCategory().map((g) => ({ label: g.label, entries: g.types.map(entryForType) }));
+}
+
+/** Every element of the PDF palette, by id (drag and drop carries the id). */
+export function pdfPaletteEntry(id: string): PaletteEntry | undefined {
+  return pdfPaletteGroups().flatMap((g) => g.entries).find((e) => e.id === id);
+}
 
 type Box = { page: number; x: number; y: number; width: number; height: number };
 
@@ -136,12 +172,16 @@ export function addDrawnElement(
     if (entry.fieldType === "radio" || entry.fieldType === "dropdown" || entry.fieldType === "checkboxes") {
       field.options = [{ value: "o1", label: "אפשרות 1" }, { value: "o2", label: "אפשרות 2" }];
     }
+    if (FIELD_TYPE_META[entry.fieldType].defaultSettings) field.settings = { ...FIELD_TYPE_META[entry.fieldType].defaultSettings };
+    // A table starts with one column; the box is its first row (more rows: "שורות" in the PDF tab).
+    if (entry.fieldType === "repeating_table") field.fields = [{ id: "c1", type: "short_text", label: "עמודה 1" }];
     definition = insertFieldByPosition(def, field, at, existing);
   } else {
     // Stamp-only elements point at a fixed id that stampPdf never resolves.
     fieldId = `_${entry.id}`;
   }
-  const stamp: PdfStamp = { ...entry.stamp, id: newId(), fieldId, page, x: box.x, y: box.y, ...size };
+  const stampField = entry.fieldType === "repeating_table" ? `${fieldId}[0].c1` : fieldId;
+  const stamp: PdfStamp = { ...entry.stamp, id: newId(), fieldId: stampField, page, x: box.x, y: box.y, ...size };
   return { definition, stamp };
 }
 

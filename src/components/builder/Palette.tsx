@@ -1,19 +1,20 @@
 "use client";
-import { FIELD_CATEGORY_LABELS, FIELD_TYPE_META, fieldTypesByCategory, type FieldType } from "@/lib/forms/field-types";
+import { FIELD_TYPE_META, LAYOUT_TYPES, formFieldTypesByCategory, type FieldType } from "@/lib/forms/field-types";
 import { FieldIcon } from "./field-icon";
 
 export const DRAG_TYPE = "application/x-field-type";
 export const DRAG_FIELD = "application/x-field-id";
 
 export function Palette({ onAdd }: { onAdd: (type: FieldType) => void }) {
-  const groups = fieldTypesByCategory();
+  // The same field types as the PDF tab; display blocks come last, under their own heading (they are not fields).
+  const groups = [...formFieldTypesByCategory(), { category: "layout", label: "תצוגה (לא שדות, רק בטופס הרספונסיבי)", types: [...LAYOUT_TYPES] }];
   return (
     <div className="space-y-4">
-      {(Object.keys(groups) as (keyof typeof groups)[]).map((cat) => (
-        <section key={cat}>
-          <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">{FIELD_CATEGORY_LABELS[cat]}</h3>
+      {groups.map((g) => (
+        <section key={g.category}>
+          <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">{g.label}</h3>
           <ul className="grid grid-cols-2 gap-1.5">
-            {groups[cat].map((t) => (
+            {g.types.map((t) => (
               <li key={t}>
                 <button
                   type="button"

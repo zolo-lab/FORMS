@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
-import { PDF_PALETTE, type PaletteEntry } from "@/lib/forms/pdf-draw";
+import { pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
+import { FieldIcon } from "@/components/builder/field-icon";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
 import { StampFieldControls } from "./StampFieldControls";
@@ -354,7 +355,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       {/* Fields to place */}
       <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="סוגי שדות">
         <h3 className="text-sm font-semibold">סוגי שדות</h3>
-        <p className="text-xs text-muted-foreground">גררו שדה אל העמוד, או לחצו + להוספה בעמוד הנוכחי. לחיצה על שדה בעמוד פותחת את המאפיינים שלו משמאל.</p>
+        <p className="text-xs text-muted-foreground">אותם סוגי שדות כמו בעריכה הרספונסיבית. גררו שדה אל העמוד, או לחצו עליו להוספה בעמוד הנוכחי. לחיצה על שדה בעמוד פותחת את המאפיינים שלו.</p>
         {guessedCount > 0 && (
           <div role="status" className="space-y-2 rounded-md border border-dashed border-primary bg-primary/5 p-2 text-xs">
             <p>{guessedCount} שיבוצים הוצעו אוטומטית (מסומנים בקו מקווקו). גרירה או שינוי גודל מאשרים שיבוץ.</p>
@@ -379,20 +380,29 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           );
         })}
         {onDrawElement && (
-          <section aria-label="סוגי שדות להוספה">
-            <ul className="grid grid-cols-2 gap-1">
-              {PDF_PALETTE.map((entry) => (
-                <li
-                  key={entry.id}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData(ELEMENT_DRAG, entry.id)}
-                  className="flex items-center justify-between gap-1 rounded-md border bg-card px-2 py-1 text-xs"
-                >
-                  <span className="truncate">{entry.label}</span>
-                  <Button variant="ghost" size="sm" aria-label={`הוספת ${entry.label}`} onClick={() => draw(entry, activePage)}><Plus className="size-3" /></Button>
-                </li>
-              ))}
-            </ul>
+          <section aria-label="סוגי שדות להוספה" className="space-y-3">
+            {pdfPaletteGroups().map((g) => (
+              <div key={g.label}>
+                <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">{g.label}</h3>
+                <ul className="grid grid-cols-2 gap-1.5">
+                  {g.entries.map((entry) => (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.setData(ELEMENT_DRAG, entry.id); e.dataTransfer.effectAllowed = "copy"; }}
+                        onClick={() => draw(entry, activePage)}
+                        aria-label={`הוספת ${entry.label}`}
+                        className="flex min-h-10 w-full items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                      >
+                        {entry.fieldType ? <FieldIcon type={entry.fieldType} className="size-4 shrink-0 text-muted-foreground" /> : <Plus className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                        <span className="truncate">{entry.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </section>
         )}
         {orphans.length > 0 && (
@@ -480,7 +490,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
-                  const entry = PDF_PALETTE.find((p) => p.id === e.dataTransfer.getData(ELEMENT_DRAG));
+                  const entry = pdfPaletteEntry(e.dataTransfer.getData(ELEMENT_DRAG));
                   if (entry) {
                     const r = pageRefs.current[pi]!.getBoundingClientRect();
                     const d = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];

@@ -74,6 +74,8 @@ export function formatAnswer(field: FormField, value: unknown, part?: string): s
         .join("\n");
     }
     case "signature":
+    case "stamp":
+    case "date_signed":
     case "file_upload":
     case "radio_grid":
     case "checkbox_grid":
