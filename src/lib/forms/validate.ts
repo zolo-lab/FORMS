@@ -182,7 +182,10 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
     }
     case "consent":
       return value === true ? null : MSG.consent;
-    case "signature": {
+    case "date_signed":
+      return null; // filled by the system when the step is signed
+    case "signature":
+    case "stamp": {
       const s = value as { image?: string } | null;
       return s && typeof s.image === "string" && SIGNATURE_IMAGE.test(s.image) && s.image.length <= SIGNATURE_MAX_CHARS ? null : MSG.signature;
     }

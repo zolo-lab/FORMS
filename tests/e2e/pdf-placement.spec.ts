@@ -42,15 +42,15 @@ test("draws elements straight onto the PDF and styles them", async ({ page }) =>
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; kind: string; bold?: boolean; color?: string; comb?: { cells: number }; dateFormat?: string }[];
 
-  for (const label of ["תעודת זהות", "תאריך חתימה", "חתימה", "תשובה קצרה", "ראשי תיבות"]) {
+  for (const label of ["תעודת זהות", "תאריך חתימה", "חתימה", "חותמת", "תשובה קצרה"]) {
     await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   }
   const stamps = await mapping();
-  expect(stamps.map((s) => s.kind)).toEqual(["comb", "date_signed", "signature", "text", "initials"]);
+  expect(stamps.map((s) => s.kind)).toEqual(["comb", "date_signed", "signature", "signature", "text"]);
   expect(stamps[0]!.comb).toEqual({ cells: 9 });
   expect(stamps[0]!.fieldId).toMatch(/^pdf_id_\d+$/);
 
-  // The last drawn stamp (initials) is selected: style it.
+  // The last drawn stamp (short text) is selected: style it.
   await page.getByRole("switch", { name: "בולד" }).click();
   await page.getByLabel("צבע").selectOption("#1a3c8c");
   const styled = (await mapping()).at(-1)!;

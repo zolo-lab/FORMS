@@ -32,11 +32,11 @@ export const DEFAULT_SIZE: Record<PdfStamp["kind"], { width: number; height: num
   stamp_image: { width: 90, height: 90 },
 };
 
-const UNSUPPORTED = new Set(["radio_grid", "checkbox_grid", "grid", "file_upload", "hidden"]);
+const UNSUPPORTED = new Set(["radio_grid", "checkbox_grid", "grid", "hidden"]);
 
 function itemsForField(f: FormField, idPrefix: string, labelPrefix: string): PlaceableItem[] {
   const meta = FIELD_TYPE_META[f.type];
-  if (!meta.hasAnswer || UNSUPPORTED.has(f.type)) return [];
+  if ((!meta.hasAnswer && f.type !== "date_signed") || UNSUPPORTED.has(f.type)) return [];
   const fieldId = idPrefix + f.id;
   const group = labelPrefix + (f.label || f.id);
   const base = { fieldId, group };
@@ -47,6 +47,9 @@ function itemsForField(f: FormField, idPrefix: string, labelPrefix: string): Pla
   };
 
   if (f.type === "signature") return [make({ kind: "signature", label: "חתימה" })];
+  if (f.type === "stamp") return [make({ kind: "signature", label: "חותמת" })];
+  if (f.type === "date_signed") return [make({ kind: "date_signed", label: "תאריך החתימה" })];
+  if (f.type === "file_upload") return [make({ kind: "check", label: "סימן שצורף מסמך" })];
   if (f.type === "consent") return [make({ kind: "check", label: "סימון X כשמאושר" })];
   if (f.type === "yes_no") {
     return [
@@ -95,7 +98,7 @@ export function placeableItems(def: FormDefinition, tableRows: Record<string, nu
 export function orphanStamps(def: FormDefinition, stamps: PdfStamp[]): PdfStamp[] {
   const known = new Set(placeableItems(def, Object.fromEntries(allFields(def).filter((f) => f.type === "repeating_table").map((f) => [f.id, 100]))).map((i) => i.key));
   // Stamps that do not read an answer are never orphans.
-  return stamps.filter((s) => s.kind !== "date_signed" && s.kind !== "stamp_image" && !known.has(stampKey(s)));
+  return stamps.filter((s) => !s.fieldId.startsWith("_") && !known.has(stampKey(s)));
 }
 
 const CELL = /^([A-Za-z]\w*)\[(\d+)\]\.([A-Za-z]\w*)$/;

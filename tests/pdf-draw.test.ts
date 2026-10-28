@@ -303,17 +303,32 @@ describe("addDetectedFields with tables and keys", () => {
   });
 });
 
-describe("PDF palette uses the responsive editor's field types", () => {
-  it("names every field element like the field type, grouped by the same categories", async () => {
+describe("one list of field types for the PDF and the responsive form", () => {
+  it("the PDF palette offers exactly the responsive editor's field types, same names and order", async () => {
     const { pdfPaletteGroups, pdfPaletteEntry } = await import("@/lib/forms/pdf-draw");
-    const { FIELD_TYPE_META, FIELD_CATEGORY_LABELS } = await import("@/lib/forms/field-types");
+    const { FIELD_TYPE_META, FORM_FIELD_TYPES, formFieldTypesByCategory } = await import("@/lib/forms/field-types");
     const groups = pdfPaletteGroups();
-    const fieldEntries = groups.slice(0, -1).flatMap((g) => g.entries);
-    for (const e of fieldEntries) expect(e.label).toBe(FIELD_TYPE_META[e.fieldType!].label);
-    expect(groups.map((g) => g.label)).toContain(FIELD_CATEGORY_LABELS.israeli);
+    const entries = groups.flatMap((g) => g.entries);
+    expect(entries.map((e) => e.fieldType)).toEqual(formFieldTypesByCategory().flatMap((g) => g.types));
+    expect(new Set(entries.map((e) => e.fieldType))).toEqual(new Set(FORM_FIELD_TYPES));
+    for (const e of entries) expect(e.label).toBe(FIELD_TYPE_META[e.fieldType!].label);
+    expect(groups.map((g) => g.label)).toEqual(formFieldTypesByCategory().map((g) => g.label));
     expect(pdfPaletteEntry("id")?.stamp).toMatchObject({ kind: "comb", comb: { cells: 9 } });
-    expect(pdfPaletteEntry("time")?.fieldType).toBe("time");
-    expect(fieldEntries.some((e) => e.fieldType === "heading" || e.fieldType === "file_upload")).toBe(false);
-    expect(groups.at(-1)!.entries.map((e) => e.id)).toEqual(["initials", "date_signed", "stamp"]);
+  });
+  it("stamp, date signed, upload and table are real fields with a box", async () => {
+    const { addDrawnElement, pdfPaletteEntry } = await import("@/lib/forms/pdf-draw");
+    const draw = (id: string) => addDrawnElement(empty(), pdfPaletteEntry(id)!, 0, { x: 0, y: 0 }, () => "s");
+    const stamp = draw("stamp");
+    expect(stamp.definition.pages[0]!.fields[0]).toMatchObject({ type: "stamp", label: "חותמת" });
+    expect(stamp.stamp.kind).toBe("signature");
+    const date = draw("date_signed");
+    expect(date.definition.pages[0]!.fields[0]!.type).toBe("date_signed");
+    expect(date.stamp).toMatchObject({ kind: "date_signed", fieldId: date.definition.pages[0]!.fields[0]!.id });
+    const upload = draw("file_upload");
+    expect(upload.stamp.kind).toBe("check");
+    const table = draw("repeating_table");
+    const t = table.definition.pages[0]!.fields[0]!;
+    expect(t.fields?.map((c) => c.id)).toEqual(["c1"]);
+    expect(table.stamp.fieldId).toBe(`${t.id}[0].c1`);
   });
 });

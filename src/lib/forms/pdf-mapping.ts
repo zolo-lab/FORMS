@@ -6,7 +6,7 @@
  * Coordinates: PDF points, origin bottom-left of the page (pdf-lib convention).
  * The builder converts from screen pixels using the page size it renders.
  */
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import { z } from "zod";
 import type { Answers } from "./conditions";
 import { formatAnswer } from "./format";
@@ -101,7 +101,11 @@ export function resolveStampValue(
   return field ? { field, value: answers[fieldId] } : null;
 }
 
+/** Lucide "paperclip" outline (24×24), drawn for an attached document. */
+const PAPERCLIP = "M13.234 20.252 21 12.3M16 6l-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486";
+
 function isChecked(field: FormField, value: unknown, whenValue?: string): boolean {
+  if (field.type === "file_upload") return Array.isArray(value) && value.length > 0;
   if (whenValue === undefined) return value === true || value === "yes";
   if (Array.isArray(value)) return value.includes(whenValue);
   return String(value) === whenValue;
@@ -183,6 +187,17 @@ export async function stampPdf(
     const resolved = resolveStampValue(form, answers, stamp.fieldId);
     if (!resolved) continue;
     const { field, value } = resolved;
+
+    if (stamp.kind === "check" && field.type === "file_upload") {
+      // An attached document: a small paperclip in the box.
+      if (isChecked(field, value)) {
+        const k = Math.min(stamp.width, stamp.height) / 24;
+        for (const page of targets) {
+          page.drawSvgPath(PAPERCLIP, { x: stamp.x + (stamp.width - 24 * k) / 2, y: stamp.y + (stamp.height + 24 * k) / 2, scale: k, borderColor: color ?? rgb(0, 0, 0), borderWidth: 1.2 });
+        }
+      }
+      continue;
+    }
 
     if (stamp.kind === "check") {
       if (isChecked(field, value, stamp.whenValue)) {
