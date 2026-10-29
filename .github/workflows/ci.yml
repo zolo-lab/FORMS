@@ -38,6 +38,10 @@ jobs:
           if-no-files-found: ignore
   e2e:
     runs-on: ubuntu-latest
+    # One e2e run at a time on the shared dev DB: the teardown deletes the test forms created since its run started.
+    concurrency:
+      group: e2e-dev-db
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
