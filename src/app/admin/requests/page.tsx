@@ -70,8 +70,8 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
       <PageHeader
-        title="בקשות"
-        description="כל הבקשות שאתה רשאי לראות: מי ממתין, כמה זמן ומה הושלם. לחיצה על כותרת עמודה ממיינת."
+        title="היסטוריית טפסים"
+        description="כל הטפסים שנשלחו ושאתה רשאי לראות: מי ממתין, כמה זמן ומה הושלם. לחיצה על כותרת עמודה ממיינת."
         actions={
           <>
           <nav aria-label="תצוגה" className="flex overflow-hidden rounded-md border text-sm">
