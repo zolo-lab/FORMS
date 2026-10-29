@@ -1,4 +1,5 @@
 "use client";
+import { StepSelect, type FormSteps } from "./StepSelect";
 import { useState } from "react";
 import { PREFILL_KEYS } from "@/lib/forms/prefill";
 import { Plus, Trash2 } from "lucide-react";
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { SWITCHABLE_TYPES, canSwitchType, newField, parseOptionsText, typeChangePatch } from "@/lib/forms/builder";
 import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { GRID_CELL_LABELS, GRID_CELL_TYPES, gridColumns, gridRows, type GridCellType, type GridColumn } from "@/lib/forms/grid";
-import { fillerRoles, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
 import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
@@ -19,8 +20,9 @@ import { GROUP_SOURCE_PREFIX, groupIdOfSource } from "@/lib/workflow/assignee";
 import { ConditionEditor } from "./ConditionEditor";
 import { FormulaEditor } from "./FormulaEditor";
 
-const ROLE_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
 /** Types whose answer can start with a default value set by the form designer. */
+const DEFAULT_STEPS: FormSteps = [{ role: "requester" }, { role: "employee" }];
+
 export const DEFAULT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown", "radio", "date", "time", "hidden"];
 const TEXT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown"];
 
@@ -129,12 +131,14 @@ function StyleControls({ style, sample, onChange }: { style: FieldStyle | undefi
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, groups = [],
+  def, field, onPatch, onRename, onMoveToPage, groups = [], steps = DEFAULT_STEPS,
 }: {
   def: FormDefinition;
   field: FormField;
   /** Saved groups (contacts) a dropdown can list; the chosen member can be the next signer. */
   groups?: { id: string; name: string }[];
+  /** The form's steps ("שלבי הטופס"), to choose the step a field belongs to. */
+  steps?: FormSteps;
   onPatch: (patch: Partial<FormField>) => void;
   onRename: (to: string) => string | undefined;
   /** Move the field to the end of another page of the form. */
@@ -342,10 +346,8 @@ export function FieldSettings({
               </Select>
             </Row>
           )}
-          <Row label="ממלא בשרשרת החתימות">
-            <Select value={field.filledBy ?? "employee"} onChange={(e) => onPatch({ filledBy: e.target.value === "employee" ? undefined : (e.target.value as FormField["filledBy"]) })}>
-              {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </Select>
+          <Row label="באיזה שלב השדה מופיע">
+            <StepSelect steps={steps} value={field.filledBy} onChange={(r) => onPatch({ filledBy: r === "employee" ? undefined : r })} />
           </Row>
           <Row label="רוחב בדסקטופ">
             <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>

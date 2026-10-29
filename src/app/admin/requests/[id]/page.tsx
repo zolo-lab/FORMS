@@ -46,7 +46,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
       <Link href="/admin/requests" className="text-sm text-muted-foreground hover:underline">
-        ← כל הבקשות
+        ← היסטוריית טפסים
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">{request.subjectName}</h1>

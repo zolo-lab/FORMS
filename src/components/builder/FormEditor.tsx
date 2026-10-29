@@ -1,4 +1,5 @@
 "use client";
+import type { FormSteps } from "./StepSelect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, Redo2, Undo2, Sparkles } from "lucide-react";
@@ -41,9 +42,11 @@ export interface FormEditorProps {
   needsPdf?: boolean;
   /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
   groups?: { id: string; name: string }[];
+  /** The form's steps ("שלבי הטופס"): each field belongs to one of them. */
+  steps?: FormSteps;
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], steps }: FormEditorProps) {
   const [def, setDef] = useState(initial);
   // One history for the form and its boxes on the PDF: undoing a delete brings back the field and its boxes together.
   const [past, setPast] = useState<HistoryEntry[]>([]);
@@ -310,6 +313,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   def={def}
                   field={selectedField}
                   groups={groups}
+                  steps={steps}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onMoveToPage={(pi) => commit(moveField(def, selectedField.id, { page: pi, index: def.pages[pi]!.fields.length }))}
                   onRename={(to) => {
@@ -340,7 +344,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={steps} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">
