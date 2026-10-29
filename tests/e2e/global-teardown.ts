@@ -25,6 +25,10 @@ export default async function globalTeardown() {
     sql`delete from package_templates where id in (select id from del_p)`,
     sql`delete from webhooks where template_id in (select id from del_t)`,
     sql`delete from form_templates where id in (select id from del_t) returning id`,
+    // Users, their contacts and groups made by tests/e2e/users.spec.ts.
+    sql`delete from groups where name like 'קבוצת e2e %' and created_at >= ${since}::timestamptz`,
+    sql`delete from contacts where email like 'e2e-%@example.test'`,
+    sql`delete from users where email like 'e2e-%@example.test'`,
   ]);
-  console.log(`e2e teardown: removed ${results.at(-1)?.length ?? 0} test forms`);
+  console.log(`e2e teardown: removed ${results[8]?.length ?? 0} test forms`);
 }
