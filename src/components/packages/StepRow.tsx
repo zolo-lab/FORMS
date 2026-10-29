@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ export function StepRow({
           <Button type="submit" name="intent" value="delete" variant="ghost" size="sm" aria-label={`מחיקת שלב ${n}`}>מחיקה</Button>
         </div>
         {who === "email" && <p className="basis-full text-xs text-muted-foreground">יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח למייל שלו.</p>}
-        {(who === "contact" || who === "group_all") && <p className="basis-full text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<a href="/admin/settings/people" className="underline">משתמשים לשלבים</a>.</p>}
+        {(who === "contact" || who === "group_all") && <p className="basis-full text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
       </form>
     </li>
   );

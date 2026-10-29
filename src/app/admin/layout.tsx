@@ -34,13 +34,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: "/admin/employees", label: "עובדים" },
             { href: "/admin/campaigns", label: "קמפיינים" },
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
+            ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },
-              { href: "/admin/settings/people", label: "משתמשים לשלבים" },
-              { href: "/admin/settings/users", label: "משתמשים והרשאות" },
             ] },
             { title: "חיבורים", items: [
               { href: "/admin/settings/webhooks", label: "Webhooks" },
