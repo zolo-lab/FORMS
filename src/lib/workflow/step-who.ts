@@ -33,3 +33,22 @@ export function stepFields(who: StepWho, role: StepRole): { role: StepRole; acti
   const r = (PERSON_ROLES as readonly StepRole[]).includes(role) ? role : "approver";
   return { role: r, action: "approve", assigneeKind: who };
 }
+
+/** One choice in a field's "באיזה שלב" select: the role the field gets, named after the step(s) that have it. */
+export interface StepChoice { role: StepRole; label: string }
+
+/**
+ * The form's steps as choices for a field. A field belongs to a role, so steps that share a role share one choice
+ * ("שלבים 3, 4"). A role the field already has but no step uses is kept, marked, so it is not silently changed.
+ */
+export function stepChoices(steps: Pick<WorkflowStep, "role" | "assigneeKind" | "assigneeFromFieldId" | "contactId">[], roleLabels: Record<StepRole, string>, current?: StepRole): StepChoice[] {
+  const byRole = new Map<StepRole, number[]>();
+  steps.forEach((s, i) => byRole.set(s.role, [...(byRole.get(s.role) ?? []), i + 1]));
+  const out: StepChoice[] = [...byRole].map(([role, ns]) => {
+    const who = stepWhoOf(steps[ns[0]! - 1]!);
+    const name = who === "requester" || who === "employee" ? STEP_WHO_LABELS[who] : roleLabels[role];
+    return { role, label: `${ns.length > 1 ? "שלבים" : "שלב"} ${ns.join(", ")} · ${name}` };
+  });
+  if (current && !byRole.has(current)) out.push({ role: current, label: `${roleLabels[current]} (אין שלב כזה בטופס)` });
+  return out;
+}

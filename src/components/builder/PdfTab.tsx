@@ -1,4 +1,5 @@
 "use client";
+import type { FormSteps } from "./StepSelect";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -33,8 +34,10 @@ export function PdfTab({
   onChange,
   onDefinitionChange,
   templateId,
+  steps,
 }: {
   templateId?: string;
+  steps?: FormSteps;
   definition: FormDefinition;
   pdf: PdfState | null;
   onChange: (p: PdfState | null) => void;
@@ -238,6 +241,7 @@ export function PdfTab({
       {pdf && (
         <PdfPlacement
           definition={definition}
+          steps={steps}
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}

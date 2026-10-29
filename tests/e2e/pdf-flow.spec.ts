@@ -36,7 +36,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await expect(page.getByText("5 חותמות ממופות")).toBeVisible();
 
   // The last element (signature) is selected: give it to the employee.
-  await page.getByLabel("מי ממלא").selectOption("employee");
+  await page.getByLabel("באיזה שלב").selectOption("employee");
 
   // The drawn fields are ordinary fields of the form: they show in the editor like any other (no hidden page).
   await page.getByRole("tab", { name: "עריכה" }).click();
