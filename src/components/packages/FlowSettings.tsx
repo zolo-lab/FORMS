@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABELS } from "@/lib/workflow/labels";
-import { ASSIGNEE_KINDS, STEP_ACTIONS } from "@/lib/workflow/types";
-import { ASSIGNEE_KIND_LABELS, assigneeKindOf } from "@/lib/workflow/assignee";
+import { FIELD_TYPE_META } from "@/lib/forms/field-types";
+import { StepRow } from "./StepRow";
 import { listContacts, listGroups } from "@/server/people-store";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
@@ -18,14 +17,6 @@ import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
 import { formatRecipients } from "@/lib/requests/recipients";
 
-
-const ACTION_LABELS: Record<(typeof STEP_ACTIONS)[number], string> = {
-  fill: "מילוי",
-  sign: "חתימה",
-  fill_and_sign: "מילוי וחתימה",
-  approve: "אישור",
-  view: "צפייה בלבד",
-};
 
 export type FlowQuery = { saved?: string; error?: string; stepError?: string; settingsError?: string };
 
@@ -47,33 +38,12 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
   // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
   const wizard = await getWizardPackage(id);
+  const answerFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => FIELD_TYPE_META[f.type]?.hasAnswer).map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
 
-  return (
-    <div className="space-y-6">
-      {!formId && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Link href="/admin/packages" className="text-sm text-muted-foreground hover:text-foreground">→ כל הערכות</Link>
-          <h1 className="text-2xl font-bold">{pkg.name}</h1>
-          {pkg.archivedAt && <Badge tone="muted">בארכיון</Badge>}
-        </div>
-      )}
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש להזין שם לערכה</p>}
-      {stepError && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">השלב לא נשמר: {stepError}</p>}
-      {(problems.length > 0 || items.length === 0 || unpublishedRequired.length > 0) && (
-        <Card className="space-y-1 border-warning p-4 text-sm" role="status">
-          <p className="font-medium">{formId ? "עדיין אי אפשר לשלוח את הטופס:" : "לא ניתן עדיין ליצור בקשות מהערכה הזאת:"}</p>
-          <ul className="list-inside list-disc text-muted-foreground">
-            {items.length === 0 && <li>הוסיפו לפחות טופס אחד</li>}
-            {unpublishedRequired.map((i) => <li key={i.id}>{formId ? "הטופס עדיין לא פורסם" : <>הטופס &quot;{i.title}&quot; עדיין לא פורסם</>}</li>)}
-            {problems.map((p) => <li key={p}>{p}</li>)}
-          </ul>
-        </Card>
-      )}
-
+  const orgCard = (
       <Card className="p-4">
         <form action={savePackageAction} className="grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="id" value={pkg.id} />
@@ -104,6 +74,32 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
           </div>
         </form>
       </Card>
+  );
+
+  return (
+    <div className="space-y-6">
+      {!formId && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/admin/packages" className="text-sm text-muted-foreground hover:text-foreground">→ כל הערכות</Link>
+          <h1 className="text-2xl font-bold">{pkg.name}</h1>
+          {pkg.archivedAt && <Badge tone="muted">בארכיון</Badge>}
+        </div>
+      )}
+      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש להזין שם לערכה</p>}
+      {stepError && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">השלב לא נשמר: {stepError}</p>}
+      {(problems.length > 0 || items.length === 0 || unpublishedRequired.length > 0) && (
+        <Card className="space-y-1 border-warning p-4 text-sm" role="status">
+          <p className="font-medium">{formId ? "עדיין אי אפשר לשלוח את הטופס:" : "לא ניתן עדיין ליצור בקשות מהערכה הזאת:"}</p>
+          <ul className="list-inside list-disc text-muted-foreground">
+            {items.length === 0 && <li>הוסיפו לפחות טופס אחד</li>}
+            {unpublishedRequired.map((i) => <li key={i.id}>{formId ? "הטופס עדיין לא פורסם" : <>הטופס &quot;{i.title}&quot; עדיין לא פורסם</>}</li>)}
+            {problems.map((p) => <li key={p}>{p}</li>)}
+          </ul>
+        </Card>
+      )}
+
+      {!formId && orgCard}
 
       {!formId && <section className="space-y-2" aria-labelledby="docs-h">
         <h2 id="docs-h" className="text-lg font-semibold">טפסים בערכה</h2>
@@ -137,89 +133,28 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
       <section className="space-y-2" aria-labelledby="steps-h">
         <h2 id="steps-h" className="text-lg font-semibold">{formId ? "שלבי הטופס" : "מסלול חתימות"}</h2>
         <p className="text-sm text-muted-foreground">
-          שלבים עם אותו מספר סדר פועלים במקביל. המבקש והעובד מזוהים לפי הבקשה; לשאר התפקידים בוחרים מי הנמען: נמען קבוע, איש קשר שמור, כל חברי קבוצה
-          במקביל, או לפי שדה בטופס (למשל רשימה נפתחת שמקורה קבוצה – המבקש בוחר את המאשר). אנשי קשר וקבוצות מנהלים ב<Link href="/admin/settings/people" className="underline">אנשי קשר</Link>.
+          הטופס עובר לפי הסדר. בשדות הטופס בוחרים לאיזה תפקיד כל שדה שייך. אנשי קשר וקבוצות מנהלים ב<Link href="/admin/settings/people" className="underline">אנשי קשר</Link>.
         </p>
-        <div className="space-y-3">
+        <ol className="space-y-2">
           {pkg.workflow.steps.map((s, i) => (
-            <Card key={i} className="p-3">
-              <form action={stepAction} className="grid gap-3 sm:grid-cols-6">
-                <input type="hidden" name="id" value={pkg.id} />
-                <input type="hidden" name="index" value={i} />
-                {returnTo}
-                <div className="space-y-1">
-                  <Label htmlFor={`s${i}-order`}>סדר</Label>
-                  <Input id={`s${i}-order`} name="order" type="number" min={1} defaultValue={s.order} />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={`s${i}-role`}>תפקיד</Label>
-                  <Select id={`s${i}-role`} name="role" defaultValue={s.role}>
-                    {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={`s${i}-action`}>פעולה</Label>
-                  <Select id={`s${i}-action`} name="action" defaultValue={s.action}>
-                    {STEP_ACTIONS.map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`s${i}-due`}>יעד (שעות)</Label>
-                  <Input id={`s${i}-due`} name="dueHours" type="number" min={1} defaultValue={s.dueHours ?? ""} />
-                </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor={`s${i}-ak`}>מי הנמען</Label>
-                  <Select id={`s${i}-ak`} name="assigneeKind" defaultValue={assigneeKindOf(s)}>
-                    {ASSIGNEE_KINDS.map((k) => <option key={k} value={k}>{ASSIGNEE_KIND_LABELS[k]}</option>)}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor={`s${i}-ac`}>איש קשר שמור</Label>
-                  <Select id={`s${i}-ac`} name="contactId" defaultValue={s.contactId ?? ""}>
-                    <option value="">–</option>
-                    {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : ""}</option>)}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor={`s${i}-ag`}>קבוצה (כל החברים במקביל)</Label>
-                  <Select id={`s${i}-ag`} name="groupId" defaultValue={s.groupId ?? ""}>
-                    <option value="">–</option>
-                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.memberIds.length})</option>)}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor={`s${i}-af`}>שדה בטופס שממנו נלקח הנמען</Label>
-                  <Input id={`s${i}-af`} name="assigneeFromFieldId" dir="ltr" defaultValue={s.assigneeFromFieldId ?? ""} />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={`s${i}-an`}>שם הנמען הקבוע</Label>
-                  <Input id={`s${i}-an`} name="assigneeName" defaultValue={s.assignee?.name ?? ""} />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={`s${i}-ae`}>מייל</Label>
-                  <Input id={`s${i}-ae`} name="assigneeEmail" type="email" dir="ltr" defaultValue={s.assignee?.email ?? ""} />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={`s${i}-ap`}>טלפון</Label>
-                  <Input id={`s${i}-ap`} name="assigneePhone" type="tel" dir="ltr" defaultValue={s.assignee?.phone ?? ""} />
-                </div>
-                <label className="flex items-center gap-2 text-sm sm:col-span-6">
-                  <Checkbox name="otpRequired" defaultChecked={!!s.otpRequired} />
-                  אימות בקוד במייל לפני מילוי
-                </label>
-                <div className="flex gap-2 sm:col-span-6">
-                  <Button type="submit" name="intent" value="save" size="sm">שמירת שלב {i + 1}</Button>
-                  <Button type="submit" name="intent" value="delete" variant="ghost" size="sm">מחיקה</Button>
-                </div>
-              </form>
-            </Card>
+            <StepRow
+              key={`${i}-${s.role}-${s.assigneeKind ?? ""}`}
+              packageId={pkg.id}
+              index={i}
+              step={s}
+              contacts={contacts.map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name }))}
+              groups={groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` }))}
+              fields={answerFields}
+              returnTo={formId ? `/admin/forms/${formId}/flow` : undefined}
+              action={stepAction}
+            />
           ))}
-          <form action={stepAction}>
-            <input type="hidden" name="id" value={pkg.id} />
-            {returnTo}
-            <Button type="submit" name="intent" value="add" variant="outline">הוספת שלב</Button>
-          </form>
-        </div>
+        </ol>
+        <form action={stepAction}>
+          <input type="hidden" name="id" value={pkg.id} />
+          {returnTo}
+          <Button type="submit" name="intent" value="add" variant="outline">הוספת שלב</Button>
+        </form>
       </section>
 
       {!formId && <form action={archivePackageAction} className="border-t pt-4">
@@ -238,6 +173,18 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
           <form action={savePackageSettingsAction} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="id" value={pkg.id} />
             {returnTo}
+            <div className="space-y-1">
+              <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
+              <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
+              <p className="text-xs text-muted-foreground">שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
+              לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
+            </label>
+            <details className="sm:col-span-2 rounded-md border p-3">
+              <summary className="cursor-pointer text-sm font-medium">הגדרות נוספות: תוקף הקישורים וטיפול אחרי החתימה</summary>
+              <div className="mt-3 grid gap-4">
             <fieldset className="space-y-2 sm:col-span-2">
               <legend className="text-sm font-medium">תוקף הקישורים</legend>
               <p className="text-xs text-muted-foreground">כרגע: {describeExpiryRule(rule, (fid) => dateFields.find((f) => f.id === fid)?.label ?? fid)}. אפשר להאריך כל בקשה בנפרד.</p>
@@ -269,25 +216,19 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
               </div>
             </fieldset>
             <div className="space-y-1">
-              <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
-              <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
-              <p className="text-xs text-muted-foreground">שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.</p>
-            </div>
-            <div className="space-y-1">
               <Label htmlFor="pk-followup">טיפול אחרי החתימה</Label>
               <Textarea id="pk-followup" name="followUp" rows={3} defaultValue={followUps.map((f) => f.label).join("\n")} placeholder={"עודכן בשכר\nהוקם בפריוריטי"} />
               <p className="text-xs text-muted-foreground">שורה לכל שלב. הצוות מסמן אותם בבקשה אחרי שכולם חתמו.</p>
             </div>
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
-              לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
-            </label>
+              </div>
+            </details>
             <div className="sm:col-span-2">
               <Button type="submit">שמירת ההגדרות</Button>
             </div>
           </form>
         </Card>
       </section>
+      {formId && orgCard}
     </div>
   );
 }
