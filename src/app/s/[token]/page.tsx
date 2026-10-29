@@ -6,6 +6,14 @@ import { withPrefill } from "@/lib/forms/prefill";
 import { lookupsFor } from "@/server/people-store";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
+import { getPackage } from "@/server/packages-store";
+
+/** The step's "רק טופס רספונסיבי" setting, read from the form's current steps (order + role identify it). */
+async function stepIsFormOnly(packageId: string | null, step: { order: number; role: string }): Promise<boolean> {
+  if (!packageId) return false;
+  const data = await getPackage(packageId);
+  return !!data?.pkg.workflow.steps.find((w) => w.order === step.order && w.role === step.role)?.formOnly;
+}
 import { SigningClient } from "./signing-client";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +66,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           role={ctx.role}
           subjectName={ctx.request.subjectName}
           action={ctx.step.action}
+          formOnly={await stepIsFormOnly(ctx.request.packageTemplateId, ctx.step)}
           returnTargets={ctx.returnTargets}
           pdfDocs={ctx.pdfDocs.map((d) => ({ title: d.title, url: `/api/s/${token}/pdf/${d.fileId}`, mapping: d.mapping }))}
           lookups={await lookupsFor([ctx.definition])}

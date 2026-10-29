@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -92,6 +93,12 @@ export function StepRow({
           </div>
         )}
 
+        {who !== "requester" && (
+          <label className="flex min-h-10 items-center gap-2 text-sm">
+            <Checkbox name="formOnly" defaultChecked={!!step.formOnly} />
+            רק טופס רספונסיבי
+          </label>
+        )}
         <div className="flex gap-1">
           <SaveButton n={n} />
           <Button type="submit" name="intent" value="delete" variant="ghost" size="sm" aria-label={`מחיקת שלב ${n}`}>מחיקה</Button>

@@ -23,6 +23,7 @@ export function parseStepForm(g: Getter): WorkflowStep {
     role: (role in ROLE_LABELS ? role : "employee") as StepRole,
     action: (STEP_ACTIONS as readonly string[]).includes(action) ? action : "fill",
     ...(g.get("otpRequired") === "on" || g.get("otpRequired") === "1" ? { otpRequired: true } : {}),
+    ...(g.get("formOnly") === "on" || g.get("formOnly") === "1" ? { formOnly: true } : {}),
     ...(kind ? { assigneeKind: kind } : {}),
     ...(kind === "contact" && contactId ? { contactId } : {}),
     ...(kind === "group_all" && groupId ? { groupId } : {}),
