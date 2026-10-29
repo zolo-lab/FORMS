@@ -54,21 +54,10 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("מספר זהות", { exact: true })).toBeVisible();
 
-  // Attach to a new package.
-  await page.goto("/admin/packages");
-  const pkg = `ערכת PDF e2e ${Date.now()}`;
-  await page.getByLabel("שם הערכה החדשה").fill(pkg);
-  await page.getByRole("button", { name: "ערכה חדשה" }).click();
-  await expect(page.getByRole("heading", { name: pkg })).toBeVisible();
-  const picker = page.locator("select").filter({ has: page.locator(`option:has-text("${title}")`) }).first();
-  await picker.selectOption({ label: title });
-  await page.getByRole("button", { name: "הוספת טופס" }).click();
-  await expect(page.locator("main").getByText(title).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("הוסיפו לפחות טופס אחד")).toHaveCount(0);
-
+  // The form carries its own route (requester → employee by default): open a request from it.
   // ---- Stage B: a request from that package, filled by the employee on the document, final PDF. ----
   await page.goto("/admin/requests/new");
-  await page.getByLabel("ערכת מסמכים").selectOption({ label: pkg });
+  await page.getByLabel("טופס", { exact: true }).selectOption({ label: title });
   await page.getByRole("button", { name: "הבא" }).click();
   const employee = `עובד PDF e2e ${Date.now()}`;
   await page.getByLabel("שם העובד").fill(employee);

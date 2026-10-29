@@ -23,7 +23,7 @@ export interface ExportRequest {
 
 const day = (d: Date | null) => (d ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d) : "");
 
-export const FIXED_HEADERS = ["מזהה בקשה", "שם", 'ת"ז', "ארגון", "ערכה", "סטטוס", "נוצרה", "יעד"];
+export const FIXED_HEADERS = ["מזהה בקשה", "שם", 'ת"ז', "ארגון", "טופס", "סטטוס", "נוצרה", "יעד"];
 
 /** Column key of a field: its export key, else its id. Layout fields and uploads are not exported. */
 function columnOf(f: { id: string; exportKey?: string; type: string }) {

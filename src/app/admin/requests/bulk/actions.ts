@@ -35,11 +35,11 @@ export type ParseResult =
 export async function parseImportAction(fd: FormData): Promise<ParseResult> {
   const packageId = String(fd.get("packageId") ?? "");
   const file = fd.get("file");
-  if (!UUID.test(packageId)) return { ok: false, error: "יש לבחור ערכה" };
+  if (!UUID.test(packageId)) return { ok: false, error: "יש לבחור טופס" };
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "יש לבחור קובץ" };
   if (file.size > MAX_FILE) return { ok: false, error: "הקובץ גדול מדי (עד 2MB)" };
   const pkg = await getWizardPackage(packageId);
-  if (!pkg) return { ok: false, error: "הערכה לא נמצאה" };
+  if (!pkg) return { ok: false, error: "הטופס לא נמצא" };
   let rows: string[][];
   try {
     rows = parseSheet(new Uint8Array(await file.arrayBuffer()));
@@ -57,11 +57,11 @@ export type CheckResult =
 
 /** Step 2: convert + validate every row; returns the creatable records and the errors per row. */
 export async function checkImportAction(input: { packageId: string; rows: string[][]; mapping: Record<string, number | null>; send: boolean }): Promise<CheckResult> {
-  if (!UUID.test(input.packageId)) return { ok: false, error: "ערכה לא תקינה" };
+  if (!UUID.test(input.packageId)) return { ok: false, error: "טופס לא תקין" };
   if (input.mapping["subject.name"] === null || input.mapping["subject.name"] === undefined) return { ok: false, error: "יש למפות את עמודת שם העובד" };
   if (!Array.isArray(input.rows) || input.rows.length > MAX_ROWS + 1) return { ok: false, error: "נתונים לא תקינים" };
   const pkg = await getWizardPackage(input.packageId);
-  if (!pkg) return { ok: false, error: "הערכה לא נמצאה" };
+  if (!pkg) return { ok: false, error: "הטופס לא נמצא" };
   const records = buildRecords(input.rows, input.mapping, pkg.requesterDefinition);
   const errors: RowError[] = [];
   const good: ImportRecord[] = [];
@@ -79,7 +79,7 @@ export async function checkImportAction(input: { packageId: string; rows: string
 export async function startImportJobAction(input: { packageId: string; organizationId: string; projectId?: string; rowCount: number; campaign?: string }): Promise<{ jobId: string } | { error: string }> {
   if (!UUID.test(input.packageId) || !UUID.test(input.organizationId)) return { error: "נתונים לא תקינים" };
   if (!(await projectOk(input.organizationId, input.projectId))) return { error: "הפרויקט לא נמצא בעמותה הזו" };
-  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { error: "אין לך הרשאה לערכה, לארגון או לפרויקט האלה" };
+  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { error: "אין לך הרשאה לטופס, לארגון או לפרויקט האלה" };
   const [job] = await db.insert(schema.bulkJobs).values({ organizationId: input.organizationId, packageTemplateId: input.packageId, rowCount: input.rowCount, status: "running" }).returning({ id: schema.bulkJobs.id });
   return { jobId: job!.id };
 }
@@ -96,9 +96,9 @@ export async function createImportChunkAction(input: { jobId: string; packageId:
     return { created: 0, errors: [{ row: 0, message: "בקשה לא תקינה" }] };
   }
   if (!(await projectOk(input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "הפרויקט לא נמצא בעמותה הזו" }] };
-  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לערכה, לארגון או לפרויקט האלה" }] };
+  if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לטופס, לארגון או לפרויקט האלה" }] };
   const pkg = await getWizardPackage(input.packageId);
-  if (!pkg) return { created: 0, errors: [{ row: 0, message: "הערכה לא נמצאה" }] };
+  if (!pkg) return { created: 0, errors: [{ row: 0, message: "הטופס לא נמצא" }] };
   for (const rec of input.records) {
     const errs = validateRecord(rec, pkg.requesterDefinition, { send: input.send });
     if (errs.length) {

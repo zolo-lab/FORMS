@@ -41,19 +41,9 @@ test("a form with two steps: the employee fills step 1 on a phone, leaves, and c
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
 
-  // Package and request.
-  await page.goto("/admin/packages");
-  const pkg = `ערכת resume ${Date.now()}`;
-  await page.getByLabel("שם הערכה החדשה").fill(pkg);
-  await page.getByRole("button", { name: "ערכה חדשה" }).click();
-  await expect(page.getByRole("heading", { name: pkg })).toBeVisible();
-  const picker = page.locator("select").filter({ has: page.locator(`option:has-text("${title}")`) }).first();
-  await picker.selectOption({ label: title });
-  await page.getByRole("button", { name: "הוספת טופס" }).click();
-  await expect(page.locator("main").getByText(title).first()).toBeVisible({ timeout: 15_000 });
-
+  // The form carries its own route (requester → employee by default): open a request from it.
   await page.goto("/admin/requests/new");
-  await page.getByLabel("ערכת מסמכים").selectOption({ label: pkg });
+  await page.getByLabel("טופס", { exact: true }).selectOption({ label: title });
   await page.getByRole("button", { name: "הבא" }).click();
   await page.getByLabel("שם העובד").fill(`עובד resume ${Date.now()}`);
   await page.getByLabel("מייל").fill("e2e-resume@example.invalid");

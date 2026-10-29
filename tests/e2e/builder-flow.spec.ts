@@ -73,13 +73,26 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.goto(`/admin/forms/${id}`);
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
-  await page.goto("/admin/packages");
-  const pkg = `ערכת בונה e2e ${Date.now()}`;
-  await page.getByLabel("שם הערכה החדשה").fill(pkg);
-  await page.getByRole("button", { name: "ערכה חדשה" }).click();
-  await expect(page.getByRole("heading", { name: pkg })).toBeVisible();
-  const picker = page.locator("select").filter({ has: page.locator(`option:has-text("${title}")`) }).first();
-  await picker.selectOption({ label: title });
-  await page.getByRole("button", { name: "הוספת טופס" }).click();
-  await expect(page.locator("main").getByText(title).first()).toBeVisible({ timeout: 15_000 });
+  // The signing route is part of the form ("שלבי הטופס"), like in iForms.
+  await page.getByRole("link", { name: "שלבי הטופס" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
+  await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
+  // A new form starts with requester → employee; add a third step: payroll, chosen in the form.
+  await page.getByRole("button", { name: "הוספת שלב" }).click();
+  const step3 = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
+  await step3.getByLabel("מי בשלב 3").selectOption({ label: "איש קשר קבוע" });
+  await step3.getByLabel("תפקיד").selectOption("payroll");
+  await step3.getByRole("button", { name: "שמירת שלב 3" }).click();
+  // A contact step needs a contact.
+  await expect(page.locator('p[role="alert"]')).toContainText("השלב לא נשמר");
+  const again = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
+  await again.getByLabel("מי בשלב 3").selectOption({ label: "מי שנבחר בטופס" });
+  await again.getByLabel("לפי השדה").selectOption({ index: 1 });
+  await again.getByLabel("תפקיד").selectOption("payroll");
+  await again.getByRole("button", { name: "שמירת שלב 3" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "נשמר" })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
+  // The form is offered when opening a request, by its own name.
+  await page.goto("/admin/requests/new");
+  await expect(page.getByLabel("טופס", { exact: true }).locator(`option:has-text("${title}")`)).toHaveCount(1);
 });

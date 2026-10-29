@@ -36,13 +36,13 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-      <PageHeader title="נתונים וייצוא" description={<>כל הערכים שמולאו, לפי סוג טופס (מסלול חתימה). המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.{isAdmin(me) && <> <Link href="/admin/settings/exports" className="underline">תבניות ייצוא</Link></>}</>} />
+      <PageHeader title="נתונים וייצוא" description={<>כל הערכים שמולאו, לפי טופס. המסמכים החתומים עצמם נמצאים בארכיון ב-Drive, והקישור אליהם בדף כל בקשה.{isAdmin(me) && <> <Link href="/admin/settings/exports" className="underline">תבניות ייצוא</Link></>}</>} />
 
       <form method="get" className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="סינון">
         <div className="space-y-1">
-          <Label htmlFor="pkg">סוג טופס (ערכה)</Label>
+          <Label htmlFor="pkg">טופס</Label>
           <Select id="pkg" name="pkg" defaultValue={filters.pkg ?? ""}>
-            <option value="">בחרו ערכה…</option>
+            <option value="">בחרו טופס…</option>
             {packages.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -80,7 +80,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: SP }
 
       {!pkg && (
         <Card className="divide-y">
-          <p className="p-3 text-sm text-muted-foreground">בחרו ערכה כדי לראות את הנתונים שלה.</p>
+          <p className="p-3 text-sm text-muted-foreground">בחרו טופס כדי לראות את הנתונים שלה.</p>
           {packages.map((p) => (
             <Link key={p.id} href={`/admin/archive?pkg=${p.id}`} className="block p-3 text-sm hover:bg-accent">
               {p.name}

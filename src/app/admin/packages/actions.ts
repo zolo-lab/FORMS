@@ -10,7 +10,11 @@ import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests
 import { parseRecipients } from "@/lib/requests/recipients";
 
 const UUID = /^[0-9a-f-]{36}$/i;
-const back = (id: string, q = "") => redirect(`/admin/packages/${id}${q}`);
+/** Back to where the edit came from: the form's "שלבי הטופס" page when it was opened there, else the package page. */
+const back = (id: string, q = "", fd?: FormData) => {
+  const to = String(fd?.get("returnTo") ?? "");
+  redirect(`${/^\/admin\/forms\/[0-9a-f-]{36}\/flow$/i.test(to) ? to : `/admin/packages/${id}`}${q}`);
+};
 
 function pkgId(fd: FormData): string {
   const id = String(fd.get("id") ?? "");
@@ -24,18 +28,19 @@ export async function createPackageAction(fd: FormData) {
   if (!name) redirect("/admin/packages?error=name");
   const id = await createPackage(name);
   revalidatePath("/admin/packages");
-  back(id);
+  back(id, "", fd);
 }
 
 export async function savePackageAction(fd: FormData) {
   await requireGrant("manageForms");
   const id = pkgId(fd);
   const name = String(fd.get("name") ?? "").trim();
-  if (!name) back(id, "?error=name");
+  if (!name) back(id, "?error=name", fd);
   const org = String(fd.get("organizationId") ?? "");
   await updatePackage(id, { name, description: String(fd.get("description") ?? "").trim() || null, organizationId: UUID.test(org) ? org : null });
   revalidatePath(`/admin/packages/${id}`);
-  back(id, "?saved=1");
+  revalidatePath("/admin/forms", "layout");
+  back(id, "?saved=1", fd);
 }
 
 export async function savePackageSettingsAction(fd: FormData) {
@@ -50,9 +55,9 @@ export async function savePackageSettingsAction(fd: FormData) {
     : kind === "dayOfNextMonth" ? { kind: "dayOfNextMonth", day: Number(fd.get("expiryDay")), dateFieldId: String(fd.get("expiryField") ?? "") }
     : null;
   const expiryRule = normalizeExpiryRule(rule);
-  if (kind !== "default" && !expiryRule) back(id, "?settingsError=expiry");
+  if (kind !== "default" && !expiryRule) back(id, "?settingsError=expiry", fd);
   const recipients = parseRecipients(String(fd.get("recipients") ?? ""));
-  if (recipients.invalid.length) back(id, `?settingsError=${encodeURIComponent(recipients.invalid.join(", "))}`);
+  if (recipients.invalid.length) back(id, `?settingsError=${encodeURIComponent(recipients.invalid.join(", "))}`, fd);
   await updatePackageSettings(id, {
     expiryRule,
     completionRecipients: recipients.valid,
@@ -60,7 +65,8 @@ export async function savePackageSettingsAction(fd: FormData) {
     remindersEnabled: fd.get("remindersEnabled") === "on",
   });
   revalidatePath(`/admin/packages/${id}`);
-  back(id, "?saved=1");
+  revalidatePath("/admin/forms", "layout");
+  back(id, "?saved=1", fd);
 }
 
 export async function archivePackageAction(fd: FormData) {
@@ -87,7 +93,8 @@ export async function documentAction(fd: FormData) {
     else if (intent === "required") await setDocumentRequired(id, item, true);
   }
   revalidatePath(`/admin/packages/${id}`);
-  back(id);
+  revalidatePath("/admin/forms", "layout");
+  back(id, "", fd);
 }
 
 export async function stepAction(fd: FormData) {
@@ -107,8 +114,9 @@ export async function stepAction(fd: FormData) {
     else if (intent === "save") steps[index] = parseStepForm(fd);
   }
   const errors = intent === "save" ? validateWorkflow({ steps: [steps[index]!] }) : [];
-  if (errors.length) back(id, `?stepError=${encodeURIComponent(errors.join(" · "))}`);
+  if (errors.length) back(id, `?stepError=${encodeURIComponent(errors.join(" · "))}`, fd);
   await setWorkflow(id, { steps });
   revalidatePath(`/admin/packages/${id}`);
-  back(id, "?saved=1");
+  revalidatePath("/admin/forms", "layout");
+  back(id, "?saved=1", fd);
 }

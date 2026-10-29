@@ -90,7 +90,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
         <FollowUpCard requestId={request.id} statuses={followUps} state={(request.followUp ?? {}) as FollowUpState} canMark={hasGrant(me, "followUp")} />
       )}
 
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "followup" ? "אין לך הרשאה לסמן טיפול אחרי חתימה." : error === "send" ? "השליחה נכשלה. בדקו שהערכה מוגדרת ושכל הטפסים בה פורסמו." : "המחיקה נכשלה."}</p>}
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "followup" ? "אין לך הרשאה לסמן טיפול אחרי חתימה." : error === "send" ? "השליחה נכשלה. בדקו ששלבי הטופס מוגדרים ושהטופס פורסם." : "המחיקה נכשלה."}</p>}
 
       {request.status === "draft" && (
         <section className="space-y-2" aria-label="טיוטה">
