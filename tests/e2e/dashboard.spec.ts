@@ -5,7 +5,7 @@ test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
 test("requests dashboard shows KPIs and filters by search", async ({ page }) => {
   await login(page, "/admin/requests");
-  await expect(page.getByRole("heading", { name: "בקשות", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "היסטוריית טפסים", exact: true })).toBeVisible();
   const kpis = page.getByRole("region", { name: "מדדים" });
   for (const label of ["פעילות", "באיחור", "הושלמו ב-30 ימים", "חציון ימים להשלמה", "ממתינות לתפקיד"]) {
     await expect(kpis.getByText(label)).toBeVisible();

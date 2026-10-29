@@ -29,7 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav
           items={tracker ? [{ href: "/admin/track", label: "מעקב חתימות" }] : [
             { href: "/admin/inbox", label: "לטיפולי", badge: pending },
-            { href: "/admin/requests", label: "בקשות" },
+            { href: "/admin/requests", label: "היסטוריית טפסים" },
             ...(tracks ? [{ href: "/admin/track", label: "מעקב" }] : []),
             { href: "/admin/employees", label: "עובדים" },
             { href: "/admin/campaigns", label: "קמפיינים" },
