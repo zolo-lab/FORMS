@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             ...(tracks ? [{ href: "/admin/track", label: "מעקב" }] : []),
             { href: "/admin/employees", label: "עובדים" },
             { href: "/admin/campaigns", label: "קמפיינים" },
-            ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }, { href: "/admin/packages", label: "מסלולי חתימה" }] : []),
+            ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={admin ? [

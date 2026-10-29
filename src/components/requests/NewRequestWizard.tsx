@@ -25,7 +25,7 @@ interface Org {
   projectRequired?: boolean;
 }
 
-const STEPS = ["ערכה וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
+const STEPS = ["טופס וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
 
 export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chainEditable = [] }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups; contacts?: { id: string; name: string }[]; chainEditable?: string[] }) {
   const [step, setStep] = useState(0);
@@ -78,7 +78,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
     );
   }
 
-  if (packages.length === 0) return <p className="text-muted-foreground">אין עדיין ערכות פעילות. יש להגדיר ערכה לפני יצירת בקשה.</p>;
+  if (packages.length === 0) return <p className="text-muted-foreground">אין עדיין טפסים פעילים. יש לפרסם טופס ולהגדיר את שלביו לפני יצירת בקשה.</p>;
 
   const err = (k: string) => errors[k];
   return (
@@ -94,7 +94,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
       {step === 0 && (
         <Card className="space-y-4 p-4">
           <div className="space-y-1">
-            <Label htmlFor="pkg">ערכת מסמכים</Label>
+            <Label htmlFor="pkg">טופס</Label>
             <Select id="pkg" value={packageId} onChange={(e) => setPackageId(e.target.value)}>
               {packages.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -185,7 +185,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
               }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">בערכה הזו אין שדות שהמבקש ממלא.</p>
+            <p className="text-sm text-muted-foreground">בטופס הזה אין שדות שהמבקש ממלא.</p>
           )}
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(1)}>
@@ -199,7 +199,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
       {step === 3 && pkg && (
         <Card className="space-y-4 p-4">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">ערכה</dt>
+            <dt className="text-muted-foreground">טופס</dt>
             <dd>{pkg.name}</dd>
             <dt className="text-muted-foreground">ארגון</dt>
             <dd>{[orgs.find((o) => o.id === organizationId)?.name, orgProjects.find((p) => p.id === projectId)?.name].filter(Boolean).join(" – ")}</dd>

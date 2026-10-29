@@ -256,12 +256,22 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <p className="border-b bg-muted px-4 py-1.5 text-xs text-muted-foreground">גרסה {version} נעולה. כל שינוי ייצור אוטומטית גרסה {version + 1} כטיוטה.</p>
       )}
 
-      <div className="px-4 pt-2">
+      <div className="flex flex-wrap items-end gap-x-4 px-4 pt-2">
         <Tabs<TabId>
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
           tabs={[{ id: "pdf", label: "מסמך PDF" }, { id: "edit", label: "עריכה (רספונסיבי)" }, { id: "preview", label: "תצוגה מקדימה" }, { id: "json", label: "JSON" }]}
         />
+        {/* The signing route is part of the form (like iForms); saving first so the last edit is not lost. */}
+        <Link
+          href={`/admin/forms/${templateId}/flow`}
+          aria-disabled={save !== "saved"}
+          onClick={(e) => { if (save !== "saved") e.preventDefault(); }}
+          className="mb-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent aria-disabled:opacity-50"
+          title={save !== "saved" ? "שומר…" : undefined}
+        >
+          שלבי הטופס
+        </Link>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

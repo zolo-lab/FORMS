@@ -237,7 +237,7 @@ export function FieldSettings({
               {groupIdOfSource(field.optionsSource) && !groups.some((g) => `${GROUP_SOURCE_PREFIX}${g.id}` === field.optionsSource) && <option value={field.optionsSource}>קבוצה (נמחקה)</option>}
             </Select>
             {groupIdOfSource(field.optionsSource) && (
-              <p className="text-xs text-muted-foreground">הרשימה מציגה את חברי הקבוצה. במסלול הערכה אפשר להגדיר שלב &quot;לפי שדה בטופס&quot; עם המזהה <bdi dir="ltr" className="font-mono">{field.id}</bdi>, והנבחר יהיה הנמען.</p>
+              <p className="text-xs text-muted-foreground">הרשימה מציגה את חברי הקבוצה. בשלבי הטופס אפשר להגדיר שלב &quot;לפי שדה בטופס&quot; עם המזהה <bdi dir="ltr" className="font-mono">{field.id}</bdi>, והנבחר יהיה הנמען.</p>
             )}
           </Row>
           {!field.optionsSource && (

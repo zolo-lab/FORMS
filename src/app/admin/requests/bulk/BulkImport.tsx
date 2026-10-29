@@ -95,7 +95,7 @@ export function BulkImport({ packages, orgs }: { packages: { id: string; name: s
       <Card className="space-y-3 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <Label htmlFor="bulk-pkg">ערכת מסמכים</Label>
+            <Label htmlFor="bulk-pkg">טופס</Label>
             <Select id="bulk-pkg" value={packageId} disabled={phase !== "upload"} onChange={(e) => setPackageId(e.target.value)}>
               {packages.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>

@@ -129,7 +129,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           </Select>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="pkg">ערכה</Label>
+          <Label htmlFor="pkg">טופס</Label>
           <Select id="pkg" name="pkg" defaultValue={filters.pkg ?? ""}>
             <option value="">הכול</option>
             {packages.map((p) => (
@@ -228,7 +228,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
               <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
-              {([["עובד", "name"], ["ארגון", "org"], ["ערכה", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["יעד", "due"]] as [string, SortKey?][]).map(([h, key]) => {
+              {([["עובד", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["יעד", "due"]] as [string, SortKey?][]).map(([h, key]) => {
                 if (!key) return <th key={h} scope="col" className="px-3 py-2 text-start font-medium">{h}</th>;
                 const state = ariaSort(filters, key);
                 return (

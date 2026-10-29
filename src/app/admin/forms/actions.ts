@@ -1,7 +1,7 @@
 "use server";
 import { requireGrant } from "@/server/guards";
 import { redirect } from "next/navigation";
-import { createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
+import { combineTemplates, createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
 import { revalidatePath } from "next/cache";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
@@ -90,4 +90,17 @@ export async function deleteFormAction(formData: FormData) {
   if (id) await deleteTemplate(id);
   revalidatePath("/admin/forms");
   redirect("/admin/forms?deleted=1");
+}
+
+/** "חיבור טפסים": a new form made of the chosen forms in the chosen order (iForms kit); opens on its PDF tab. */
+export async function combineFormsAction(formData: FormData) {
+  await requireGrant("manageForms");
+  const ids = formData.getAll("part").map(String).filter((v) => /^[0-9a-f-]{36}$/i.test(v));
+  const unique = ids.filter((v, i) => ids.indexOf(v) === i);
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) redirect("/admin/forms?combine=title");
+  const r = await combineTemplates(unique, title);
+  if ("error" in r) redirect(`/admin/forms?combine=${encodeURIComponent(r.error)}`);
+  revalidatePath("/admin/forms");
+  redirect(`/admin/forms/${(r as { id: string }).id}?tab=pdf`);
 }
