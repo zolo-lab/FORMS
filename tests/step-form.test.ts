@@ -23,6 +23,14 @@ describe("parseStepForm", () => {
   });
 });
 
+describe("parseStepForm – responsive only", () => {
+  it("reads the formOnly checkbox", () => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries({ order: "2", role: "employee", action: "fill_and_sign", formOnly: "on" })) f.set(k, v);
+    expect(parseStepForm(f)).toMatchObject({ role: "employee", formOnly: true });
+  });
+});
+
 describe("parseStepForm – typed email", () => {
   it("uses the email as the name when no name was typed", () => {
     const f = new FormData();

@@ -69,6 +69,8 @@ export interface WorkflowStep {
   role: StepRole;
   action: StepActionKind;
   otpRequired?: boolean;
+  /** The signer gets only the responsive form, never "על גבי המסמך". */
+  formOnly?: boolean;
   /** Missing = "from_field" when `assigneeFromFieldId` is set, otherwise "fixed" (older packages). */
   assigneeKind?: AssigneeKind;
   contactId?: string;
