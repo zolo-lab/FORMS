@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -348,14 +348,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (!table) return null;
     return { list, row: first.row, table, maxRows: Number(table.settings?.maxRows ?? 20) };
   })();
-  const rowsFor = (t: (typeof tables)[number]) => tableRows[t.id] ?? (Math.max(1, Number(t.settings?.minRows ?? 1)) || 1);
 
   return (
     <div ref={rootRef} tabIndex={-1} className="grid gap-4 outline-none lg:grid-cols-[18rem_1fr_16rem]" onKeyDown={onKey}>
       {/* Fields to place */}
       <aside className="order-2 space-y-3 lg:order-none lg:max-h-[75vh] lg:overflow-auto" aria-label="סוגי שדות">
         <h3 className="text-sm font-semibold">סוגי שדות</h3>
-        <p className="text-xs text-muted-foreground">אותם סוגי שדות כמו בעריכה הרספונסיבית. גררו שדה אל העמוד, או לחצו עליו להוספה בעמוד הנוכחי. לחיצה על שדה בעמוד פותחת את המאפיינים שלו.</p>
         {guessedCount > 0 && (
           <div role="status" className="space-y-2 rounded-md border border-dashed border-primary bg-primary/5 p-2 text-xs">
             <p>{guessedCount} שיבוצים הוצעו אוטומטית (מסומנים בקו מקווקו). גרירה או שינוי גודל מאשרים שיבוץ.</p>
@@ -365,20 +363,6 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             </div>
           </div>
         )}
-        {tables.map((t) => {
-          const current = rowsFor(t);
-          const max = Number(t.settings?.maxRows ?? 20);
-          return (
-            <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-              <span>שורות ב&quot;{t.label}&quot;</span>
-              <span className="flex items-center gap-1">
-                <Button variant="outline" size="sm" aria-label="פחות שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.max(1, current - 1) }))}><Minus className="size-3" /></Button>
-                <span className="w-5 text-center">{current}</span>
-                <Button variant="outline" size="sm" aria-label="עוד שורות" onClick={() => setTableRows((r) => ({ ...r, [t.id]: Math.min(max, current + 1) }))}><Plus className="size-3" /></Button>
-              </span>
-            </div>
-          );
-        })}
         {onDrawElement && (
           <section aria-label="סוגי שדות להוספה" className="space-y-3">
             {pdfPaletteGroups().map((g) => (
