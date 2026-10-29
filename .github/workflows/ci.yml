@@ -22,6 +22,11 @@ jobs:
         env:
           # Dev-branch DB; enables tests/requests-store.test.ts (skipped when unset).
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # e2e (which cleans up at its end) does not run when this job fails: clean the test data here instead.
+      - run: pnpm exec tsx scripts/clean-test-data.ts
+        if: failure()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Hebrew PDF sample
         if: always()
         run: |
@@ -38,7 +43,9 @@ jobs:
           if-no-files-found: ignore
   e2e:
     runs-on: ubuntu-latest
-    # One e2e run at a time on the shared dev DB: the teardown deletes the test forms created since its run started.
+    # After the unit tests, so the cleanup at the end of e2e also removes what they created.
+    needs: check
+    # One e2e run at a time on the shared dev DB: its teardown removes all test data (tests/e2e/clean-test-data.ts).
     concurrency:
       group: e2e-dev-db
       cancel-in-progress: false
