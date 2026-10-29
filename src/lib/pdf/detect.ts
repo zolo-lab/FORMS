@@ -51,6 +51,12 @@ export function cleanLabel(s: string, keepLong = false): string {
     .replace(/\s+/g, " ")
     .trim();
   if (!/[A-Za-z֐-׿]/.test(t)) return ""; // "(1)", "9", "/": a mark, not a name
+  if (!keepLong) {
+    // A remark in brackets is not part of the name: "מספר זהות (9 ספרות)" → "מספר זהות". Hebrew PDFs often store the
+    // brackets in visual order, ") 9 ספרות(", so either bracket may open the remark.
+    const bare = t.replace(/\s*[()][^()]*[()]\s*/g, " ").replace(/\s+/g, " ").trim();
+    if (bare !== t && /[A-Za-z֐-׿]/.test(bare)) return cleanLabel(bare, false);
+  }
   const words = t.split(" ");
   if (words.length >= 2 && words.every((w) => w.length === 1)) return ""; // a letter-spaced heading
   // A sentence ending at the place to write: its last words name the field (the end sits closest to a Hebrew line).
@@ -66,13 +72,13 @@ const has = (n: string, words: string[]) => words.some((w) => n.includes(normali
 /** The type for text typed in a box/line, from its label. */
 export function typeFromLabel(label: string): FieldType {
   const n = normalizeText(label);
+  if (has(n, ["דרכון", "passport"])) return "short_text";
   if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"])) return "id_number";
   if (has(n, ["חתימה", "חתימת", "חתום"])) return "signature";
   if (has(n, ["תאריך", "מתאריך", "עד תאריך"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
   if (has(n, ["טלפון", "נייד", "סלולרי", "פקס"])) return "phone";
   if (has(n, ["סכום", "שכר"]) || n.split(" ").includes("שח") || label.includes("₪")) return "currency";
-  if (has(n, ["דרכון"])) return "short_text";
   if (has(n, ["כמות", "גיל", "מספר", "מיקוד"])) return "number";
   return "short_text";
 }
