@@ -9,8 +9,9 @@ export function parseStepForm(g: Getter): WorkflowStep {
   const role = str(g, "role") as StepRole;
   const action = str(g, "action") as StepActionKind;
   const order = Number(str(g, "order"));
-  const name = str(g, "assigneeName");
   const email = str(g, "assigneeEmail");
+  // An email typed for the step ("מייל שאני רושם") is enough: the name defaults to it.
+  const name = str(g, "assigneeName") || email;
   const phone = str(g, "assigneePhone");
   const due = str(g, "dueHours");
   const fromField = str(g, "assigneeFromFieldId");

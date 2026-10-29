@@ -39,7 +39,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           settings={admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },
-              { href: "/admin/settings/people", label: "אנשי קשר וקבוצות" },
+              { href: "/admin/settings/people", label: "משתמשים לשלבים" },
               { href: "/admin/settings/users", label: "משתמשים והרשאות" },
             ] },
             { title: "חיבורים", items: [
