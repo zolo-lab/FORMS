@@ -110,6 +110,6 @@ test("colours stamps by role and shows a legend", async ({ page }) => {
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
   await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
-  await page.getByLabel("מי ממלא").selectOption("approver");
-  await expect(page.getByLabel("מקרא תפקידים")).toContainText("מאשר");
+  await page.getByLabel("באיזה שלב").selectOption("requester");
+  await expect(page.getByLabel("מקרא תפקידים")).toContainText("מבקש");
 });

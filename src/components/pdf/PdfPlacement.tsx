@@ -1,4 +1,5 @@
 "use client";
+import { StepSelect, type FormSteps } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -40,6 +41,8 @@ export interface PdfPlacementProps {
    */
   /** Change a field of the form from the stamp panel (e.g. who fills it). */
   onFieldPatch?: (fieldId: string, patch: Partial<FormField>) => void;
+  /** The form's steps, to choose the step a field belongs to. */
+  steps?: FormSteps;
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
   /** Copy/paste of an element: make a copy of its field and return the new field id (null = keep the same field). */
   onCloneField?: (fieldId: string) => string | null;
@@ -49,7 +52,7 @@ export interface PdfPlacementProps {
   onSplitStep?: (fieldId: string) => void;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ role: "requester" }, { role: "employee" }] }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -575,11 +578,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
-                <Label className="text-muted-foreground">מי ממלא</Label>
-                <Select className="h-9" aria-label="מי ממלא" value={roleOf(selectedStamp) === "none" ? "" : roleOf(selectedStamp)} onChange={(e) => onFieldPatch(baseFieldId(selectedStamp.fieldId), { filledBy: (e.target.value || undefined) as FillerRole | undefined })}>
-                  <option value="">ללא תפקיד מוגדר</option>
-                  {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                </Select>
+                <Label className="text-muted-foreground">באיזה שלב</Label>
+                <StepSelect className="h-9" steps={steps} value={roleOf(selectedStamp) === "none" ? undefined : (roleOf(selectedStamp) as FillerRole)} onChange={(r) => onFieldPatch(baseFieldId(selectedStamp.fieldId), { filledBy: r === "employee" ? undefined : r })} />
               </div>
             )}
             {selectedStamp.kind === "stamp_image" && (

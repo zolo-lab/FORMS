@@ -24,7 +24,7 @@ export default async function FormFlowPage({ params, searchParams }: { params: P
         <span aria-current="page" className="font-semibold text-primary">שלבי הטופס</span>
       </nav>
       <p className="text-sm text-muted-foreground">
-        מי ממלא ומי חותם, ובאיזה סדר. אחרי הגדרת השלבים משייכים כל שדה לשלב שלו ב&quot;מי ממלא&quot; בהגדרות השדה.
+        מי ממלא ומי חותם, ובאיזה סדר. אחרי הגדרת השלבים משייכים כל שדה לשלב שלו ב&quot;באיזה שלב השדה מופיע&quot; בהגדרות השדה.
       </p>
       {content}
     </main>
