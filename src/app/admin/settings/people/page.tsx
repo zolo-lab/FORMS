@@ -25,7 +25,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
   const active = contacts.filter((c) => c.active);
   return (
     <main className="mx-auto max-w-5xl space-y-8 px-4 py-6">
-      <PageHeader title="אנשי קשר וקבוצות" description={<>אנשי קשר הם מי שאפשר לנתב אליהם שלב בבקשה: מזכירות, מנהלים, חשבות שכר, ספקים. קבוצה מאגדת כמה מהם: שלב יכול לעבור לכולם במקביל,
+      <PageHeader title="משתמשים לשלבים" description={<>מי שאפשר להעביר אליו שלב בטופס: מזכירות, מנהלים, חשבות שכר, ספקים. קבוצה מאגדת כמה מהם: שלב יכול לעבור לכולם במקביל,
           או שהמבקש בוחר אחד מהם ברשימה נפתחת בטופס (מקור הרשימה &quot;קבוצה&quot;).</>} />
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
       {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}

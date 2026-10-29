@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { PERSON_ROLES, STEP_WHO, STEP_WHO_LABELS, stepFields, stepWhoOf, type StepWho } from "@/lib/workflow/step-who";
@@ -45,7 +45,7 @@ export function StepRow({
         {hidden.assigneeKind && <input type="hidden" name="assigneeKind" value={hidden.assigneeKind} />}
         {who === "employee" || who === "requester" ? <input type="hidden" name="role" value={hidden.role} /> : null}
         {step.dueHours ? <input type="hidden" name="dueHours" value={step.dueHours} /> : null}
-        {step.otpRequired ? <input type="hidden" name="otpRequired" value="1" /> : null}
+        {step.otpRequired || who === "email" ? <input type="hidden" name="otpRequired" value="1" /> : null}
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
         <span className="flex size-8 shrink-0 items-center justify-center self-center rounded-full bg-secondary text-sm font-semibold" aria-hidden>{n}</span>
@@ -58,7 +58,7 @@ export function StepRow({
 
         {who === "contact" && (
           <div className="min-w-48 flex-1 space-y-1">
-            <Label htmlFor={`${id}-contact`}>איש הקשר</Label>
+            <Label htmlFor={`${id}-contact`}>המשתמש</Label>
             <Select id={`${id}-contact`} name="contactId" defaultValue={step.contactId ?? ""}>
               <option value="">בחרו…</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -73,6 +73,18 @@ export function StepRow({
               {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
             </Select>
           </div>
+        )}
+        {who === "email" && (
+          <>
+            <div className="min-w-48 flex-1 space-y-1">
+              <Label htmlFor={`${id}-email`}>מייל</Label>
+              <Input id={`${id}-email`} name="assigneeEmail" type="email" dir="ltr" required defaultValue={step.assignee?.email ?? ""} />
+            </div>
+            <div className="min-w-40 flex-1 space-y-1">
+              <Label htmlFor={`${id}-name`}>שם (לא חובה)</Label>
+              <Input id={`${id}-name`} name="assigneeName" defaultValue={step.assignee?.name && step.assignee.name !== step.assignee.email ? step.assignee.name : ""} />
+            </div>
+          </>
         )}
         {who === "from_field" && (
           <div className="min-w-48 flex-1 space-y-1">
@@ -96,6 +108,8 @@ export function StepRow({
           <SaveButton n={n} />
           <Button type="submit" name="intent" value="delete" variant="ghost" size="sm" aria-label={`מחיקת שלב ${n}`}>מחיקה</Button>
         </div>
+        {who === "email" && <p className="basis-full text-xs text-muted-foreground">יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח למייל שלו.</p>}
+        {(who === "contact" || who === "group_all") && <p className="basis-full text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<a href="/admin/settings/people" className="underline">משתמשים לשלבים</a>.</p>}
       </form>
     </li>
   );

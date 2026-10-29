@@ -138,7 +138,7 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
       <section className="space-y-2" aria-labelledby="steps-h">
         <h2 id="steps-h" className="text-lg font-semibold">{formId ? "שלבי הטופס" : "מסלול חתימות"}</h2>
         <p className="text-sm text-muted-foreground">
-          הטופס עובר לפי הסדר. בשדות הטופס בוחרים לאיזה תפקיד כל שדה שייך. אנשי קשר וקבוצות מנהלים ב<Link href="/admin/settings/people" className="underline">אנשי קשר</Link>.
+          הטופס עובר לפי הסדר. בהגדרות כל שדה בוחרים באיזה שלב הוא מופיע. משתמשים וקבוצות מגדירים ב<Link href="/admin/settings/people" className="underline">משתמשים לשלבים</Link>.
         </p>
         <ol className="space-y-2">
           {pkg.workflow.steps.map((s, i) => (

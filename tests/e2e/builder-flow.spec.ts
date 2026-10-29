@@ -80,7 +80,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // A new form starts with requester → employee; add a third step: payroll, chosen in the form.
   await page.getByRole("button", { name: "הוספת שלב" }).click();
   const step3 = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
-  await step3.getByLabel("מי בשלב 3").selectOption({ label: "איש קשר קבוע" });
+  await step3.getByLabel("מי בשלב 3").selectOption({ label: "משתמש מוגדר" });
   await step3.getByLabel("תפקיד").selectOption("payroll");
   await step3.getByRole("button", { name: "שמירת שלב 3" }).click();
   // A contact step needs a contact.
