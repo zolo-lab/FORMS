@@ -12,7 +12,8 @@ import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
 import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction, stepAction } from "@/app/admin/packages/actions";
 import { getWizardPackage } from "@/server/packages-store";
-import { allFields } from "@/lib/forms/schema";
+import { allFields, type FormDefinition } from "@/lib/forms/schema";
+import { getEditorData } from "@/server/forms-store";
 import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
 import { formatRecipients } from "@/lib/requests/recipients";
@@ -38,7 +39,11 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
   // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
   const wizard = await getWizardPackage(id);
-  const answerFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => FIELD_TYPE_META[f.type]?.hasAnswer).map((f) => ({ id: f.id, label: f.label || f.id })) : [];
+  // Every answer field of the form(s): a step can go to the person chosen in any of them.
+  const editors = await Promise.all(items.map((i) => getEditorData(i.templateId)));
+  const answerFields = editors.flatMap((e) => (e?.version ? allFields(e.version.definition as FormDefinition) : []))
+    .filter((f) => FIELD_TYPE_META[f.type]?.hasAnswer)
+    .map((f) => ({ id: f.id, label: f.label || f.id }));
   const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
