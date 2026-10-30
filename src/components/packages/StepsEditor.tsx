@@ -9,14 +9,15 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { STEP_WHO, STEP_WHO_LABELS, assignRoles, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
+import type { StepRole } from "@/lib/workflow/types";
 
 type Option = { id: string; label: string };
+/** An email field (or group list) of the form, with the step role that fills it. */
+export type EmailField = Option & { role: StepRole };
 
 const HINTS: Partial<Record<StepWho, string>> = {
-  requester: "ממלא את הטופס במערכת ושולח אותו.",
   employee: "את השם, המייל או הנייד שלו ממלאים כששולחים את הטופס (במסך \"פרטי העובד\").",
   email: "יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח למייל שלו.",
-  from_field: "השלב נשלח למייל שמולא בשדה הזה בטופס (או למי שנבחר ברשימה של קבוצה).",
 };
 
 /**
@@ -24,10 +25,11 @@ const HINTS: Partial<Record<StepWho, string>> = {
  * "who" choice and only the detail that choice needs.
  */
 export function StepsEditor({
-  packageId, initial, contacts, groups, emailFields, save,
+  packageId, initial, contacts, groups, emailFields, save, onSaved,
 }: {
-  packageId: string; initial: StepDraft[]; contacts: Option[]; groups: Option[]; emailFields: Option[];
+  packageId: string; initial: StepDraft[]; contacts: Option[]; groups: Option[]; emailFields: EmailField[];
   save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
+  onSaved?: (drafts: StepDraft[]) => void;
 }) {
   const [steps, setSteps] = useState<StepDraft[]>(initial);
   const [dirty, setDirty] = useState(false);
@@ -52,7 +54,7 @@ export function StepsEditor({
   const onSave = () => start(async () => {
     const r = await save(packageId, steps);
     setResult(r);
-    if (r.ok) setDirty(false);
+    if (r.ok) { setDirty(false); onSaved?.(steps); }
   });
 
   return (
@@ -61,7 +63,9 @@ export function StepsEditor({
         {steps.map((s, i) => {
           const n = i + 1;
           const id = `s${i}`;
-          const fields = s.fieldId && !emailFields.some((f) => f.id === s.fieldId) ? [...emailFields, { id: s.fieldId, label: `${s.fieldId} (לא שדה מייל)` }] : emailFields;
+          // The email must be known before this step starts: only fields filled in an earlier step can be chosen.
+          const earlier = new Set(steps.slice(0, i).map((x) => x.role));
+          const fields = s.fieldId && !emailFields.some((f) => f.id === s.fieldId) ? [...emailFields, { id: s.fieldId, label: `${s.fieldId} (לא שדה מייל)`, role: s.role }] : emailFields;
           return (
             <li key={i} className="rounded-lg border bg-card p-3" aria-label={`שלב ${n}`}>
               <div className="flex flex-wrap items-end gap-3">
@@ -107,7 +111,7 @@ export function StepsEditor({
                     <Label htmlFor={`${id}-field`}>שדה המייל</Label>
                     <Select id={`${id}-field`} value={s.fieldId ?? ""} onChange={(e) => patch(i, { fieldId: e.target.value || undefined })}>
                       <option value="">{fields.length ? "בחרו…" : "אין בטופס שדה מייל"}</option>
-                      {fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                      {fields.map((f) => <option key={f.id} value={f.id} disabled={!earlier.has(f.role)}>{f.label}{earlier.has(f.role) ? "" : " (לא בשלב קודם)"}</option>)}
                     </Select>
                   </div>
                 )}
@@ -125,7 +129,7 @@ export function StepsEditor({
               </div>
               {HINTS[s.who] && <p className="mt-2 text-xs text-muted-foreground">{HINTS[s.who]}</p>}
               {(s.who === "contact" || s.who === "group_all") && <p className="mt-2 text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
-              {s.who === "from_field" && emailFields.length === 0 && <p className="mt-2 text-xs text-warning">הוסיפו לטופס שדה מסוג &quot;דוא&quot;ל&quot; כדי לבחור כך.</p>}
+              {s.who === "from_field" && !emailFields.some((f) => earlier.has(f.role)) && <p className="mt-2 text-xs text-warning">צריך שדה מסוג &quot;דוא&quot;ל&quot; באחד השלבים שלפני השלב הזה. מגדירים בהגדרות השדה, ב&quot;באיזה שלב השדה מופיע&quot;.</p>}
             </li>
           );
         })}

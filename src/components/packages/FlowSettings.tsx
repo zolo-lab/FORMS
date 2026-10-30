@@ -27,7 +27,7 @@ export type FlowQuery = { saved?: string; error?: string; stepError?: string; se
  * The signing route and sending settings. `formId` = shown inside a form ("שלבי הטופס"): the package is the form's
  * own, so its name follows the form and there is no list of forms or archive button; every save comes back here.
  */
-export async function FlowSettings({ id, query, formId }: { id: string; query: FlowQuery; formId?: string }) {
+export async function FlowSettings({ id, query, formId, settingsOnly = false }: { id: string; query: FlowQuery; formId?: string; settingsOnly?: boolean }) {
   const { saved, error, stepError, settingsError } = query;
   const data = await getPackage(id);
   if (!data) return null;
@@ -45,7 +45,7 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
   const editors = await Promise.all(items.map((i) => getEditorData(i.templateId)));
   const emailFields = editors.flatMap((e) => (e?.version ? allFields(e.version.definition as FormDefinition) : []))
     .filter((f) => f.type === "email" || (f.type === "dropdown" && groupIdOfSource(f.optionsSource)))
-    .map((f) => ({ id: f.id, label: f.type === "email" ? f.label || f.id : `${f.label || f.id} (בחירה מקבוצה)` }));
+    .map((f) => ({ id: f.id, label: f.type === "email" ? f.label || f.id : `${f.label || f.id} (בחירה מקבוצה)`, role: f.filledBy ?? ("employee" as const) }));
   const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
@@ -137,7 +137,7 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
         </Card>
       </section>}
 
-      <section className="space-y-2" aria-labelledby="steps-h">
+      {!settingsOnly && <section className="space-y-2" aria-labelledby="steps-h">
         <h2 id="steps-h" className="text-lg font-semibold">{formId ? "שלבי הטופס" : "מסלול חתימות"}</h2>
         <p className="text-sm text-muted-foreground">
           הטופס עובר לפי הסדר. בהגדרות כל שדה בוחרים באיזה שלב הוא מופיע. משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.
@@ -150,7 +150,7 @@ export async function FlowSettings({ id, query, formId }: { id: string; query: F
           emailFields={emailFields}
           save={saveStepsAction}
         />
-      </section>
+      </section>}
 
       {!formId && <form action={archivePackageAction} className="border-t pt-4">
         <input type="hidden" name="id" value={pkg.id} />

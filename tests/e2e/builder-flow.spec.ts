@@ -74,8 +74,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
   // The signing route is part of the form ("שלבי הטופס"), like in iForms.
-  await page.getByRole("link", { name: "שלבי הטופס" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
+  await page.getByRole("tab", { name: "שלבי הטופס" }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
   // A new form starts with requester → employee; add a third step and save all steps with one button.
   await page.getByRole("button", { name: "הוספת שלב" }).click();
@@ -87,9 +86,14 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await step3.getByLabel("מייל").fill("payroll@example.test");
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
-  await page.reload();
+  await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
-  await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
+  // Each step is its own choice for the fields, and its fields can be highlighted (and others moved into it).
+  await page.getByRole("tab", { name: "עריכה (רספונסיבי)" }).click();
+  const focus = page.getByLabel("הדגשת השדות של שלב");
+  await expect(focus.locator("option")).toHaveText(["כל השלבים", /^שלב 1 · /, /^שלב 2 · /, /^שלב 3 · /]);
+  await focus.selectOption({ index: 3 });
+  await expect(page.getByRole("button", { name: /לשלב הזה/ }).first()).toBeVisible();
   // The form is offered when opening a request, by its own name.
   await page.goto("/admin/requests/new");
   await expect(page.getByLabel("טופס", { exact: true }).locator(`option:has-text("${title}")`)).toHaveCount(1);

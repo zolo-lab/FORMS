@@ -1,5 +1,6 @@
 "use client";
 import type { FormSteps } from "./StepSelect";
+import type { FillerRole } from "@/lib/forms/schema";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -35,9 +36,11 @@ export function PdfTab({
   onDefinitionChange,
   templateId,
   steps,
+  focusRole,
 }: {
   templateId?: string;
   steps?: FormSteps;
+  focusRole?: FillerRole | "";
   definition: FormDefinition;
   pdf: PdfState | null;
   onChange: (p: PdfState | null) => void;
@@ -242,6 +245,7 @@ export function PdfTab({
         <PdfPlacement
           definition={definition}
           steps={steps}
+          focusRole={focusRole}
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}
