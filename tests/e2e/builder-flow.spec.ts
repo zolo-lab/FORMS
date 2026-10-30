@@ -77,20 +77,19 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("link", { name: "שלבי הטופס" }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
-  // A new form starts with requester → employee; add a third step: payroll, chosen in the form.
+  // A new form starts with requester → employee; add a third step and save all steps with one button.
   await page.getByRole("button", { name: "הוספת שלב" }).click();
-  const step3 = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
-  await step3.getByLabel("מי בשלב 3").selectOption({ label: "משתמש מוגדר" });
+  const step3 = page.getByRole("listitem", { name: "שלב 3" });
   await step3.getByLabel("תפקיד").selectOption("payroll");
-  await step3.getByRole("button", { name: "שמירת שלב 3" }).click();
-  // A contact step needs a contact.
-  await expect(page.locator('p[role="alert"]')).toContainText("השלב לא נשמר");
-  const again = page.locator("form").filter({ has: page.locator('input[name="index"][value="2"]') });
-  await again.getByLabel("מי בשלב 3").selectOption({ label: "מי שנבחר בטופס" });
-  await again.getByLabel("לפי השדה").selectOption({ index: 1 });
-  await again.getByLabel("תפקיד").selectOption("payroll");
-  await again.getByRole("button", { name: "שמירת שלב 3" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "נשמר" })).toBeVisible();
+  await page.getByRole("button", { name: "שמירת השלבים" }).click();
+  // A "משתמש מוגדר" step needs a user: nothing is saved and the edit stays on screen.
+  await expect(page.getByRole("alert").filter({ hasText: "יש לבחור איש קשר" })).toBeVisible();
+  await step3.getByLabel("מי בשלב 3").selectOption({ label: "מייל שאני רושם (למשל גורם חיצוני)" });
+  await step3.getByLabel("מייל").fill("payroll@example.test");
+  await page.getByRole("button", { name: "שמירת השלבים" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
   await expect(page).toHaveURL(new RegExp(`/admin/forms/${id}/flow`));
   // The form is offered when opening a request, by its own name.
   await page.goto("/admin/requests/new");
