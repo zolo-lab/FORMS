@@ -1,5 +1,5 @@
 "use client";
-import { StepSelect, type FormSteps } from "./StepSelect";
+import { StepSelect, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { PREFILL_KEYS } from "@/lib/forms/prefill";
 import { Plus, Trash2 } from "lucide-react";
@@ -21,7 +21,7 @@ import { ConditionEditor } from "./ConditionEditor";
 import { FormulaEditor } from "./FormulaEditor";
 
 /** Types whose answer can start with a default value set by the form designer. */
-const DEFAULT_STEPS: FormSteps = [{ role: "requester" }, { role: "employee" }];
+const DEFAULT_STEPS: StepView[] = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }];
 
 export const DEFAULT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown", "radio", "date", "time", "hidden"];
 const TEXT_TYPES: FieldType[] = ["short_text", "long_text", "email", "phone", "id_number", "number", "currency", "percent", "dropdown"];
@@ -138,7 +138,7 @@ export function FieldSettings({
   /** Saved groups (contacts) a dropdown can list; the chosen member can be the next signer. */
   groups?: { id: string; name: string }[];
   /** The form's steps ("שלבי הטופס"), to choose the step a field belongs to. */
-  steps?: FormSteps;
+  steps?: StepView[];
   onPatch: (patch: Partial<FormField>) => void;
   onRename: (to: string) => string | undefined;
   /** Move the field to the end of another page of the form. */
@@ -347,7 +347,7 @@ export function FieldSettings({
             </Row>
           )}
           <Row label="באיזה שלב השדה מופיע">
-            <StepSelect steps={steps} value={field.filledBy} onChange={(r) => onPatch({ filledBy: r === "employee" ? undefined : r })} />
+            <StepSelect views={steps} value={field.filledBy} onChange={(r) => onPatch({ filledBy: r })} />
           </Row>
           <Row label="רוחב בדסקטופ">
             <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>

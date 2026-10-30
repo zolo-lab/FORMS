@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { parseStepForm } from "@/lib/workflow/step-form";
 import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib/workflow/step-who";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
+import { draftProblems, emailFieldsOf } from "@/lib/workflow/step-fields";
+import { getEditorData } from "@/server/forms-store";
 import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests/follow-up";
@@ -128,8 +130,16 @@ export type SaveStepsResult = { ok: true } | { ok: false; errors: string[] };
 export async function saveStepsAction(packageId: string, drafts: StepDraft[]): Promise<SaveStepsResult> {
   await requireGrant("manageForms");
   if (!/^[0-9a-f-]{36}$/i.test(packageId) || !Array.isArray(drafts) || drafts.length > 30) return { ok: false, errors: ["קלט לא תקין"] };
-  if (!(await getPackage(packageId))) return { ok: false, errors: ["הטופס לא נמצא"] };
-  const steps = assignRoles(drafts.map(sanitizeDraft)).map((d, i) => stepFromDraft(d, i));
+  const data = await getPackage(packageId);
+  if (!data) return { ok: false, errors: ["הטופס לא נמצא"] };
+  const clean = assignRoles(drafts.map(sanitizeDraft));
+  // The same checks the editor shows, on the saved form: the email field of a "by field" step must exist and be
+  // filled in an earlier step.
+  const defs = await Promise.all(data.items.map((i) => getEditorData(i.templateId)));
+  const emailFields = defs.flatMap((e) => (e?.version ? emailFieldsOf(e.version.definition) : []));
+  const problems = draftProblems(clean, emailFields).flatMap((list, i) => list.map((m) => `שלב ${i + 1}: ${m}`));
+  if (problems.length) return { ok: false, errors: problems };
+  const steps = clean.map((d, i) => stepFromDraft(d, i));
   const errors = validateWorkflow({ steps });
   if (errors.length) return { ok: false, errors };
   await setWorkflow(packageId, { steps });

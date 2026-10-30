@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Lookups } from "@/lib/forms/lookups";
 import type { FieldErrors } from "@/lib/forms/validate";
-import { ROLE_LABELS } from "@/lib/workflow/labels";
+import { runStepLabel } from "@/lib/workflow/labels";
 import type { WorkflowStep } from "@/lib/workflow/types";
 import { ChainEditor } from "./ChainEditor";
 import type { WizardPackage } from "@/server/packages-store";
@@ -218,8 +218,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
                   .sort((a, b) => a.order - b.order)
                   .map((s, i) => (
                     <li key={i}>
-                      {ROLE_LABELS[s.role]}
-                      {s.assignee?.name ? ` (${s.assignee.name})` : ""}
+                      {runStepLabel({ order: i + 1, role: s.role, assigneeName: s.assignee?.name })}
                     </li>
                   ))}
               </ol>

@@ -10,8 +10,7 @@ import { Button } from "@/components/ui/button";
 import { discardDraftAction, sendDraftAction } from "../actions";
 import { Badge, Card } from "@/components/ui/card";
 import { eventLabel } from "@/lib/requests/list";
-import { REQUEST_STATUS_LABEL, ROLE_LABELS, STEP_STATUS_LABEL } from "@/lib/workflow/labels";
-import type { StepRole } from "@/lib/workflow/types";
+import { REQUEST_STATUS_LABEL, STEP_STATUS_LABEL, runStepLabel } from "@/lib/workflow/labels";
 import { requestAnswerItems, uploadedFiles } from "@/server/dashboard-store";
 import { getRequest } from "@/server/requests-store";
 import { FollowUpCard } from "@/components/requests/FollowUpCard";
@@ -37,7 +36,6 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const files = await uploadedFiles(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
-  const roleOf = (r: string) => ROLE_LABELS[r as StepRole] ?? r;
   const openSteps = steps.filter((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
   const live = request.status === "in_progress" || request.status === "returned";
   const [pkg] = await db.select({ followUpStatuses: schema.packageTemplates.followUpStatuses }).from(schema.packageTemplates).where(eq(schema.packageTemplates.id, request.packageTemplateId));
@@ -67,7 +65,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             {steps.map((s, i) => (
               <li key={s.id} className="flex items-center gap-2">
                 <Card className={`min-w-36 space-y-1 p-3 text-sm ${s.status === "active" || s.status === "in_progress" ? "border-primary" : ""}`}>
-                  <p className="font-medium">{roleOf(s.role)}</p>
+                  <p className="font-medium">{runStepLabel(s)}</p>
                   <p className="truncate text-xs text-muted-foreground">{s.assigneeName ?? s.assigneeEmail ?? "—"}</p>
                   <Badge tone={stepTone(s.status)}>{STEP_STATUS_LABEL[s.status] ?? s.status}</Badge>
                   {s.completedAt && <p className="text-xs text-muted-foreground">{fmt.format(s.completedAt)}</p>}
@@ -81,7 +79,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
 
       {live && openSteps.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">ממתין ל{roleOf(openSteps[0]!.role)}:</span>
+          <span className="text-muted-foreground">ממתין ל{runStepLabel(openSteps[0]!)}:</span>
           <RemindButton requestId={request.id} subject={request.subjectName} />
         </div>
       )}
@@ -115,7 +113,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             requestId={request.id}
             canExtend
             canCancel={live && hasGrant(me, "cancel")}
-            openSteps={openSteps.map((s) => ({ id: s.id, label: roleOf(s.role), name: s.assigneeName ?? "", email: s.assigneeEmail ?? "", phone: s.assigneePhone ?? "" }))}
+            openSteps={openSteps.map((s) => ({ id: s.id, label: runStepLabel(s), name: s.assigneeName ?? "", email: s.assigneeEmail ?? "", phone: s.assigneePhone ?? "" }))}
           />
         </section>
       )}

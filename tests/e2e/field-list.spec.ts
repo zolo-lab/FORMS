@@ -9,8 +9,9 @@ test("download the field list as Excel and ask for readable ids", async ({ page 
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `Field list ${Date.now()}`);
   const download = page.waitForEvent("download");
+  await page.getByText("כלים", { exact: true }).click();
   await page.getByRole("button", { name: "רשימת השדות (Excel)" }).click();
   expect((await download).suggestedFilename()).toMatch(/שדות\.xlsx$/);
-  await page.getByRole("button", { name: "שמות מזהים" }).click();
+  await page.getByRole("button", { name: "שמות מזהים לשדות" }).click();
   await expect(page.getByText("לכל השדות כבר יש שמות מזהים.")).toBeVisible();
 });

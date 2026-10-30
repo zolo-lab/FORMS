@@ -5,17 +5,12 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StepsEditor } from "./StepsEditor";
-import { draftOf } from "@/lib/workflow/step-who";
-import { groupIdOfSource } from "@/lib/workflow/assignee";
-import { listContacts, listGroups } from "@/server/people-store";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
-import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction, saveStepsAction } from "@/app/admin/packages/actions";
+import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction } from "@/app/admin/packages/actions";
 import { getWizardPackage } from "@/server/packages-store";
-import { allFields, type FormDefinition } from "@/lib/forms/schema";
-import { getEditorData } from "@/server/forms-store";
+import { allFields } from "@/lib/forms/schema";
 import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
 import { formatRecipients } from "@/lib/requests/recipients";
@@ -32,7 +27,6 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const data = await getPackage(id);
   if (!data) return null;
   const returnTo = formId ? <input type="hidden" name="returnTo" value={`/admin/forms/${formId}/flow`} /> : null;
-  const [contacts, groups] = await Promise.all([listContacts(), listGroups()]);
   const { pkg, items } = data;
   const [orgs, forms] = await Promise.all([listOrgs(), availableForms()]);
   const inPackage = new Set(items.map((i) => i.templateId));
@@ -41,11 +35,6 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
   // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
   const wizard = await getWizardPackage(id);
-  // A step "by a field" goes to the e-mail typed in it, or to the group member picked in a group list: only those fit.
-  const editors = await Promise.all(items.map((i) => getEditorData(i.templateId)));
-  const emailFields = editors.flatMap((e) => (e?.version ? allFields(e.version.definition as FormDefinition) : []))
-    .filter((f) => f.type === "email" || (f.type === "dropdown" && groupIdOfSource(f.optionsSource)))
-    .map((f) => ({ id: f.id, label: f.type === "email" ? f.label || f.id : `${f.label || f.id} (בחירה מקבוצה)`, role: f.filledBy ?? ("employee" as const) }));
   const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
@@ -95,7 +84,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
       {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש להזין שם לערכה</p>}
       {stepError && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">השלב לא נשמר: {stepError}</p>}
-      {(problems.length > 0 || items.length === 0 || unpublishedRequired.length > 0) && (
+      {!settingsOnly && (problems.length > 0 || items.length === 0 || unpublishedRequired.length > 0) && (
         <Card className="space-y-1 border-warning p-4 text-sm" role="status">
           <p className="font-medium">{formId ? "עדיין אי אפשר לשלוח את הטופס:" : "לא ניתן עדיין ליצור בקשות מהערכה הזאת:"}</p>
           <ul className="list-inside list-disc text-muted-foreground">
@@ -137,20 +126,6 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
         </Card>
       </section>}
 
-      {!settingsOnly && <section className="space-y-2" aria-labelledby="steps-h">
-        <h2 id="steps-h" className="text-lg font-semibold">{formId ? "שלבי הטופס" : "מסלול חתימות"}</h2>
-        <p className="text-sm text-muted-foreground">
-          הטופס עובר לפי הסדר. בהגדרות כל שדה בוחרים באיזה שלב הוא מופיע. משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.
-        </p>
-        <StepsEditor
-          packageId={pkg.id}
-          initial={pkg.workflow.steps.map(draftOf)}
-          contacts={contacts.map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name }))}
-          groups={groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` }))}
-          emailFields={emailFields}
-          save={saveStepsAction}
-        />
-      </section>}
 
       {!formId && <form action={archivePackageAction} className="border-t pt-4">
         <input type="hidden" name="id" value={pkg.id} />

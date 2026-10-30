@@ -7,9 +7,9 @@ import { fieldKey } from "./field-keys";
 import type { PdfStamp } from "./pdf-mapping";
 import type { FormDefinition, FormField } from "./schema";
 
-const FILLER_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש", approver2: "מאשר 2", approver3: "מאשר 3", approver4: "מאשר 4", approver5: "מאשר 5", approver6: "מאשר 6" };
+const FILLER_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש", approver2: "מאשר 2", approver3: "מאשר 3", approver4: "מאשר 4", approver5: "מאשר 5", approver6: "מאשר 6", unassigned: "לא משויך לשלב" };
 
-export const DICTIONARY_HEADER = ["מזהה", "מפתח ייצוא", "שם השדה", "סוג", "שלב", "ממלא", "חובה", "אפשרויות", "עמוד ב-PDF"];
+export const DICTIONARY_HEADER = ["מזהה", "מפתח ייצוא", "שם השדה", "סוג", "עמוד", "שלב", "חובה", "אפשרויות", "עמוד ב-PDF"];
 
 /** One row per answer field (and per column of a repeating table: "children[].name"), in form order. */
 export function fieldDictionary(def: FormDefinition, stamps: PdfStamp[] = []): string[][] {
@@ -21,7 +21,7 @@ export function fieldDictionary(def: FormDefinition, stamps: PdfStamp[] = []): s
   }
   const rows: string[][] = [DICTIONARY_HEADER];
   def.pages.forEach((page, pi) => {
-    const step = page.title?.trim() || `שלב ${pi + 1}`;
+    const step = page.title?.trim() || `עמוד ${pi + 1}`;
     for (const f of page.fields) {
       if (!FIELD_TYPE_META[f.type]?.hasAnswer) continue;
       const pdfPage = pageOf.has(f.id) ? String(pageOf.get(f.id)! + 1) : "";
