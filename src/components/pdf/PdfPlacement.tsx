@@ -118,7 +118,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
   const rolesUsed = [...new Set(mapping.stamps.map(shownRole))].filter((r): r is FillerRole => r !== "none");
-  const roleName = (r: FillerRole) => steps.find((v) => v.role === r)?.label ?? ROLE_LABELS[r];
+  const roleName = (r: FillerRole) => steps.filter((v) => v.role === r).map((v) => v.label).join(" / ") || ROLE_LABELS[r];
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
   /** The form field a stamp writes; a table cell resolves to its column. */
   const fieldOf = (s: PdfStamp): FormField | undefined => {

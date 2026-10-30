@@ -62,7 +62,8 @@ export interface FormEditorProps {
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow }: FormEditorProps) {
-  const [def, setDef] = useState(initial);
+  // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
+  const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
   const [stepWork, setStepWork] = useState<EditorDraft[]>(() => (flow?.drafts ?? []).map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role })));
   const [stepSaved, setStepSaved] = useState(stepWork);
@@ -390,7 +391,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               <Canvas
                 def={def}
                 focusRole={focusRole || undefined}
-                stepNames={views ? Object.fromEntries(views.map((v) => [v.role, v.label])) : undefined}
+                stepNames={views ? Object.fromEntries([...views].reverse().map((v) => [v.role, v.label])) : undefined}
                 selection={selection}
                 onSelect={setSelection}
                 onPatchField={(id, patch) => commit(updateField(def, id, patch))}
