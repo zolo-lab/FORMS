@@ -107,7 +107,8 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "אי אפשר לפרסם" })).toContainText("לא משויכים לאף שלב");
   await page.getByRole("button", { name: "שיוך כולם לשלב 1" }).click();
-  await expect(page.getByText("שדות לא משויכים לאף שלב")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "שיוך כולם לשלב 1" })).toHaveCount(0);
+  await expect(page.getByRole("alert").filter({ hasText: "אי אפשר לפרסם" })).toHaveCount(0);
   // The form is offered when opening a request, by its own name.
   await page.goto("/admin/requests/new");
   await expect(page.getByLabel("טופס", { exact: true }).locator(`option:has-text("${title}")`)).toHaveCount(1);

@@ -369,7 +369,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             <span className="flex flex-wrap items-center gap-2 text-destructive">
               {unassigned.length} שדות לא משויכים לאף שלב.
               <Button variant="outline" size="sm" onClick={() => setFocusRole("unassigned")}>הצגה</Button>
-              <Button variant="outline" size="sm" onClick={() => commit(unassigned.reduce((d, f) => updateField(d, f.id, { filledBy: views[0]!.role }), def))}>שיוך כולם לשלב 1</Button>
+              <Button variant="outline" size="sm" onClick={() => { commit(unassigned.reduce((d, f) => updateField(d, f.id, { filledBy: views[0]!.role }), def)); setIssues([]); }}>שיוך כולם לשלב 1</Button>
             </span>
           )}
         </div>
