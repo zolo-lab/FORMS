@@ -340,8 +340,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
           tabs={[
-            { id: "edit", label: "עריכה (רספונסיבי)" },
             { id: "pdf", label: "מסמך PDF" },
+            { id: "edit", label: "עריכה (רספונסיבי)" },
             ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),

@@ -105,7 +105,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await expect(page.getByText("שדות לא משויכים לאף שלב").first()).toBeVisible();
   // A field in no step blocks publishing; one click puts all such fields in step 1.
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByRole("alert")).toContainText("לא משויכים לאף שלב");
+  await expect(page.getByRole("alert").filter({ hasText: "אי אפשר לפרסם" })).toContainText("לא משויכים לאף שלב");
   await page.getByRole("button", { name: "שיוך כולם לשלב 1" }).click();
   await expect(page.getByText("שדות לא משויכים לאף שלב")).toHaveCount(0);
   // The form is offered when opening a request, by its own name.

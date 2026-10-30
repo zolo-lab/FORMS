@@ -54,11 +54,12 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   // Cut the form into steps right from the document: the date of birth opens step 2.
   await page.locator("[data-stamp]").filter({ hasText: "תאריך לידה" }).first().click();
   await page.getByRole("button", { name: "עמוד חדש מכאן" }).click();
-  await expect(page.getByText(/נוצר שלב חדש/)).toBeVisible();
+  await expect(page.getByText(/נוצר עמוד חדש/)).toBeVisible();
 
   // The same fields are the responsive form, in the order of the document.
   await page.getByRole("tab", { name: "עריכה" }).click();
   for (const label of ["שם העובד", "מספר זהות", "תאריך לידה", "מין"]) await expect(page.getByText(label).first()).toBeVisible();
   await expect(page.getByText("עמוד 2").filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "סידור לפי ה-PDF" })).toBeVisible();
+  await page.getByText("כלים", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "סידור השדות לפי ה-PDF" })).toBeVisible();
 });
