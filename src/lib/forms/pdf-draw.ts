@@ -280,7 +280,7 @@ export function addDetectedFields(
       ...definition,
       pages: pdfPages.map((pg, i) => ({
         ...(i === 0 ? first : { id: `step_${i + 1}` }),
-        title: `שלב ${i + 1}`,
+        title: `עמוד ${i + 1}`,
         fields: fields.filter((f) => pageOf.get(f.id) === pg),
       })),
     };
@@ -332,7 +332,7 @@ export function splitStepAt(def: FormDefinition, fieldId: string): { definition:
   const taken = new Set(def.pages.map((p) => p.id));
   const { nextPage, ...bare } = page;
   const head = { ...bare, fields: page.fields.slice(0, at) };
-  const tail = { ...bare, ...(nextPage ? { nextPage } : {}), id: uniqueId("step", taken), title: `שלב ${def.pages.length + 1}`, fields: page.fields.slice(at) };
+  const tail = { ...bare, ...(nextPage ? { nextPage } : {}), id: uniqueId("step", taken), title: `עמוד ${def.pages.length + 1}`, fields: page.fields.slice(at) };
   const pages = [...def.pages.slice(0, pi), head, tail, ...def.pages.slice(pi + 1)];
   return { definition: { ...def, pages }, step: pi + 1 };
 }

@@ -12,6 +12,7 @@ export const ROLE_OVERLAY: Record<FillerRole | "none", { box: string; boxActive:
   approver4: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
   approver5: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
   approver6: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
+  unassigned: { box: "border-destructive/60 bg-destructive/10", boxActive: "border-destructive bg-destructive/25", dot: "bg-destructive" },
   hr: { box: "border-accent-foreground/60 bg-accent-foreground/10", boxActive: "border-accent-foreground bg-accent-foreground/25", dot: "bg-accent-foreground" },
 };
 

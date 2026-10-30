@@ -4,7 +4,8 @@ import { db, schema } from "@/db";
 import { blankForm, publishIssues } from "@/lib/forms/builder";
 import { parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
-import { formPackageId, syncFormPackage } from "./packages-store";
+import { formPackageId, getPackage, syncFormPackage } from "./packages-store";
+import { unassignedFields } from "@/lib/workflow/step-fields";
 
 const { formTemplates, formTemplateVersions, pdfFiles, packageDocuments, packageTemplateItems, requests, webhooks } = schema;
 
@@ -93,6 +94,10 @@ export async function publishTemplate(templateId: string): Promise<{ ok: true; v
   const issues = publishIssues(data.version.definition).map((i) => i.message);
   // Every new form starts from a PDF; forms published before that rule keep working without one.
   if (!data.version.pdfFileId && data.template.publishedVersion === null) issues.unshift(NEEDS_PDF);
+  // Every field must be in a step of the form, or nobody would ever fill it.
+  const pkg = await getPackage(await formPackageId(templateId, data.template.title));
+  const orphans = unassignedFields(data.version.definition, (pkg?.pkg.workflow.steps ?? []).map((s) => s.role));
+  if (orphans.length) issues.push(`${orphans.length} שדות לא משויכים לאף שלב: ${orphans.slice(0, 5).map((f) => f.label || f.id).join(", ")}`);
   if (issues.length) return { ok: false, issues };
   await db.update(formTemplateVersions).set({ publishedAt: new Date() }).where(eq(formTemplateVersions.id, data.version.id));
   await db

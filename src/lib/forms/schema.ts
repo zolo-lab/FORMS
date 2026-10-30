@@ -40,8 +40,11 @@ export const conditionSchema: z.ZodType<Condition> = z.lazy(() =>
 // ---------- Field ----------
 
 /** Who fills a field in the signing chain. */
-/** "approver2"… are further approval steps: each step of a form has its own role, so each field belongs to one step. */
-export const fillerRoles = ["requester", "employee", "approver", "payroll", "hr", "approver2", "approver3", "approver4", "approver5", "approver6"] as const;
+/**
+ * "approver2"… are further approval steps: each step of a form has its own role, so each field belongs to one step.
+ * "unassigned" = taken out of every step in the editor (no step has it, so nobody fills it; publishing is blocked).
+ */
+export const fillerRoles = ["requester", "employee", "approver", "payroll", "hr", "approver2", "approver3", "approver4", "approver5", "approver6", "unassigned"] as const;
 export type FillerRole = (typeof fillerRoles)[number];
 
 export const optionSchema = z.object({

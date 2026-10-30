@@ -9,12 +9,12 @@ export const STEP_WHO = ["requester", "employee", "contact", "group_all", "email
 export type StepWho = (typeof STEP_WHO)[number];
 
 export const STEP_WHO_LABELS: Record<StepWho, string> = {
-  requester: "מי ששולח את הטופס",
+  requester: "השולח (ממלא את הטופס ושולח)",
   employee: "העובד (מי שהטופס נשלח אליו)",
   contact: "משתמש מוגדר",
   group_all: "קבוצה (כולם במקביל)",
-  email: "מייל שאני רושם (למשל גורם חיצוני)",
-  from_field: "המייל שמולא בשדה בטופס",
+  email: "מייל קבוע (למשל גורם חיצוני)",
+  from_field: "המייל שמולא בשדה של שלב קודם",
 };
 
 /**
@@ -31,12 +31,21 @@ export function freePersonRole(used: StepRole[]): StepRole {
   return APPROVER_ROLES.find((r) => !used.includes(r)) ?? "approver6";
 }
 
-/** Gives every person step its own role: a step without a valid one, or sharing it with an earlier step, gets a free one. */
-export function assignRoles<T extends { who: StepWho; role: StepRole }>(drafts: T[]): T[] {
+/**
+ * Gives every step that goes to a person its own role (the role ties the fields to the step). A step keeps its role
+ * while it is valid and not taken by an earlier step; otherwise it gets one that no step uses and no field still
+ * holds (`reserved`: roles of fields left without a step, so a new step does not silently take them over).
+ * The sender and the employee have fixed roles.
+ */
+export function assignRoles<T extends { who: StepWho; role: StepRole }>(drafts: T[], reserved: StepRole[] = []): T[] {
+  const fixedRole = (d: T): StepRole | null => (d.who === "requester" ? "requester" : d.who === "employee" ? "employee" : null);
+  const taken: StepRole[] = [...reserved, ...drafts.filter((d) => isPersonWho(d.who) && isPersonRole(d.role)).map((d) => d.role)];
   const used: StepRole[] = [];
   return drafts.map((d) => {
-    if (!isPersonWho(d.who)) return d;
-    const role = isPersonRole(d.role) && !used.includes(d.role) ? d.role : freePersonRole([...used, ...drafts.filter((x) => isPersonWho(x.who)).map((x) => x.role)]);
+    const fixed = fixedRole(d);
+    if (fixed) return d.role === fixed ? d : { ...d, role: fixed };
+    const keep = isPersonRole(d.role) && !used.includes(d.role) && !reserved.includes(d.role);
+    const role = keep ? d.role : freePersonRole([...taken, ...used]);
     used.push(role);
     return role === d.role ? d : { ...d, role };
   });
@@ -56,24 +65,6 @@ export function stepFields(who: StepWho, role: StepRole): { role: StepRole; acti
   if (who === "employee") return { role: "employee", action: "fill_and_sign" };
   const r = isPersonRole(role) ? role : "approver";
   return { role: r, action: "approve", assigneeKind: who === "email" ? "fixed" : who };
-}
-
-/** One choice in a field's "באיזה שלב" select: the role the field gets, named after the step(s) that have it. */
-export interface StepChoice { role: StepRole; label: string }
-
-/**
- * The form's steps as choices for a field. A field belongs to a role, so steps that share a role share one choice
- * ("שלבים 3, 4"). A role the field already has but no step uses is kept, marked, so it is not silently changed.
- */
-export function stepChoices(steps: Pick<WorkflowStep, "role" | "assigneeKind" | "assigneeFromFieldId" | "contactId">[], roleLabels: Record<StepRole, string>, current?: StepRole): StepChoice[] {
-  const byRole = new Map<StepRole, number[]>();
-  steps.forEach((s, i) => byRole.set(s.role, [...(byRole.get(s.role) ?? []), i + 1]));
-  const out: StepChoice[] = [...byRole].map(([role, ns]) => {
-    const name = STEP_WHO_LABELS[stepWhoOf(steps[ns[0]! - 1]!)];
-    return { role, label: `${ns.length > 1 ? "שלבים" : "שלב"} ${ns.join(", ")} · ${name}` };
-  });
-  if (current && !byRole.has(current)) out.push({ role: current, label: `${roleLabels[current]} (אין שלב כזה בטופס)` });
-  return out;
 }
 
 /** What the steps editor holds for one step: the "who" choice and the one detail it needs. */

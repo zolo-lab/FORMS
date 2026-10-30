@@ -1,20 +1,29 @@
 "use client";
 
 import { Select } from "@/components/ui/input";
-import { ROLE_LABELS } from "@/lib/workflow/labels";
-import { stepChoices } from "@/lib/workflow/step-who";
+import { cn } from "@/lib/utils";
 import type { FillerRole } from "@/lib/forms/schema";
-import type { WorkflowStep } from "@/lib/workflow/types";
+import type { StepView } from "@/lib/workflow/step-fields";
 
-export type FormSteps = Pick<WorkflowStep, "role" | "assigneeKind" | "assigneeFromFieldId" | "contactId">[];
+export type { StepView };
 
-/** "באיזה שלב השדה מופיע": the form's own steps. A field with no role belongs to the employee, as before. */
-export function StepSelect({ steps, value, onChange, className, id }: { steps: FormSteps; value: FillerRole | undefined; onChange: (role: FillerRole) => void; className?: string; id?: string }) {
+/**
+ * "באיזה שלב השדה מופיע": one option per step of the form ("שלב 2 · העובד"). A field that is in no step says so,
+ * and is never shown as belonging to a step the form does not have.
+ */
+export function StepSelect({ views, value, onChange, className, id }: { views: StepView[]; value: FillerRole | undefined; onChange: (role: FillerRole) => void; className?: string; id?: string }) {
   const role = value ?? "employee";
-  const choices = stepChoices(steps, ROLE_LABELS, role);
+  const inStep = views.some((v) => v.role === role);
   return (
-    <Select id={id} aria-label="באיזה שלב" className={className} value={role} onChange={(e) => onChange(e.target.value as FillerRole)}>
-      {choices.map((c) => <option key={c.role} value={c.role}>{c.label}</option>)}
+    <Select
+      id={id}
+      aria-label="באיזה שלב"
+      className={cn(className, !inStep && "border-destructive text-destructive")}
+      value={inStep ? role : ""}
+      onChange={(e) => e.target.value && onChange(e.target.value as FillerRole)}
+    >
+      {!inStep && <option value="">לא משויך לשלב – בחרו שלב</option>}
+      {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
     </Select>
   );
 }

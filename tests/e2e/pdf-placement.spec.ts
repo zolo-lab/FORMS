@@ -109,7 +109,7 @@ test("colours stamps by role and shows a legend", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
-  await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
+  await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 2 · העובד");
   await page.getByLabel("באיזה שלב").selectOption("requester");
-  await expect(page.getByLabel("מקרא תפקידים")).toContainText("מבקש");
+  await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 1 · השולח");
 });

@@ -76,24 +76,38 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // The signing route is part of the form ("שלבי הטופס"), like in iForms.
   await page.getByRole("tab", { name: "שלבי הטופס" }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
-  // A new form starts with requester → employee; add a third step and save all steps with one button.
+  // A new form starts with the sender → the employee. Step 1 is fixed; add a third step.
+  await expect(page.getByRole("listitem", { name: "שלב 1" })).toContainText("שלב 1 · השולח");
   await page.getByRole("button", { name: "הוספת שלב" }).click();
   const step3 = page.getByRole("listitem", { name: "שלב 3" });
-  await page.getByRole("button", { name: "שמירת השלבים" }).click();
-  // A "משתמש מוגדר" step needs a user: nothing is saved and the edit stays on screen.
-  await expect(page.getByRole("alert").filter({ hasText: "יש לבחור איש קשר" })).toBeVisible();
-  await step3.getByLabel("מי בשלב 3").selectOption({ label: "מייל שאני רושם (למשל גורם חיצוני)" });
+  // What is missing shows on the step itself, and nothing can be saved until it is fixed.
+  await expect(step3).toContainText("בחרו משתמש");
+  await expect(page.getByRole("button", { name: "שמירת השלבים" })).toBeDisabled();
+  await step3.getByLabel("למי השלב הולך").selectOption({ label: "מייל קבוע (למשל גורם חיצוני)" });
   await step3.getByLabel("מייל").fill("payroll@example.test");
+  await expect(step3).toContainText("שלב 3 · payroll@example.test");
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
-  // Each step is its own choice for the fields, and its fields can be highlighted (and others moved into it).
+
+  // "סימון שדות לשלב": each step separately; ticking a field puts it in the step, unticking leaves it in no step.
   await page.getByRole("tab", { name: "עריכה (רספונסיבי)" }).click();
-  const focus = page.getByLabel("הדגשת השדות של שלב");
-  await expect(focus.locator("option")).toHaveText(["כל השלבים", /^שלב 1 · /, /^שלב 2 · /, /^שלב 3 · /]);
-  await focus.selectOption({ index: 3 });
-  await expect(page.getByRole("button", { name: /לשלב הזה/ }).first()).toBeVisible();
+  const pick = page.getByLabel("סימון שדות לשלב");
+  await expect(pick.locator("option")).toHaveText(["— בחרו שלב —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test"]);
+  await pick.selectOption({ label: "שלב 3 · payroll@example.test" });
+  const notes = page.getByLabel("הערות בשלב הזה");
+  await expect(notes).not.toBeChecked();
+  await notes.check();
+  await expect(page.locator("span", { hasText: "שדות בשלב הזה" })).toContainText("1 שדות בשלב הזה");
+  await notes.uncheck();
+  await page.getByRole("button", { name: "סיום" }).click();
+  await expect(page.getByText("שדות לא משויכים לאף שלב").first()).toBeVisible();
+  // A field in no step blocks publishing; one click puts all such fields in step 1.
+  await page.getByRole("button", { name: "פרסום" }).click();
+  await expect(page.getByRole("alert")).toContainText("לא משויכים לאף שלב");
+  await page.getByRole("button", { name: "שיוך כולם לשלב 1" }).click();
+  await expect(page.getByText("שדות לא משויכים לאף שלב")).toHaveCount(0);
   // The form is offered when opening a request, by its own name.
   await page.goto("/admin/requests/new");
   await expect(page.getByLabel("טופס", { exact: true }).locator(`option:has-text("${title}")`)).toHaveCount(1);

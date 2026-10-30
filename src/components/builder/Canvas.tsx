@@ -27,9 +27,12 @@ export interface CanvasProps {
   onAddPage: () => void;
   onRemovePage: (index: number) => void;
   onMovePage: (index: number, dir: -1 | 1) => void;
-  /** "הדגשת השדות של": the fields of this step stand out, the others fade and can be moved into it in one click. */
+  /**
+   * "סימון שדות לשלב": the fields of this step stand out with a ticked box, the others fade with an empty one; ticking
+   * puts a field in the step, unticking takes it out ("לא משויך"). "unassigned" shows the fields that are in no step.
+   */
   focusRole?: FillerRole;
-  /** Step names by role ("שלב 2 · העובד"), shown on each field instead of the role. */
+  /** Step names by role ("שלב 2 · העובד"), shown on each field; a field whose role has no step is "לא משויך לשלב". */
   stepNames?: Partial<Record<FillerRole, string>>;
 }
 
@@ -77,17 +80,30 @@ export function Canvas(p: CanvasProps) {
               {page.fields.map((f, fi) => {
                 const selected = p.selection?.kind === "field" && p.selection.id === f.id;
                 const role = f.filledBy ?? "employee";
-                const answers = FIELD_TYPE_META[f.type].hasAnswer;
-                const inFocus = !!p.focusRole && answers && role === p.focusRole;
-                const outOfFocus = !!p.focusRole && answers && role !== p.focusRole;
+                const answers = FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden";
+                const stepName = p.stepNames ? p.stepNames[role] : undefined;
+                const noStep = !!p.stepNames && answers && !stepName;
+                const matches = p.focusRole === "unassigned" ? noStep : role === p.focusRole;
+                const inFocus = !!p.focusRole && answers && matches;
+                const outOfFocus = !!p.focusRole && answers && !matches;
+                const assigning = !!p.focusRole && p.focusRole !== "unassigned" && answers;
                 return (
                   <div key={f.id}>
                     {zone(pi, fi, `before-${f.id}`, <div className="h-2" />)}
                     <div
                       draggable={!selected}
                       onDragStart={(e) => { e.dataTransfer.setData(DRAG_FIELD, f.id); e.dataTransfer.effectAllowed = "move"; }}
-                      className={cn("flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity", selected && "border-primary ring-2 ring-primary/40", inFocus && "border-primary bg-primary/5", outOfFocus && "opacity-50 hover:opacity-100")}
+                      className={cn("flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity", selected && "border-primary ring-2 ring-primary/40", inFocus && "border-2 border-primary bg-primary/10", outOfFocus && "opacity-40 hover:opacity-100")}
                     >
+                      {assigning && (
+                        <input
+                          type="checkbox"
+                          className="size-5 shrink-0 accent-primary"
+                          checked={matches}
+                          onChange={(e) => p.onPatchField(f.id, { filledBy: e.target.checked ? p.focusRole : "unassigned" })}
+                          aria-label={`${f.label || "השדה"} בשלב הזה`}
+                        />
+                      )}
                       <button type="button" onClick={() => p.onSelect({ kind: "field", id: f.id })} className="flex min-w-0 flex-1 items-center gap-2 text-start" aria-pressed={selected}>
                         <FieldIcon type={f.type} className="size-4 shrink-0 text-muted-foreground" />
                         <span className="min-w-0">
@@ -97,14 +113,13 @@ export function Canvas(p: CanvasProps) {
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {FIELD_TYPE_META[f.type].label}
-                            {answers ? ` · ${p.stepNames?.[role] ?? (f.filledBy && f.filledBy !== "employee" ? `ממלא: ${ROLE_LABELS[f.filledBy]}` : "")}`.replace(/ · $/, "") : ""}
+                            {answers && stepName ? ` · ${stepName}` : ""}
+                            {answers && !p.stepNames && f.filledBy && f.filledBy !== "employee" ? ` · ממלא: ${ROLE_LABELS[f.filledBy]}` : ""}
+                            {noStep && <span className="text-destructive"> · לא משויך לשלב</span>}
                             {f.visibleIf ? " · מותנה" : ""}
                           </span>
                         </span>
                       </button>
-                      {outOfFocus && (
-                        <Button variant="outline" size="sm" onClick={() => p.onPatchField(f.id, { filledBy: p.focusRole === "employee" ? undefined : p.focusRole })} aria-label={`העברת ${f.label || "השדה"} לשלב הזה`}>לשלב הזה</Button>
-                      )}
                       <Button variant="ghost" size="sm" aria-label="הזזה למעלה" disabled={pi === 0 && fi === 0} onClick={() => p.onMoveField(f.id, -1)}><ArrowUp className="size-4" /></Button>
                       <Button variant="ghost" size="sm" aria-label="הזזה למטה" disabled={pi === p.def.pages.length - 1 && fi === page.fields.length - 1} onClick={() => p.onMoveField(f.id, 1)}><ArrowDown className="size-4" /></Button>
                       <Button variant="ghost" size="sm" aria-label="שכפול שדה" onClick={() => p.onDuplicate(f.id)}><Copy className="size-4" /></Button>

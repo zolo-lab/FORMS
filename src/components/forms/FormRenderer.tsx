@@ -132,10 +132,10 @@ export function FormRenderer({
       )}
 
       {!cardMode && wizard && visible.length > 1 && (
-        <div aria-label={`שלב ${step + 1} מתוך ${visible.length}`}>
+        <div aria-label={`עמוד ${step + 1} מתוך ${visible.length}`}>
           <div className="mb-1 flex justify-between text-sm text-muted-foreground">
             <span>{definition.pages[current]?.title}</span>
-            <span>שלב {step + 1} מתוך {visible.length}</span>
+            <span>עמוד {step + 1} מתוך {visible.length}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={1} aria-valuemax={visible.length} aria-valuenow={step + 1}>
             <div className="h-full bg-primary transition-all" style={{ width: `${((step + 1) / visible.length) * 100}%` }} />
