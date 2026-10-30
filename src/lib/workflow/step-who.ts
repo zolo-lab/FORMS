@@ -17,8 +17,30 @@ export const STEP_WHO_LABELS: Record<StepWho, string> = {
   from_field: "המייל שמולא בשדה בטופס",
 };
 
-/** Roles a chosen person can have; the role decides which fields of the form are theirs. */
-export const PERSON_ROLES = ["approver", "payroll", "hr"] as const satisfies readonly StepRole[];
+/**
+ * Roles of the steps that go to a chosen person. The role only ties fields to their step ("באיזה שלב השדה מופיע"), so
+ * every such step gets its own, automatically: the admin never picks it. payroll/hr are kept for older forms.
+ */
+export const APPROVER_ROLES = ["approver", "approver2", "approver3", "approver4", "approver5", "approver6"] as const satisfies readonly StepRole[];
+export const PERSON_ROLES = [...APPROVER_ROLES, "payroll", "hr"] as const satisfies readonly StepRole[];
+const isPersonRole = (r: string) => (PERSON_ROLES as readonly string[]).includes(r);
+const isPersonWho = (w: StepWho) => w !== "requester" && w !== "employee";
+
+/** The first approval role no other step uses (the last one when all are taken). */
+export function freePersonRole(used: StepRole[]): StepRole {
+  return APPROVER_ROLES.find((r) => !used.includes(r)) ?? "approver6";
+}
+
+/** Gives every person step its own role: a step without a valid one, or sharing it with an earlier step, gets a free one. */
+export function assignRoles<T extends { who: StepWho; role: StepRole }>(drafts: T[]): T[] {
+  const used: StepRole[] = [];
+  return drafts.map((d) => {
+    if (!isPersonWho(d.who)) return d;
+    const role = isPersonRole(d.role) && !used.includes(d.role) ? d.role : freePersonRole([...used, ...drafts.filter((x) => isPersonWho(x.who)).map((x) => x.role)]);
+    used.push(role);
+    return role === d.role ? d : { ...d, role };
+  });
+}
 
 export function stepWhoOf(step: Pick<WorkflowStep, "role" | "assigneeKind" | "assigneeFromFieldId" | "contactId">): StepWho {
   if (step.role === "requester") return "requester";
@@ -32,7 +54,7 @@ export function stepWhoOf(step: Pick<WorkflowStep, "role" | "assigneeKind" | "as
 export function stepFields(who: StepWho, role: StepRole): { role: StepRole; action: StepActionKind; assigneeKind?: AssigneeKind } {
   if (who === "requester") return { role: "requester", action: "fill" };
   if (who === "employee") return { role: "employee", action: "fill_and_sign" };
-  const r = (PERSON_ROLES as readonly StepRole[]).includes(role) ? role : "approver";
+  const r = isPersonRole(role) ? role : "approver";
   return { role: r, action: "approve", assigneeKind: who === "email" ? "fixed" : who };
 }
 
@@ -47,8 +69,7 @@ export function stepChoices(steps: Pick<WorkflowStep, "role" | "assigneeKind" | 
   const byRole = new Map<StepRole, number[]>();
   steps.forEach((s, i) => byRole.set(s.role, [...(byRole.get(s.role) ?? []), i + 1]));
   const out: StepChoice[] = [...byRole].map(([role, ns]) => {
-    const who = stepWhoOf(steps[ns[0]! - 1]!);
-    const name = who === "requester" || who === "employee" ? STEP_WHO_LABELS[who] : roleLabels[role];
+    const name = STEP_WHO_LABELS[stepWhoOf(steps[ns[0]! - 1]!)];
     return { role, label: `${ns.length > 1 ? "שלבים" : "שלב"} ${ns.join(", ")} · ${name}` };
   });
   if (current && !byRole.has(current)) out.push({ role: current, label: `${roleLabels[current]} (אין שלב כזה בטופס)` });

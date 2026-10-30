@@ -7,9 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABELS } from "@/lib/workflow/labels";
-import { PERSON_ROLES, STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
-import type { StepRole } from "@/lib/workflow/types";
+import { STEP_WHO, STEP_WHO_LABELS, assignRoles, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 
 type Option = { id: string; label: string };
@@ -43,7 +41,8 @@ export function StepsEditor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  const change = (next: StepDraft[]) => { setSteps(next); setDirty(true); setResult(null); };
+  // Each step that goes to a chosen person gets its own role behind the scenes (it ties the fields to the step).
+  const change = (next: StepDraft[]) => { setSteps(assignRoles(next)); setDirty(true); setResult(null); };
   const patch = (i: number, p: Partial<StepDraft>) => change(steps.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const move = (i: number, by: -1 | 1) => {
     const next = [...steps];
@@ -62,7 +61,6 @@ export function StepsEditor({
         {steps.map((s, i) => {
           const n = i + 1;
           const id = `s${i}`;
-          const person = s.who !== "requester" && s.who !== "employee";
           const fields = s.fieldId && !emailFields.some((f) => f.id === s.fieldId) ? [...emailFields, { id: s.fieldId, label: `${s.fieldId} (לא שדה מייל)` }] : emailFields;
           return (
             <li key={i} className="rounded-lg border bg-card p-3" aria-label={`שלב ${n}`}>
@@ -113,14 +111,6 @@ export function StepsEditor({
                     </Select>
                   </div>
                 )}
-                {person && (
-                  <div className="w-40 space-y-1">
-                    <Label htmlFor={`${id}-role`}>תפקיד</Label>
-                    <Select id={`${id}-role`} value={(PERSON_ROLES as readonly string[]).includes(s.role) ? s.role : "approver"} onChange={(e) => patch(i, { role: e.target.value as StepRole })}>
-                      {PERSON_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                    </Select>
-                  </div>
-                )}
                 {s.who !== "requester" && (
                   <label className="flex min-h-10 items-center gap-2 text-sm">
                     <Checkbox checked={!!s.formOnly} onChange={(e) => patch(i, { formOnly: e.target.checked })} />
@@ -140,7 +130,7 @@ export function StepsEditor({
           );
         })}
       </ol>
-      <Button type="button" variant="outline" onClick={() => change([...steps, { who: "contact", role: "approver" }])}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
+      <Button type="button" variant="outline" onClick={() => change([...steps, { who: "contact", role: "requester" }])}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur">
         <Button type="button" onClick={onSave} disabled={pending || !dirty}>{pending ? "שומר…" : "שמירת השלבים"}</Button>

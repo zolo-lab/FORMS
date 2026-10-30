@@ -80,7 +80,6 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // A new form starts with requester → employee; add a third step and save all steps with one button.
   await page.getByRole("button", { name: "הוספת שלב" }).click();
   const step3 = page.getByRole("listitem", { name: "שלב 3" });
-  await step3.getByLabel("תפקיד").selectOption("payroll");
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   // A "משתמש מוגדר" step needs a user: nothing is saved and the edit stays on screen.
   await expect(page.getByRole("alert").filter({ hasText: "יש לבחור איש קשר" })).toBeVisible();

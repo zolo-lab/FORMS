@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { draftOf, sanitizeDraft, stepChoices, stepFields, stepFromDraft, stepWhoOf } from "@/lib/workflow/step-who";
+import { ROLE_LABELS } from "@/lib/workflow/labels";
+import { assignRoles, draftOf, sanitizeDraft, stepChoices, stepFields, stepFromDraft, stepWhoOf } from "@/lib/workflow/step-who";
 
 describe("step who", () => {
   it("reads the choice back from a stored step", () => {
@@ -20,12 +21,12 @@ describe("step who", () => {
 });
 
 describe("stepChoices", () => {
-  const L = { requester: "מבקש", employee: "עובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" } as const;
+  const L = ROLE_LABELS;
   it("names each step and merges steps that share a role", () => {
     expect(stepChoices([{ role: "requester" }, { role: "employee" }, { role: "payroll", assigneeKind: "contact" }, { role: "payroll", assigneeKind: "group_all" }], L)).toEqual([
       { role: "requester", label: "שלב 1 · מי ששולח את הטופס" },
       { role: "employee", label: "שלב 2 · העובד (מי שהטופס נשלח אליו)" },
-      { role: "payroll", label: "שלבים 3, 4 · חשבות שכר" },
+      { role: "payroll", label: "שלבים 3, 4 · משתמש מוגדר" },
     ]);
   });
   it("keeps a role the field has but no step uses", () => {
@@ -44,5 +45,21 @@ describe("step drafts (the steps editor)", () => {
   });
   it("cleans what the browser sends", () => {
     expect(sanitizeDraft({ who: "hack", role: "boss", email: 5, formOnly: "yes" })).toMatchObject({ who: "employee", role: "approver", email: undefined, formOnly: false });
+  });
+});
+
+describe("assignRoles", () => {
+  it("gives each person step its own role, keeping valid ones", () => {
+    const out = assignRoles([
+      { who: "requester" as const, role: "requester" as const },
+      { who: "contact" as const, role: "approver" as const },
+      { who: "group_all" as const, role: "approver" as const },
+      { who: "email" as const, role: "requester" as const },
+      { who: "employee" as const, role: "employee" as const },
+    ]);
+    expect(out.map((d) => d.role)).toEqual(["requester", "approver", "approver2", "approver3", "employee"]);
+  });
+  it("keeps an older payroll step as it is", () => {
+    expect(assignRoles([{ who: "email" as const, role: "payroll" as const }])[0]!.role).toBe("payroll");
   });
 });

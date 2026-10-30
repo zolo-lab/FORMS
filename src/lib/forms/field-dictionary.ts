@@ -7,7 +7,7 @@ import { fieldKey } from "./field-keys";
 import type { PdfStamp } from "./pdf-mapping";
 import type { FormDefinition, FormField } from "./schema";
 
-const FILLER_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש" };
+const FILLER_LABELS: Record<string, string> = { requester: "המנהל המבקש", employee: "העובד", approver: "מאשר", payroll: "חשבות שכר", hr: "משאבי אנוש", approver2: "מאשר 2", approver3: "מאשר 3", approver4: "מאשר 4", approver5: "מאשר 5", approver6: "מאשר 6" };
 
 export const DICTIONARY_HEADER = ["מזהה", "מפתח ייצוא", "שם השדה", "סוג", "שלב", "ממלא", "חובה", "אפשרויות", "עמוד ב-PDF"];
 

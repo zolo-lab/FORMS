@@ -3,7 +3,7 @@ import { requireGrant } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseStepForm } from "@/lib/workflow/step-form";
-import { sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib/workflow/step-who";
+import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib/workflow/step-who";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
@@ -129,7 +129,7 @@ export async function saveStepsAction(packageId: string, drafts: StepDraft[]): P
   await requireGrant("manageForms");
   if (!/^[0-9a-f-]{36}$/i.test(packageId) || !Array.isArray(drafts) || drafts.length > 30) return { ok: false, errors: ["קלט לא תקין"] };
   if (!(await getPackage(packageId))) return { ok: false, errors: ["הטופס לא נמצא"] };
-  const steps = drafts.map((d, i) => stepFromDraft(sanitizeDraft(d), i));
+  const steps = assignRoles(drafts.map(sanitizeDraft)).map((d, i) => stepFromDraft(d, i));
   const errors = validateWorkflow({ steps });
   if (errors.length) return { ok: false, errors };
   await setWorkflow(packageId, { steps });
