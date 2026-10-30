@@ -1,12 +1,17 @@
 "use client";
 import type { FormSteps } from "./StepSelect";
+import { StepsEditor } from "@/components/packages/StepsEditor";
+import type { SaveStepsResult } from "@/app/admin/packages/actions";
+import { stepFromDraft, type StepDraft } from "@/lib/workflow/step-who";
+import { emailFieldsOf, stepOptions } from "@/lib/workflow/step-fields";
+import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, Redo2, Undo2, Sparkles } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { publishAction, saveDraftAction } from "@/app/admin/forms/actions";
 import {
@@ -27,7 +32,7 @@ import { FieldSettings, PageSettings } from "./SettingsPanel";
 import { FormTestFill } from "@/components/forms/FormTestFill";
 import { PdfTab, type PdfState } from "./PdfTab";
 
-type TabId = "edit" | "preview" | "pdf" | "json";
+type TabId = "edit" | "preview" | "pdf" | "steps" | "json";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
@@ -42,11 +47,23 @@ export interface FormEditorProps {
   needsPdf?: boolean;
   /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
   groups?: { id: string; name: string }[];
-  /** The form's steps ("שלבי הטופס"): each field belongs to one of them. */
-  steps?: FormSteps;
+  /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
+  flow?: {
+    packageId: string;
+    drafts: StepDraft[];
+    contacts: { id: string; label: string }[];
+    groups: { id: string; label: string }[];
+    save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
+    /** Sending settings (recipients, reminders…), rendered on the server. */
+    sendSettings?: React.ReactNode;
+  };
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], steps }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow }: FormEditorProps) {
+  const [stepDrafts, setStepDrafts] = useState<StepDraft[]>(flow?.drafts ?? []);
+  const steps: FormSteps | undefined = flow ? stepDrafts.map((d, i) => stepFromDraft(d, i)) : undefined;
+  // "הצגת שדות של שלב": the fields of one step stand out, in the responsive form and on the PDF.
+  const [focusRole, setFocusRole] = useState<FillerRole | "">("");
   const [def, setDef] = useState(initial);
   // One history for the form and its boxes on the PDF: undoing a delete brings back the field and its boxes together.
   const [past, setPast] = useState<HistoryEntry[]>([]);
@@ -128,7 +145,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     if (!lost.length) { setPdf(next); return; }
     commit(lost.reduce((d, id) => removeField(d, id), def), next);
     setSelection(null);
-  }, [commit, def, setPdf]);
+  }, [commit, def, setPdf, setSelection]);
 
   const step = (from: HistoryEntry[], to: (f: (h: HistoryEntry[]) => HistoryEntry[]) => void, take: "last" | "first") => {
     if (!from.length) return from;
@@ -263,18 +280,17 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <Tabs<TabId>
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
-          tabs={[{ id: "pdf", label: "מסמך PDF" }, { id: "edit", label: "עריכה (רספונסיבי)" }, { id: "preview", label: "תצוגה מקדימה" }, { id: "json", label: "JSON" }]}
+          tabs={[{ id: "pdf", label: "מסמך PDF" }, { id: "edit", label: "עריכה (רספונסיבי)" }, ...(flow ? [{ id: "steps" as const, label: "שלבי הטופס" }] : []), { id: "preview", label: "תצוגה מקדימה" }, { id: "json", label: "JSON" }]}
         />
-        {/* The signing route is part of the form (like iForms); saving first so the last edit is not lost. */}
-        <Link
-          href={`/admin/forms/${templateId}/flow`}
-          aria-disabled={save !== "saved"}
-          onClick={(e) => { if (save !== "saved") e.preventDefault(); }}
-          className="mb-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent aria-disabled:opacity-50"
-          title={save !== "saved" ? "שומר…" : undefined}
-        >
-          שלבי הטופס
-        </Link>
+        {steps && (tab === "edit" || tab === "pdf") && (
+          <label className="mb-2 ms-auto flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">הדגשת השדות של</span>
+            <Select className="h-9 w-56" aria-label="הדגשת השדות של שלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
+              <option value="">כל השלבים</option>
+              {stepOptions(steps).map((o) => <option key={o.role} value={o.role}>{o.label}</option>)}
+            </Select>
+          </label>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -291,6 +307,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             <div className="order-1 lg:order-none lg:overflow-auto">
               <Canvas
                 def={def}
+                focusRole={focusRole || undefined}
+                stepNames={steps ? Object.fromEntries(stepOptions(steps).map((o) => [o.role, o.label])) : undefined}
                 selection={selection}
                 onSelect={setSelection}
                 onPatchField={(id, patch) => commit(updateField(def, id, patch))}
@@ -344,7 +362,25 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={steps} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
+        {tab === "steps" && flow && (
+          <div className="mx-auto max-w-4xl space-y-6 p-4">
+            <section className="space-y-2" aria-labelledby="steps-h">
+              <h2 id="steps-h" className="text-lg font-semibold">שלבי הטופס</h2>
+              <p className="text-sm text-muted-foreground">מי ממלא ומאשר, לפי הסדר. אילו שדות שייכים לכל שלב בוחרים בהגדרות השדה, או עם &quot;הדגשת השדות של&quot; בלשוניות העריכה וה-PDF.</p>
+              <StepsEditor
+                packageId={flow.packageId}
+                initial={stepDrafts}
+                contacts={flow.contacts}
+                groups={flow.groups}
+                emailFields={emailFieldsOf(def)}
+                save={flow.save}
+                onSaved={setStepDrafts}
+              />
+            </section>
+            {flow.sendSettings}
+          </div>
+        )}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={steps} focusRole={focusRole} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

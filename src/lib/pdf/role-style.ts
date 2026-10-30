@@ -7,6 +7,11 @@ export const ROLE_OVERLAY: Record<FillerRole | "none", { box: string; boxActive:
   employee: { box: "border-success/60 bg-success/10", boxActive: "border-success bg-success/25", dot: "bg-success" },
   approver: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
   payroll: { box: "border-destructive/60 bg-destructive/10", boxActive: "border-destructive bg-destructive/25", dot: "bg-destructive" },
+  approver2: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
+  approver3: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
+  approver4: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
+  approver5: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
+  approver6: { box: "border-warning/60 bg-warning/10", boxActive: "border-warning bg-warning/25", dot: "bg-warning" },
   hr: { box: "border-accent-foreground/60 bg-accent-foreground/10", boxActive: "border-accent-foreground bg-accent-foreground/25", dot: "bg-accent-foreground" },
 };
 

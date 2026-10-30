@@ -6,6 +6,11 @@ export const ROLE_LABELS: Record<StepRole, string> = {
   approver: "מאשר",
   payroll: "חשבות שכר",
   hr: "משאבי אנוש",
+  approver2: "מאשר 2",
+  approver3: "מאשר 3",
+  approver4: "מאשר 4",
+  approver5: "מאשר 5",
+  approver6: "מאשר 6",
 };
 
 export const REQUEST_STATUS_LABEL = {

@@ -59,6 +59,6 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   // The same fields are the responsive form, in the order of the document.
   await page.getByRole("tab", { name: "עריכה" }).click();
   for (const label of ["שם העובד", "מספר זהות", "תאריך לידה", "מין"]) await expect(page.getByText(label).first()).toBeVisible();
-  await expect(page.getByText("שלב 2").first()).toBeVisible();
+  await expect(page.getByText("שלב 2").filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "סידור לפי ה-PDF" })).toBeVisible();
 });

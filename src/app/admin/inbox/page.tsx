@@ -30,7 +30,8 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       <h1 className="text-2xl font-bold">ממתינים לטיפול</h1>
       <p className="text-sm text-muted-foreground">בחרו תפקיד כדי לראות את הבקשות שממתינות לו. (חיבור משתמשים אישיים יתווסף עם כניסה באמצעות Google.)</p>
       <nav aria-label="תפקיד" className="flex flex-wrap gap-2">
-        {(Object.keys(ROLE_LABELS) as StepRole[]).map((r) => (
+        {/* Further approval steps ("מאשר 2"…) only when something waits for them. */}
+        {(Object.keys(ROLE_LABELS) as StepRole[]).filter((r) => !/^approver\d$/.test(r) || counts.get(r) || role === r).map((r) => (
           <Link
             key={r}
             href={`/admin/inbox?role=${r}`}

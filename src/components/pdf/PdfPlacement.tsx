@@ -43,6 +43,8 @@ export interface PdfPlacementProps {
   onFieldPatch?: (fieldId: string, patch: Partial<FormField>) => void;
   /** The form's steps, to choose the step a field belongs to. */
   steps?: FormSteps;
+  /** Set by the editor's "הדגשת השדות של": boxes of other steps fade. When given, the local "צפה כ-" picker is hidden. */
+  focusRole?: FillerRole | "";
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
   /** Copy/paste of an element: make a copy of its field and return the new field id (null = keep the same field). */
   onCloneField?: (fieldId: string) => string | null;
@@ -52,7 +54,7 @@ export interface PdfPlacementProps {
   onSplitStep?: (fieldId: string) => void;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ role: "requester" }, { role: "employee" }] }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ role: "requester" }, { role: "employee" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -65,7 +67,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
   /** "צפה כ-": stamps of other roles are dimmed. */
-  const [viewAs, setViewAs] = useState<FillerRole | "">("");
+  const [localViewAs, setViewAs] = useState<FillerRole | "">("");
+  const viewAs = focusRole !== undefined ? focusRole : localViewAs;
   /** Rows offered per table in the list; at least as many as are already placed (so their names resolve). */
   const [tableRowsSet, setTableRows] = useState<Record<string, number>>({});
   const tableRows = useMemo(() => {
@@ -425,13 +428,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               )}
             </div>
           )}
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          {focusRole === undefined && <label className="flex items-center gap-1 text-xs text-muted-foreground">
             צפה כ-
             <Select className="h-8 w-32" aria-label="צפה כתפקיד" value={viewAs} onChange={(e) => setViewAs(e.target.value as FillerRole | "")}>
               <option value="">כולם</option>
               {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </Select>
-          </label>
+          </label>}
           {onPreview && <Button className="lg:ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
         {doc && pages.length > 1 && (

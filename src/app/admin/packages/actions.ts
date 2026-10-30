@@ -3,6 +3,7 @@ import { requireGrant } from "@/server/guards";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseStepForm } from "@/lib/workflow/step-form";
+import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib/workflow/step-who";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
@@ -40,7 +41,7 @@ export async function savePackageAction(fd: FormData) {
   await updatePackage(id, { name, description: String(fd.get("description") ?? "").trim() || null, organizationId: UUID.test(org) ? org : null });
   revalidatePath(`/admin/packages/${id}`);
   revalidatePath("/admin/forms", "layout");
-  back(id, "?saved=1", fd);
+  back(id, "?saved=org", fd);
 }
 
 export async function savePackageSettingsAction(fd: FormData) {
@@ -66,7 +67,7 @@ export async function savePackageSettingsAction(fd: FormData) {
   });
   revalidatePath(`/admin/packages/${id}`);
   revalidatePath("/admin/forms", "layout");
-  back(id, "?saved=1", fd);
+  back(id, "?saved=settings", fd);
 }
 
 export async function archivePackageAction(fd: FormData) {
@@ -119,4 +120,20 @@ export async function stepAction(fd: FormData) {
   revalidatePath(`/admin/packages/${id}`);
   revalidatePath("/admin/forms", "layout");
   back(id, "?saved=1", fd);
+}
+
+export type SaveStepsResult = { ok: true } | { ok: false; errors: string[] };
+
+/** The steps editor ("שלבי הטופס") saves all steps at once and stays on the page (no redirect), showing the result. */
+export async function saveStepsAction(packageId: string, drafts: StepDraft[]): Promise<SaveStepsResult> {
+  await requireGrant("manageForms");
+  if (!/^[0-9a-f-]{36}$/i.test(packageId) || !Array.isArray(drafts) || drafts.length > 30) return { ok: false, errors: ["קלט לא תקין"] };
+  if (!(await getPackage(packageId))) return { ok: false, errors: ["הטופס לא נמצא"] };
+  const steps = assignRoles(drafts.map(sanitizeDraft)).map((d, i) => stepFromDraft(d, i));
+  const errors = validateWorkflow({ steps });
+  if (errors.length) return { ok: false, errors };
+  await setWorkflow(packageId, { steps });
+  revalidatePath(`/admin/packages/${packageId}`);
+  revalidatePath("/admin/forms", "layout");
+  return { ok: true };
 }
