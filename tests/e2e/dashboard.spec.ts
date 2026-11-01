@@ -30,7 +30,7 @@ test("switches between table and board and opens the inbox by role", async ({ pa
 
   await page.goto("/admin/inbox");
   await expect(page.getByRole("heading", { name: "ממתינים לטיפול" })).toBeVisible();
-  await page.getByRole("navigation", { name: "תפקיד" }).getByRole("link", { name: /מאשר/ }).click();
+  await page.getByRole("navigation", { name: "תפקיד" }).getByRole("link", { name: /^מאשר \d+$/ }).click();
   await expect(page).toHaveURL(/role=approver/);
   await expect(page.getByRole("list", { name: "לוח בקשות" }).or(page.getByText(/אין בקשות שממתינות/))).toBeVisible();
 });
