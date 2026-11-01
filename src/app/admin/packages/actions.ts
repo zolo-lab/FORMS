@@ -39,8 +39,16 @@ export async function savePackageAction(fd: FormData) {
   const id = pkgId(fd);
   const name = String(fd.get("name") ?? "").trim();
   if (!name) back(id, "?error=name", fd);
+  // "זמין לעמותות": ticked organizations (one = the form belongs to it). The older single choice still works.
+  const ticked = [...new Set(fd.getAll("organizationIds").map(String).filter((v) => UUID.test(v)))];
   const org = String(fd.get("organizationId") ?? "");
-  await updatePackage(id, { name, description: String(fd.get("description") ?? "").trim() || null, organizationId: UUID.test(org) ? org : null });
+  const organizationIds = fd.has("orgsField") ? ticked : UUID.test(org) ? [org] : [];
+  await updatePackage(id, {
+    name,
+    description: String(fd.get("description") ?? "").trim() || null,
+    organizationId: organizationIds.length === 1 ? organizationIds[0]! : null,
+    organizationIds,
+  });
   revalidatePath(`/admin/packages/${id}`);
   revalidatePath("/admin/forms", "layout");
   back(id, "?saved=org", fd);

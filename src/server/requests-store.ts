@@ -4,6 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
+import { withOrgFields } from "@/lib/forms/prefill";
 import { afterResponse } from "./after";
 import { kickDelivery } from "./notifications";
 import { nearestDue } from "@/lib/requests/list";
@@ -317,6 +318,14 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   // Saved contacts and group members the steps may be routed to (a "group" dropdown stores the contact id).
   const docRows = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
   const versions = docRows.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.templateVersionId))) : [];
+  // The organization's fields (org_name, org_number…) carry the request's organization from the start, for every step.
+  const [reqOrg] = await db.select({ name: organizations.name, registrationNumber: organizations.registrationNumber }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const orgAnswers = versions.reduce<Answers>((a, v) => withOrgFields(v.definition, reqOrg ?? null, a), {});
+  if (Object.keys(orgAnswers).length) {
+    const params = (req.apiParams ?? {}) as { requesterAnswers?: Answers };
+    await db.update(requests).set({ apiParams: { ...params, requesterAnswers: { ...(params.requesterAnswers ?? {}), ...orgAnswers } } }).where(eq(requests.id, requestId));
+    Object.assign(answers, orgAnswers);
+  }
   const people = await peopleForWorkflow(((req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride) ?? pkg!.workflow, versions.map((v) => v.definition));
   // Whoever opened the request (for steps that come back to them).
   if (req.createdBy) {

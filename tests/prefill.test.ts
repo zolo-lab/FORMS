@@ -38,7 +38,7 @@ describe("withPrefill", () => {
   });
 
   it("every key offered in the builder list fills something", () => {
-    const subj = { name: "דנה כהן", idNumber: "000000018", email: "d@example.com", phone: "0501234567" };
+    const subj = { name: "דנה כהן", idNumber: "000000018", email: "d@example.com", phone: "0501234567", org: { name: "פנימה", registrationNumber: "580000000" } };
     for (const { key } of PREFILL_KEYS) {
       const d: FormDefinition = { schemaVersion: 1, title: "t", pages: [{ id: "p", title: "", fields: [{ id: "f", type: "short_text", label: "f", prefill: key }] }] };
       expect(withPrefill(d, subj, {}).f, key).toBeTruthy();

@@ -13,17 +13,17 @@ import type { Lookups } from "@/lib/forms/lookups";
 type Done = { message?: string; waitingFor: string[]; completed: boolean };
 
 /** The form from its own link: the first step's fields, on the document or as a form, and "שליחה" opens the request. */
-export function PublicFill({ formId, definition, role, pdf, lookups }: { formId: string; definition: FormDefinition; role: "requester" | "employee"; pdf?: { url: string; mapping: PdfMapping }; lookups?: Lookups }) {
+export function PublicFill({ formId, org, definition, role, pdf, lookups, initialAnswers = {} }: { formId: string; org: string | null; definition: FormDefinition; role: "requester" | "employee"; pdf?: { url: string; mapping: PdfMapping }; lookups?: Lookups; initialAnswers?: Answers }) {
   const onDocument = !!pdf && pdf.mapping.stamps.length > 0;
   const [mode, setMode] = useFillView(onDocument);
-  const [answers, setAnswers] = useState<Answers>({});
+  const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [done, setDone] = useState<Done | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
   async function send(cleaned: Answers) {
     setFailed(null);
-    const res = await fetch(`/api/f/${formId}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned }) });
+    const res = await fetch(`/api/f/${formId}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned, ...(org ? { org } : {}) }) });
     const body = (await res.json().catch(() => ({}))) as { errors?: FieldErrors; error?: string } & Partial<Done>;
     if (res.ok) {
       setDone({ message: body.message, waitingFor: body.waitingFor ?? [], completed: !!body.completed });
@@ -33,7 +33,7 @@ export function PublicFill({ formId, definition, role, pdf, lookups }: { formId:
       setErrors(body.errors);
       return;
     }
-    setFailed(body.error === "closed" || body.error === "not_public" ? "הטופס כבר לא פתוח למילוי." : "השליחה נכשלה. נסו שוב בעוד רגע.");
+    setFailed(["closed", "not_public", "choose_org", "org_not_allowed", "no_organization"].includes(body.error ?? "") ? "הטופס כבר לא פתוח למילוי." : "השליחה נכשלה. נסו שוב בעוד רגע.");
   }
 
   if (done) {

@@ -255,6 +255,8 @@ export const packageTemplates = pgTable("package_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** null = available to all organizations */
   organizationId: uuid("organization_id").references(() => organizations.id),
+  /** The organizations the form is open to (its link per organization: /f/<form>/<slug>); empty = organizationId / all. */
+  organizationIds: jsonb("organization_ids").$type<string[]>().notNull().default([]),
   name: text("name").notNull(),
   description: text("description"),
   workflow: jsonb("workflow").$type<Workflow>().notNull(),
