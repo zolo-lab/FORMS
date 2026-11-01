@@ -18,21 +18,36 @@ export function SubmitButton({
   name,
   value,
   disabled,
+  onClick,
   ...props
 }: Omit<ButtonProps, "type"> & { saved?: boolean; savedText?: string; pendingText?: string }) {
   const { pending, data } = useFormStatus();
   // With several submit buttons in one form (save / delete…), only the pressed one spins: its name=value is in the data.
   const mine = pending && (!name || !data || data.get(name) === String(value ?? ""));
-  const [showSaved, setShowSaved] = useState(saved);
+  // "נשמר" fades after a few seconds; pressing the button again starts a new round (the page keeps this component
+  // across the redirect, so `saved` alone may not change).
+  const [round, setRound] = useState(0);
+  const [expired, setExpired] = useState(-1);
   useEffect(() => {
-    setShowSaved(saved);
     if (!saved) return;
-    const t = setTimeout(() => setShowSaved(false), 5000);
+    const t = setTimeout(() => setExpired(round), 5000);
     return () => clearTimeout(t);
-  }, [saved]);
+  }, [saved, round]);
+  const showSaved = saved && expired !== round;
   return (
     <span className="inline-flex flex-wrap items-center gap-3">
-      <Button type="submit" name={name} value={value} disabled={disabled || pending} aria-busy={mine || undefined} {...props}>
+      <Button
+        type="submit"
+        name={name}
+        value={value}
+        disabled={disabled || pending}
+        aria-busy={mine || undefined}
+        {...props}
+        onClick={(e) => {
+          setRound((r) => r + 1);
+          onClick?.(e);
+        }}
+      >
         {mine && <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />}
         {mine && pendingText ? pendingText : children}
       </Button>

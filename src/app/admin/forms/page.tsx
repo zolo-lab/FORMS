@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
