@@ -3,6 +3,7 @@
  * longest first, to the organization's tracking users and admins. Status only – no form content. Pure, unit tested.
  */
 import { israelClock } from "@/lib/workflow/reminders";
+import { DEFAULT_TEMPLATES, renderTemplate, type MessageTemplate } from "./templates";
 
 export const DIGEST_KEY = "weekly_digest";
 export const DIGEST_MIN_DAYS = 3;
@@ -19,11 +20,14 @@ export function digestItems(items: DigestItem[], minDays = DIGEST_MIN_DAYS): Dig
   return items.filter((i) => i.days > minDays).sort((a, b) => b.days - a.days);
 }
 
-export function digestMessage(org: string, items: DigestItem[], link: string): { subject: string; body: string } {
+/** The list part of the summary ({{items}} in its text). */
+export function digestLines(items: DigestItem[]): string {
   const lines = items.slice(0, 60).map((i) => `• ${i.subject} – ${i.packageName} – ממתין ל${i.waitingFor} – ${i.days} ימים`);
   const more = items.length > 60 ? `\nועוד ${items.length - 60} בקשות.` : "";
-  return {
-    subject: `${items.length} בקשות ממתינות – ${org}`,
-    body: `שלום,\nאלה הבקשות של ${org} שממתינות יותר מ-${DIGEST_MIN_DAYS} ימים:\n${lines.join("\n")}${more}\nלמסך המעקב: ${link}`,
-  };
+  return `${lines.join("\n")}${more}`;
+}
+
+export function digestMessage(org: string, items: DigestItem[], link: string, template: MessageTemplate = DEFAULT_TEMPLATES.weekly_digest!): MessageTemplate {
+  const vars = { org, count: String(items.length), items: digestLines(items), link };
+  return { subject: renderTemplate(template.subject, vars), body: renderTemplate(template.body, vars) };
 }

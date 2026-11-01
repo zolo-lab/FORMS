@@ -5,6 +5,8 @@
  *  - a step returned for correction is handled where the target step is re-activated (it gets the "returned" text
  *    with the reason and a fresh link instead of the plain invitation).
  */
+import type { RecipientKind } from "./triggers";
+
 export interface Recipient {
   name: string;
   email?: string | null;
@@ -23,6 +25,21 @@ export interface StatusNotice {
   vars: { name: string; subject?: string; reason?: string; stepName?: string };
 }
 
+/** What the triggers panel set for one of these notices (see `triggers.ts`); without it, the defaults. */
+export interface NoticeSetting {
+  enabled: boolean;
+  recipients: RecipientKind[];
+  fixedRecipients: { name: string; email: string }[];
+}
+
+type StatusKey = StatusNotice["key"];
+
+const DEFAULTS: Record<StatusKey, NoticeSetting> = {
+  completed: { enabled: true, recipients: ["employee", "creator"], fixedRecipients: [] },
+  declined: { enabled: true, recipients: ["employee", "creator"], fixedRecipients: [] },
+  step_done: { enabled: true, recipients: ["creator", "trackers"], fixedRecipients: [] },
+};
+
 export function statusNotices(
   events: StatusEvent[],
   ctx: {
@@ -33,33 +50,56 @@ export function statusNotices(
     stepRole?: (stepId: string) => string | undefined;
     /** Tracking users of the organization: told when the person finished their step. */
     watchers?: Recipient[];
+    /** The organization's secretariat / bookkeeping addresses (for triggers that include them). */
+    secretariat?: Recipient[];
+    bookkeeping?: Recipient[];
+    settings?: Partial<Record<StatusKey, NoticeSetting>>;
   },
 ): StatusNotice[] {
   const out: StatusNotice[] = [];
+  const setting = (k: StatusKey) => ctx.settings?.[k] ?? DEFAULTS[k];
   const completed = events.some((e) => e.type === "request_completed");
   const declined = events.some((e) => e.type === "request_declined");
   const reason = String(events.find((e) => e.type === "step_declined")?.payload?.reason ?? "");
-  const same = (a: Recipient, b: Recipient) => !!a.email && a.email.toLowerCase() === (b.email ?? "").toLowerCase();
+
+  /** One notice per person: an address already told for this event is skipped (case-insensitive). */
+  const told = new Set<string>();
+  const push = (to: Recipient, key: StatusKey, vars: StatusNotice["vars"]) => {
+    const e = to.email?.trim().toLowerCase();
+    if (e) {
+      if (told.has(e)) return;
+      told.add(e);
+    }
+    out.push({ to, key, vars });
+  };
+  const others = (st: NoticeSetting, kinds: RecipientKind[]): Recipient[] => [
+    ...(kinds.includes("secretariat") && st.recipients.includes("secretariat") ? (ctx.secretariat ?? []) : []),
+    ...(kinds.includes("bookkeeping") && st.recipients.includes("bookkeeping") ? (ctx.bookkeeping ?? []) : []),
+    ...(kinds.includes("fixed") && st.recipients.includes("fixed") ? st.fixedRecipients : []),
+  ];
 
   const both = (key: "completed" | "declined", extra: { reason?: string }) => {
-    out.push({ to: ctx.subject, key, vars: { name: ctx.subject.name, ...extra } });
-    if (ctx.creator && !same(ctx.creator, ctx.subject)) {
-      out.push({ to: ctx.creator, key, vars: { name: ctx.creator.name, subject: ` (${ctx.subject.name})`, ...extra } });
-    }
+    const st = setting(key);
+    if (!st.enabled) return;
+    const about = { subject: ` (${ctx.subject.name})`, ...extra };
+    if (st.recipients.includes("employee")) push(ctx.subject, key, { name: ctx.subject.name, ...extra });
+    if (ctx.creator && st.recipients.includes("creator")) push(ctx.creator, key, { name: ctx.creator.name, ...about });
+    for (const p of others(st, ["secretariat", "bookkeeping", "fixed"])) push(p, key, { name: p.name, ...about });
   };
   if (completed) both("completed", {});
   else if (declined) both("declined", { reason });
   else {
+    const st = setting("step_done");
+    if (!st.enabled) return out;
     for (const e of events) {
       if (e.type !== "step_completed" || !e.stepId) continue;
-      if (ctx.creator) out.push({ to: ctx.creator, key: "step_done", vars: { name: ctx.creator.name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId) } });
+      told.clear();
+      const vars = (name: string) => ({ name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId!) });
+      if (ctx.creator && st.recipients.includes("creator")) push(ctx.creator, "step_done", vars(ctx.creator.name));
       // The secretariats that chase signatures hear when the person themselves finished their part.
-      if (ctx.stepRole?.(e.stepId) === "employee") {
-        for (const w of ctx.watchers ?? []) {
-          if (ctx.creator && same(w, ctx.creator)) continue;
-          out.push({ to: w, key: "step_done", vars: { name: w.name, subject: ctx.subject.name, stepName: ctx.stepName(e.stepId) } });
-        }
-      }
+      const ownStep = ctx.stepRole?.(e.stepId) === "employee";
+      if (ownStep && st.recipients.includes("trackers")) for (const w of ctx.watchers ?? []) push(w, "step_done", vars(w.name));
+      for (const p of others(st, ownStep ? ["secretariat", "fixed"] : ["fixed"])) push(p, "step_done", vars(p.name));
     }
   }
   return out;

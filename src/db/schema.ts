@@ -16,6 +16,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -27,6 +28,7 @@ import type { ExportTemplate } from "@/lib/export/template";
 import type { UserGrants } from "@/lib/auth/permissions";
 import type { ExpiryRule } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
+import type { RecipientKind } from "@/lib/notifications/triggers";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -71,6 +73,9 @@ export const organizations = pgTable("organizations", {
   reminderPolicy: jsonb("reminder_policy").$type<ReminderPolicy>(),
   /** Weekly "waiting" summary to the organization's tracking users and admins. */
   weeklyDigest: boolean("weekly_digest").notNull().default(true),
+  /** Secretariat and bookkeeping addresses: recipients the e-mail triggers can choose (see triggers.ts). */
+  secretariatEmails: jsonb("secretariat_emails").$type<string[]>().notNull().default([]),
+  bookkeepingEmails: jsonb("bookkeeping_emails").$type<string[]>().notNull().default([]),
   ...timestamps,
 });
 
@@ -544,6 +549,22 @@ export const messageTemplates = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("message_templates_org_key_channel_uq").on(t.organizationId, t.key, t.channel)],
+);
+
+/** E-mail trigger settings (src/lib/notifications/triggers.ts). organizationId null = all organizations; an organization's row wins. */
+export const mailTriggers = pgTable(
+  "mail_triggers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    key: text("key").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    recipients: jsonb("recipients").$type<RecipientKind[]>().notNull().default([]),
+    fixedRecipients: jsonb("fixed_recipients").$type<{ name: string; email: string }[]>().notNull().default([]),
+    updatedBy: uuid("updated_by"),
+    ...timestamps,
+  },
+  (t) => [unique("mail_triggers_org_key_uq").on(t.organizationId, t.key).nullsNotDistinct()],
 );
 
 export const webhooks = pgTable("webhooks", {

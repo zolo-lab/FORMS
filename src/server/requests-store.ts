@@ -27,7 +27,6 @@ import {
   type EngineResult,
   type EngineStep,
 } from "@/lib/workflow/engine";
-import { renderDefault } from "@/lib/notifications/templates";
 import { listContacts, peopleForWorkflow } from "./people-store";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
@@ -35,6 +34,8 @@ import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeCampaign } from "@/lib/requests/campaign";
 import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
+import { triggersFor, type Triggers } from "./mail-triggers";
+import { addPeople } from "@/lib/notifications/triggers";
 import { COMPLETION_DOCS_KEY, completionMessage, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole, Workflow } from "@/lib/workflow/types";
@@ -160,10 +161,6 @@ export async function collectedAnswers(requestId: string, opts: { draftStepId?: 
   return out;
 }
 
-function inviteMessage(vars: { name: string; org: string; link: string; dueDate: string }) {
-  return renderDefault("step_invite", vars);
-}
-
 /**
  * Write an engine result: step rows, events, tokens + outbox rows for newly activated steps.
  * `before` is what was loaded, `result` the engine output.
@@ -238,6 +235,7 @@ async function persist(
   if (closed.length) await db.update(stepTokens).set({ revokedAt: now }).where(inArray(stepTokens.stepId, closed));
 
   // Tokens + outbox for newly activated steps that need an outside person.
+  let mail: Triggers | null = null;
   for (const id of activatedIds) {
     const s = result.steps.find((x) => x.id === id)!;
     if (s.status !== "active" || s.role === "requester") continue;
@@ -245,17 +243,23 @@ async function persist(
     await db.insert(stepTokens).values({ stepId: id, tokenHash: hash, expiresAt: req.expiresAt });
     tokensToLink.push({ stepId: id, token });
     const targets = deliveryTargets({ email: s.assigneeEmail, phone: s.assigneePhone });
-    if (targets.length) {
+    // A step that was sent back for correction gets the "returned" text with the reason, not the plain invitation.
+    const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason;
+    const key = returnReason ? "returned" : "step_invite";
+    mail ??= await triggersFor(req.organizationId);
+    if (targets.length && mail.trigger(key).enabled) {
       const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
+      const [pkg] = await db.select({ name: packageTemplates.name }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
       const vars = {
         name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
         org: org?.name ?? "",
+        form: pkg?.name ?? "",
+        subject: req.subjectName,
         link: `${appUrl()}/s/${token}`,
         dueDate: req.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(req.expiresAt) : "",
+        reason: returnReason ? String(returnReason) : undefined,
       };
-      // A step that was sent back for correction gets the "returned" text with the reason, not the plain invitation.
-      const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason;
-      const msg = returnReason ? renderDefault("returned", { ...vars, reason: String(returnReason) }) : inviteMessage(vars);
+      const msg = mail.render(key, vars);
       // Both channels when both are known: the e-mail and an SMS with the same link.
       await db.insert(notifications).values(
         targets.map((t) => ({
@@ -264,7 +268,7 @@ async function persist(
           stepId: id,
           channel: t.channel,
           to: t.to,
-          templateKey: returnReason ? "returned" : "step_invite",
+          templateKey: key,
           subject: t.channel === "email" ? msg.subject : null,
           body: msg.body,
         })),
@@ -545,7 +549,12 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
   if (!req) return;
   const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
   const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
+  const [pkg] = await db.select({ name: packageTemplates.name }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  const mail = await triggersFor(req.organizationId);
   const notices = statusNotices(evs, {
+    secretariat: mail.secretariat,
+    bookkeeping: mail.bookkeeping,
+    settings: { completed: mail.trigger("completed"), declined: mail.trigger("declined"), step_done: mail.trigger("step_done") },
     subject: { name: req.subjectName, email: req.subjectEmail, phone: req.subjectPhone },
     creator: creator ? { name: creator.name, email: creator.email } : null,
     stepName: (id) => ROLE_LABELS[(steps.find((x) => x.id === id)?.role ?? "employee") as StepRole],
@@ -553,7 +562,7 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
     watchers: evs.some((e) => e.type === "step_completed") ? await orgTrackers(req.organizationId) : [],
   });
   const rows = notices.flatMap((n) => {
-    const msg = renderDefault(n.key, { ...n.vars, org: org?.name ?? "" });
+    const msg = mail.render(n.key, { ...n.vars, org: org?.name ?? "", form: pkg?.name ?? "" });
     return deliveryTargets(n.to).map((t) => ({
       organizationId: req.organizationId,
       requestId,
@@ -576,15 +585,24 @@ export async function enqueueCompletionDocs(requestId: string) {
   if (!req) return;
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
-  const targets = completionTargets(pkg?.completionRecipients, [req.subjectEmail, creator?.email]);
+  const mail = await triggersFor(req.organizationId);
+  const t = mail.trigger(COMPLETION_DOCS_KEY);
+  if (!t.enabled) return;
+  const chosen = addPeople([], [
+    ...(t.recipients.includes("package") ? (pkg?.completionRecipients ?? []) : []),
+    ...(t.recipients.includes("secretariat") ? mail.secretariat : []),
+    ...(t.recipients.includes("bookkeeping") ? mail.bookkeeping : []),
+    ...(t.recipients.includes("fixed") ? t.fixedRecipients : []),
+  ]);
+  const targets = completionTargets(chosen, [req.subjectEmail, creator?.email]);
   if (!targets.length) return;
   const already = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.requestId, requestId), eq(notifications.templateKey, COMPLETION_DOCS_KEY)));
   if (already.length) return;
   const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
   await db.insert(notifications).values(
-    targets.map((t) => {
-      const m = completionMessage({ name: t.name, subject: req.subjectName, packageName: pkg?.name ?? "", org: org?.name ?? "", link: `${appUrl()}/admin/requests/${requestId}` });
-      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: t.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.body };
+    targets.map((p) => {
+      const m = completionMessage({ name: p.name, subject: req.subjectName, packageName: pkg?.name ?? "", org: org?.name ?? "", link: `${appUrl()}/admin/requests/${requestId}` }, mail.template(COMPLETION_DOCS_KEY));
+      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.body };
     }),
   );
   await kickDelivery();
