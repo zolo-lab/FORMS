@@ -3,7 +3,7 @@ import { allowedOrgs, linkOrg, publicFillPath, publicRole, publicStart, subjectF
 import { lockOrgFields, withOrgFields, withPrefill } from "@/lib/forms/prefill";
 import type { FormDefinition } from "@/lib/forms/schema";
 
-const def = (fields: { id: string; type: string; label: string }[]) =>
+const def = (fields: { id: string; type: string; label: string; prefill?: string }[]) =>
   ({ schemaVersion: 1, title: "t", pages: [{ id: "p", title: "", fields }] }) as unknown as FormDefinition;
 
 describe("form's public link", () => {
@@ -36,6 +36,17 @@ describe("form's public link", () => {
     ]);
     expect(subjectFromAnswers(d, { fn: "דנה", ln: "לוי", org: "פנימה", mail: "Dana@Example.test", tz: "000000018" }))
       .toEqual({ name: "דנה לוי", email: "dana@example.test", idNumber: "000000018" });
+  });
+
+  it("an external filler's form: the employee's name, not the employer, the organization field or the manager", () => {
+    const d = def([
+      { id: "company_name", type: "short_text", label: "שם המעביד", prefill: "org.name" },
+      { id: "boss_name", type: "short_text", label: "שם הממונה" },
+      { id: "fname", type: "short_text", label: "שם פרטי" },
+      { id: "lname", type: "short_text", label: "שם משפחה" },
+      { id: "email_address", type: "email", label: "כתובת דואר אלקטרוני" },
+    ]);
+    expect(subjectFromAnswers(d, { company_name: "שיבת ציון", boss_name: "רכז ארצנו", fname: "ישראל", lname: "בדיקה", email_address: "a@b.co" }).name).toBe("ישראל בדיקה");
   });
 
   it("falls back to the e-mail as the name when there is no name field", () => {
