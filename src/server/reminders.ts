@@ -2,7 +2,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
-import { renderDefault } from "@/lib/notifications/templates";
+import { triggersFor, type Triggers } from "./mail-triggers";
 import { canSendReminderNow, reminderDue } from "@/lib/workflow/reminders";
 import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
 import { deliveryTargets } from "@/lib/notifications/channels";
@@ -33,11 +33,14 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
   }
 
   let queued = 0;
+  const mailByOrg: Record<string, Triggers> = {};
   for (const { step, request, org, remindersEnabled } of open) {
     if (!remindersEnabled || step.role === "requester" || !step.activatedAt) continue;
     const targets = deliveryTargets({ email: step.assigneeEmail, phone: step.assigneePhone });
     if (!targets.length) continue;
     const policy = org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
+    const mail = (mailByOrg[org.id] ??= await triggersFor(org.id));
+    if (!mail.trigger("reminder").enabled) continue;
 
     const past = sentByStep.get(step.id) ?? [];
     if (!reminderDue({ activatedAt: step.activatedAt, sent: past.length, lastSentAt: past[0] ?? null }, policy, now)) continue;
@@ -45,7 +48,8 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
     // A second valid link, so a reminder never kills a tab the person already has open.
     const { token, hash } = createToken();
     await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
-    const msg = renderDefault("reminder", {
+    const msg = mail.render("reminder", {
+      subject: request.subjectName,
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,
@@ -85,6 +89,8 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
   if (!open.length) return { ok: false, message: "אין שלב פתוח שממתין לתזכורת" };
   const policy = open[0]!.org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
   if (!canSendReminderNow(now, policy)) return { ok: false, message: "עכשיו שעות שקט או שבת – התזכורת לא נשלחה" };
+  const mail = await triggersFor(open[0]!.org.id);
+  if (!mail.trigger("reminder").enabled) return { ok: false, message: "התזכורות כבויות בלוח הטריגרים של המיילים" };
   const last = await db
     .select({ at: notifications.createdAt })
     .from(notifications)
@@ -98,7 +104,8 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
     if (!targets.length) continue;
     const { token, hash } = createToken();
     await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
-    const msg = renderDefault("reminder", {
+    const msg = mail.render("reminder", {
+      subject: request.subjectName,
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,

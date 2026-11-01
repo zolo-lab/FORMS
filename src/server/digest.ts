@@ -8,6 +8,8 @@ import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { queryRequests } from "./dashboard-store";
 import { enqueue } from "./notifications";
+import { triggersFor } from "./mail-triggers";
+import { addPeople } from "@/lib/notifications/triggers";
 import { appUrl } from "./requests-store";
 
 const { organizations, users, userOrganizations, notifications } = schema;
@@ -35,7 +37,15 @@ export async function runWeeklyDigest(now = new Date(), opts: { force?: boolean 
       const mine = limits.filter((l) => l.userId === u.id);
       return mine.length === 0 || mine.some((l) => l.organizationId === org.id);
     }).filter((u) => !isPlaceholderEmail(u.email));
-    if (!to.length) continue;
+    const mail = await triggersFor(org.id);
+    const t = mail.trigger(DIGEST_KEY);
+    if (!t.enabled) continue;
+    const people = addPeople([], [
+      ...(t.recipients.includes("managers") ? to.map((u) => ({ name: u.name, email: u.email })) : []),
+      ...(t.recipients.includes("secretariat") ? mail.secretariat : []),
+      ...(t.recipients.includes("fixed") ? t.fixedRecipients : []),
+    ]);
+    if (!people.length) continue;
     const { rows } = await queryRequests({ org: org.id, status: "in_progress", page: 1 }, now, 500, null);
     const items = digestItems(
       rows.map<DigestItem>((r) => ({
@@ -46,8 +56,8 @@ export async function runWeeklyDigest(now = new Date(), opts: { force?: boolean 
       })),
     );
     if (!items.length) continue;
-    const msg = digestMessage(org.name, items, `${appUrl()}/admin/track?org=${org.id}`);
-    for (const u of to) await enqueue({ organizationId: org.id, to: u.email, templateKey: DIGEST_KEY, subject: msg.subject, body: msg.body });
+    const msg = digestMessage(org.name, items, `${appUrl()}/admin/track?org=${org.id}`, mail.template(DIGEST_KEY));
+    for (const u of people) await enqueue({ organizationId: org.id, to: u.email, templateKey: DIGEST_KEY, subject: msg.subject, body: msg.body });
     sent++;
   }
   return sent;

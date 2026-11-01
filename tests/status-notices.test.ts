@@ -48,3 +48,26 @@ describe("watchers (secretariats)", () => {
     expect(statusNotices([{ type: "step_completed", stepId: "appr" }], ctx2).map((x) => x.to.email)).toEqual(["m@x.org"]);
   });
 });
+
+describe("statusNotices with trigger settings", () => {
+  const base = { subject: { name: "דנה", email: "d@x.org" }, creator: { name: "רות", email: "r@x.org" }, stepName: () => "עובד", stepRole: () => "employee", secretariat: [{ name: "מזכירות", email: "s@x.org" }], bookkeeping: [{ name: "הנה\"ח", email: "b@x.org" }] };
+  it("a switched-off trigger sends nothing", () => {
+    expect(statusNotices([{ type: "request_completed" }], { ...base, settings: { completed: { enabled: false, recipients: ["employee"], fixedRecipients: [] } } })).toEqual([]);
+    expect(statusNotices([{ type: "step_completed", stepId: "e" }], { ...base, settings: { step_done: { enabled: false, recipients: ["creator"], fixedRecipients: [] } } })).toEqual([]);
+  });
+  it("chosen recipients: secretariat, bookkeeping and fixed addresses, each once", () => {
+    const n = statusNotices([{ type: "request_completed" }], {
+      ...base,
+      settings: { completed: { enabled: true, recipients: ["secretariat", "bookkeeping", "fixed"], fixedRecipients: [{ name: "שכר", email: "S@x.org" }, { name: "חשבות", email: "c@x.org" }] } },
+    });
+    expect(n.map((x) => x.to.email)).toEqual(["s@x.org", "b@x.org", "c@x.org"]);
+    expect(n[0]!.vars).toMatchObject({ name: "מזכירות", subject: " (דנה)" });
+  });
+  it("step done: secretariat only for the person's own step, fixed for every step", () => {
+    const settings = { step_done: { enabled: true, recipients: ["secretariat", "fixed"] as const, fixedRecipients: [{ name: "קבוע", email: "f@x.org" }] } };
+    const own = statusNotices([{ type: "step_completed", stepId: "e" }], { ...base, settings: { step_done: { ...settings.step_done, recipients: [...settings.step_done.recipients] } } });
+    expect(own.map((x) => x.to.email)).toEqual(["s@x.org", "f@x.org"]);
+    const other = statusNotices([{ type: "step_completed", stepId: "a" }], { ...base, stepRole: () => "approver", settings: { step_done: { ...settings.step_done, recipients: [...settings.step_done.recipients] } } });
+    expect(other.map((x) => x.to.email)).toEqual(["f@x.org"]);
+  });
+});

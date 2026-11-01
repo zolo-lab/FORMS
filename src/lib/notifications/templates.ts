@@ -2,7 +2,7 @@
 
 export const MAX_ATTEMPTS = 3;
 
-export type TemplateVars = Partial<Record<"name" | "link" | "org" | "dueDate" | "code" | "reason" | "subject" | "stepName", string>>;
+export type TemplateVars = Partial<Record<"name" | "link" | "org" | "dueDate" | "code" | "reason" | "subject" | "stepName" | "form" | "count" | "items", string>>;
 
 export interface MessageTemplate {
   subject: string;
@@ -38,6 +38,14 @@ export const DEFAULT_TEMPLATES: Record<string, MessageTemplate> = {
   step_done: {
     subject: "התקדמות בבקשה – {{subject}}",
     body: "שלום {{name}},\nהשלב \"{{stepName}}\" בבקשה של {{subject}} הושלם.\n{{org}}",
+  },
+  completion_docs: {
+    subject: "מסמכים חתומים: {{form}} – {{subject}}",
+    body: "שלום {{name}},\nכל השלבים ב\"{{form}}\" של {{subject}} הושלמו. המסמכים החתומים מצורפים.\nלצפייה בבקשה: {{link}}\n{{org}}",
+  },
+  weekly_digest: {
+    subject: "{{count}} בקשות ממתינות – {{org}}",
+    body: "שלום,\nאלה הבקשות של {{org}} שממתינות יותר מ-3 ימים:\n{{items}}\nלמסך המעקב: {{link}}",
   },
   otp: {
     subject: "קוד האימות שלך – {{org}}",
