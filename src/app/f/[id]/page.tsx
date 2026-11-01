@@ -16,7 +16,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
       <main className="mx-auto max-w-md px-4 py-16">
         <Card className="space-y-2 p-6 text-center">
           <h1 className="text-xl font-bold">{view.title}</h1>
-          <p className="text-muted-foreground">{view.reason === "not_public" ? "הטופס הזה מתחיל אצל מישהו אחר ולא נפתח למילוי בקישור." : "הטופס לא פתוח כרגע למילוי."}</p>
+          <p className="text-muted-foreground">{view.reason === "not_public" ? "הטופס הזה מתחיל אצל מישהו אחר ולא נפתח למילוי בקישור." : view.reason === "no_fields" ? "בשלב הראשון של הטופס אין שדות למילוי." : "הטופס לא פתוח כרגע למילוי."}</p>
         </Card>
       </main>
     );

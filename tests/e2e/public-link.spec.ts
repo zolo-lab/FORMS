@@ -13,7 +13,8 @@ test("a form's own link opens the form itself on its first step, for anyone", as
   // Anyone with the link, not logged in: straight to the form, no page of details before it.
   await context.clearCookies();
   await page.goto(href!);
-  await expect(page.getByRole("button", { name: "שליחה" }).first()).toBeVisible();
+  // The form itself (a form of several pages shows "הבא" first, the last one "שליחה").
+  await expect(page.getByRole("button", { name: /^(שליחה|הבא)$/ }).first()).toBeVisible();
   await expect(page.getByText("המשך למילוי")).toHaveCount(0);
   await expect(page.getByLabel("שם מלא *")).toHaveCount(0);
 });

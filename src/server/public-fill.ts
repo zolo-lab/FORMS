@@ -11,7 +11,7 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
-import { publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
+import { publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { getFile } from "./storage";
@@ -23,7 +23,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 
 export type PublicForm =
   | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; organizationId: string | null }
-  | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" };
+  | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" | "no_fields" };
 
 export async function publicForm(formId: string): Promise<PublicForm> {
   if (!UUID.test(formId)) return { ok: false, reason: "not_found" };
@@ -39,10 +39,12 @@ export async function publicForm(formId: string): Promise<PublicForm> {
   const start = publicStart(pkg?.workflow.steps ?? []);
   if (!pkg || pkg.archivedAt) return { ok: false, title: form.title, reason: "closed" };
   if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
-  const merged = mergedDefinitionForStep([{ title: form.title, definition: version.definition }], start.role);
-  const definition = roleView(merged, {}, start.role).definition;
+  const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
+  const role = publicRole(pkg.workflow.steps, (r) => viewFor(r).pages.length > 0);
+  if (!role) return { ok: false, title: form.title, reason: "no_fields" };
+  const definition = viewFor(role);
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
-  return { ok: true, formId, title: form.title, role: start.role, definition, pdf, packageId: pkg.id, organizationId: pkg.organizationId };
+  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, organizationId: pkg.organizationId };
 }
 
 /** The published form's own document, for the link's on-document view. */
@@ -58,7 +60,7 @@ export async function publicFormPdf(formId: string): Promise<Uint8Array | null> 
 export type PublicSubmitResult =
   | { ok: true; message?: string; waitingFor: string[]; completed: boolean }
   | { ok: false; errors: FieldErrors }
-  | { ok: false; error: "not_found" | "closed" | "not_public" | "no_organization" | "failed" };
+  | { ok: false; error: "not_found" | "closed" | "not_public" | "no_fields" | "no_organization" | "failed" };
 
 export async function publicSubmit(formId: string, input: Answers): Promise<PublicSubmitResult> {
   const view = await publicForm(formId);

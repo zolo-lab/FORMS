@@ -18,6 +18,19 @@ export function publicStart(steps: { role: StepRole }[]): PublicStart {
   return { ok: false, reason: "first_step_is_someone" };
 }
 
+/**
+ * The step the link opens on: the first step, unless it is a sender with nothing to fill and the employee comes next –
+ * then the employee's fields (as when the form is sent from the system, an empty sender step is passed at once).
+ * null when there is nothing to fill at all.
+ */
+export function publicRole(steps: { role: StepRole }[], hasFields: (role: "requester" | "employee") => boolean): "requester" | "employee" | null {
+  const start = publicStart(steps);
+  if (!start.ok) return null;
+  if (hasFields(start.role)) return start.role;
+  if (start.role === "requester" && steps[1]?.role === "employee" && hasFields("employee")) return "employee";
+  return null;
+}
+
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 /**

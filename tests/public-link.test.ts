@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { publicFillPath, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
+import { publicFillPath, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import type { FormDefinition } from "@/lib/forms/schema";
 
 const def = (fields: { id: string; type: string; label: string }[]) =>
@@ -15,6 +15,14 @@ describe("form's public link", () => {
     expect(publicStart([{ role: "employee" }, { role: "approver" }])).toEqual({ ok: true, role: "employee" });
     expect(publicStart([{ role: "approver" }])).toEqual({ ok: false, reason: "first_step_is_someone" });
     expect(publicStart([])).toEqual({ ok: false, reason: "no_steps" });
+  });
+
+  it("skips a sender with nothing to fill and opens on the employee who comes next", () => {
+    const steps = [{ role: "requester" as const }, { role: "employee" as const }];
+    expect(publicRole(steps, () => true)).toBe("requester");
+    expect(publicRole(steps, (r) => r === "employee")).toBe("employee");
+    expect(publicRole(steps, () => false)).toBeNull();
+    expect(publicRole([{ role: "requester" }, { role: "approver" }], (r) => r === "employee")).toBeNull();
   });
 
   it("takes the employee from what was filled: e-mail, ID, phone and the name fields", () => {
