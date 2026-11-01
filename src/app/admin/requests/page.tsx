@@ -154,7 +154,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <Label htmlFor="role">ממתין ל</Label>
           <Select id="role" name="role" defaultValue={filters.role ?? ""}>
             <option value="">הכול</option>
-            {Object.entries(ROLE_LABELS).map(([k, label]) => (
+            {Object.entries(ROLE_LABELS).filter(([k]) => k !== "unassigned").map(([k, label]) => (
               <option key={k} value={k}>
                 {label}
               </option>
@@ -270,7 +270,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                     <Badge tone={tone}>{label}</Badge>
                     {r.followUpPending && <span className="mt-1 block text-xs font-medium text-muted-foreground">ממתין: {r.followUpPending}</span>}
                   </td>
-                  <td className="px-3 py-2">{r.waitingFor.length ? r.waitingFor.map((w) => `${ROLE_LABELS[w.role as StepRole] ?? w.role}${w.name ? ` (${w.name})` : ""}`).join(", ") : "—"}</td>
+                  <td className="px-3 py-2">{r.waitingFor.length ? r.waitingFor.map((w) => (w.name ? w.name : (ROLE_LABELS[w.role as StepRole] ?? w.role))).join(", ") : "—"}</td>
                   <td className="px-3 py-2">{r.daysInStep ?? "—"}</td>
                   <td className="px-3 py-2">{r.progress.total ? `${r.progress.done}/${r.progress.total}` : "—"}</td>
                   <td className="px-3 py-2">{fmt.format(r.createdAt)}</td>

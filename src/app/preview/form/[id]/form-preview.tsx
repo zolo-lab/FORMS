@@ -21,7 +21,11 @@ export function FormPreview({ definition, pdf, steps, startWithAll = false }: { 
           </Select>
         </label>
       )}
-      <FormTestFill key={role} definition={shown} pdf={pdf} />
+      {shown.pages.length === 0 ? (
+        <p className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">אין בשלב הזה שדות למילוי. בחרו שלב אחר למעלה, או שייכו לו שדות ב&quot;סימון שדות לשלב&quot;.</p>
+      ) : (
+        <FormTestFill key={role} definition={shown} pdf={pdf} />
+      )}
     </div>
   );
 }

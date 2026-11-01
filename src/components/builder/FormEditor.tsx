@@ -55,6 +55,8 @@ export interface FormEditorProps {
     save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
     sendSettings?: React.ReactNode;
+    /** Open the sending settings (they were just saved, or failed). */
+    sendSettingsOpen?: boolean;
   };
 }
 
@@ -215,6 +217,16 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     } else if (loc.index < page.fields.length - 1) commit(moveField(def, id, { page: loc.page, index: loc.index + 2 }));
     else if (loc.page < def.pages.length - 1) commit(moveField(def, id, { page: loc.page + 1, index: 0 }));
   };
+
+  // A step whose role is about to change takes its fields along on save: check the steps as if it already had.
+  const pendingMoves = new Map(stepWork.filter((d) => d.origRole && d.origRole !== d.role).map((d) => [d.origRole!, d.role] as const));
+  // Leaving the page with unsaved steps asks first.
+  useEffect(() => {
+    if (!stepsDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [stepsDirty]);
 
   /** Steps edits: every step that goes to a person keeps its own role; roles still held by fields are not reused. */
   function changeSteps(next: EditorDraft[]) {
@@ -469,7 +481,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 onChange={changeSteps}
                 contacts={flow.contacts}
                 groups={flow.groups}
-                emailFields={emailFieldsOf(def)}
+                emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
                 dirty={stepsDirty}
                 state={stepState}
                 onSave={() => void saveSteps()}
@@ -477,7 +489,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               />
             </section>
             {flow.sendSettings && (
-              <details className="rounded-lg border bg-card p-4">
+              <details className="rounded-lg border bg-card p-4" open={flow.sendSettingsOpen}>
                 <summary className="cursor-pointer font-semibold">הגדרות שליחה: מקבלי המסמכים, תזכורות ותוקף הקישורים</summary>
                 <div className="mt-4">{flow.sendSettings}</div>
               </details>

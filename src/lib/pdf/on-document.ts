@@ -94,7 +94,9 @@ export function inputAttrs(field: FormField): { type: string; inputMode?: "numer
     case "email": return { type: "email", inputMode: "email", dir: "ltr" };
     case "number": case "currency": case "percent": return { type: "text", inputMode: "decimal", dir: "ltr" };
     // Text is written right to left (the boxes sit on a page laid out left to right), so "קא'קא'" keeps its punctuation in place.
-    default: return field.validation?.charset === "digits" ? { type: "text", inputMode: "numeric", dir: "ltr" } : { type: "text", dir: "rtl" };
+    default:
+      if (field.validation?.charset === "digits") return { type: "text", inputMode: "numeric", dir: "ltr" };
+      return { type: "text", dir: field.validation?.charset === "english" ? "ltr" : "rtl" };
   }
 }
 

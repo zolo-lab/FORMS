@@ -21,8 +21,10 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   // Every step that goes to a person has its own role, so every step can be picked for a field ("שלב 2", "שלב 3"…).
   // Older forms had steps sharing a role: give them their own once, here.
   const stored = pkg?.pkg.workflow.steps ?? [];
-  const drafts = assignRoles(stored.map(draftOf));
-  if (drafts.some((d, i) => d.role !== stored[i]!.role)) await setWorkflow(pkgId, { steps: drafts.map((d, i) => stepFromDraft(d, i)) });
+  // Step 1 is always the sender: a workflow without one gets it in front.
+  const loaded = stored.map(draftOf);
+  const drafts = assignRoles(loaded[0]?.who === "requester" ? loaded : [{ who: "requester" as const, role: "requester" as const }, ...loaded.filter((d) => d.who !== "requester")]);
+  if (drafts.length !== stored.length || drafts.some((d, i) => d.role !== stored[i]!.role)) await setWorkflow(pkgId, { steps: drafts.map((d, i) => stepFromDraft(d, i)) });
 
   const sendSettings = await FlowSettings({ id: pkgId, query, formId: id, settingsOnly: true });
   const initialTab = tab === "pdf" || tab === "steps" ? tab : "edit";
@@ -39,6 +41,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         groups: groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` })),
         save: saveStepsAction,
         sendSettings,
+        sendSettingsOpen: !!(query.saved === "settings" || query.saved === "org" || query.settingsError || query.error),
       }}
       initial={data.version.definition}
       initialVersion={data.version.version}

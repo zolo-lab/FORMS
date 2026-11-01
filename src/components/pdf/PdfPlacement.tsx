@@ -544,8 +544,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         inGroup ? ROLE_OVERLAY[shownRole(s)].boxActive : ROLE_OVERLAY[shownRole(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                         s.guessed && "border-dashed",
-                        viewAs && roleOf(s) !== "none" && roleOf(s) !== viewAs && !inGroup && "opacity-25",
-                        viewAs && roleOf(s) === viewAs && "ring-2 ring-primary ring-offset-1",
+                        viewAs && shownRole(s) !== "none" && shownRole(s) !== viewAs && !inGroup && "opacity-25",
+                        viewAs && shownRole(s) === viewAs && "ring-2 ring-primary ring-offset-1",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
