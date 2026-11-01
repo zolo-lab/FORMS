@@ -3,7 +3,7 @@ import { and, eq, gte, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeGrants, normalizeRole } from "@/lib/auth/permissions";
 import { isPlaceholderEmail } from "@/lib/notifications/channels";
-import { DIGEST_KEY, digestItems, digestMessage, isDigestTime, type DigestItem } from "@/lib/notifications/digest";
+import { DIGEST_KEY, digestItems, digestLines, isDigestTime, type DigestItem } from "@/lib/notifications/digest";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { queryRequests } from "./dashboard-store";
@@ -56,8 +56,8 @@ export async function runWeeklyDigest(now = new Date(), opts: { force?: boolean 
       })),
     );
     if (!items.length) continue;
-    const msg = digestMessage(org.name, items, `${appUrl()}/admin/track?org=${org.id}`, mail.template(DIGEST_KEY));
-    for (const u of people) await enqueue({ organizationId: org.id, to: u.email, templateKey: DIGEST_KEY, subject: msg.subject, body: msg.body });
+    const msg = mail.render(DIGEST_KEY, { org: org.name, count: String(items.length), items: digestLines(items), link: `${appUrl()}/admin/track?org=${org.id}` });
+    for (const u of people) await enqueue({ organizationId: org.id, to: u.email, templateKey: DIGEST_KEY, subject: msg.subject, body: msg.text, html: msg.html });
     sent++;
   }
   return sent;

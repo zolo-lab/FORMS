@@ -268,7 +268,8 @@ async function persist(
           to: t.to,
           templateKey: key,
           subject: t.channel === "email" ? msg.subject : null,
-          body: msg.body,
+          body: t.channel === "email" ? msg.text : msg.body,
+          html: t.channel === "email" ? msg.html : null,
         })),
       );
       await kickDelivery();
@@ -370,7 +371,7 @@ async function notifySent(requestId: string, steps: EngineStep[]) {
   await db.insert(notifications).values(
     to.map((p) => {
       const m = mail.render("sent_to_creator", { ...common, name: p.name, stepName: waiting.join(", ") || "—", link: `${appUrl()}/admin/requests/${requestId}` });
-      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: "sent_to_creator", subject: m.subject, body: m.body };
+      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: "sent_to_creator", subject: m.subject, body: m.text, html: m.html };
     }),
   );
   await kickDelivery();
@@ -595,7 +596,8 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
       to: t.to,
       templateKey: n.key,
       subject: t.channel === "email" ? msg.subject : null,
-      body: msg.body,
+      body: t.channel === "email" ? msg.text : msg.body,
+      html: t.channel === "email" ? msg.html : null,
     }));
   });
   if (rows.length) {
@@ -626,7 +628,7 @@ export async function enqueueCompletionDocs(requestId: string) {
   await db.insert(notifications).values(
     targets.map((p) => {
       const m = mail.render(COMPLETION_DOCS_KEY, { ...common, name: p.name, link: `${appUrl()}/admin/requests/${requestId}` });
-      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.body };
+      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.text, html: m.html };
     }),
   );
   await kickDelivery();

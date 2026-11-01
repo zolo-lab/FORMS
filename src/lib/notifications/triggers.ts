@@ -5,6 +5,7 @@
  * Pure, unit tested; the DB side is `src/server/mail-triggers.ts`.
  */
 import { DEFAULT_TEMPLATES, renderTemplate, type MessageTemplate } from "./templates";
+import { DEFAULT_HTML, htmlToText, looksLikeHtml, renderHtml } from "./email-design";
 import { DEFAULT_SUMMARY_SCHEDULE, parseSchedule, type SummarySchedule } from "./open-summary";
 
 export type RecipientKind = "signer" | "employee" | "creator" | "trackers" | "managers" | "secretariat" | "bookkeeping" | "package" | "fixed";
@@ -61,7 +62,7 @@ export const SAMPLE_VARS: Record<string, string> = {
   org: "עמותת הדוגמה",
   form: "קליטת עובד",
   subject: "דנה כהן",
-  link: "https://gybs-forms.vercel.app/s/…",
+  link: "https://gybs-forms.vercel.app/s/sample-link-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd",
   dueDate: "15.11.2026",
   reason: "חסר צילום ת\"ז",
   stepName: "העובד",
@@ -142,21 +143,41 @@ export interface TemplateRow {
   body: string;
 }
 
-/** The text that applies: this organization's, else the all-organizations one, else the built-in default. */
-export function effectiveTemplate(key: string, rows: TemplateRow[], organizationId: string | null): MessageTemplate & { source: "default" | "all" | "org" } {
+export interface EmailTemplate extends MessageTemplate {
+  /** The designed HTML (with {{variables}}); the plain `body` is kept for SMS. */
+  html?: string;
+}
+
+/** The text that applies: this organization's, else the all-organizations one, else the built-in default (with its design). */
+export function effectiveTemplate(key: string, rows: TemplateRow[], organizationId: string | null): EmailTemplate & { source: "default" | "all" | "org" } {
   const own = organizationId ? rows.find((r) => r.key === key && r.organizationId === organizationId) : undefined;
   const all = rows.find((r) => r.key === key && r.organizationId === null);
   const row = triggerDef(key)?.locked ? undefined : (own ?? all);
   const def = DEFAULT_TEMPLATES[key];
   if (!row) {
     if (!def) throw new Error(`unknown message template: ${key}`);
-    return { ...def, source: "default" };
+    return { ...def, ...(DEFAULT_HTML[key] ? { html: DEFAULT_HTML[key] } : {}), source: "default" };
   }
-  return { subject: row.subject ?? def?.subject ?? "", body: row.body, source: own ? "org" : "all" };
+  const source = own ? "org" : "all";
+  const subject = row.subject ?? def?.subject ?? "";
+  // Saved from the panel as HTML: the e-mail is that design, SMS keeps the plain default text.
+  if (looksLikeHtml(row.body)) return { subject, body: def?.body ?? htmlToText(row.body), html: row.body, source };
+  return { subject, body: row.body, source };
 }
 
-export function renderMessage(t: MessageTemplate, vars: Record<string, string | undefined>): MessageTemplate {
-  return { subject: renderTemplate(t.subject, vars), body: renderTemplate(t.body, vars) };
+export interface RenderedMessage {
+  subject: string;
+  /** Plain text for SMS. */
+  body: string;
+  /** The e-mail: its HTML (null = build a simple one from `text`) and its plain-text part. */
+  html: string | null;
+  text: string;
+}
+
+export function renderMessage(t: EmailTemplate, vars: Record<string, string | undefined>): RenderedMessage {
+  const body = renderTemplate(t.body, vars);
+  const html = t.html ? renderHtml(t.html, vars) : null;
+  return { subject: renderTemplate(t.subject, vars), body, html, text: html ? htmlToText(html) : body };
 }
 
 /** Adds people without repeating an address (case-insensitive); entries without an address are dropped. */
@@ -211,7 +232,7 @@ export function parseTemplateForm(key: string, subject: string, body: string): T
   const s = subject.replace(/\s+/g, " ").trim();
   const b = body.replace(/\r\n/g, "\n").trim();
   if (!s || !b) return { ok: false, error: "empty" };
-  if (s.length > 200 || b.length > 5000) return { ok: false, error: "too_long" };
+  if (s.length > 200 || b.length > 30000) return { ok: false, error: "too_long" };
   return { ok: true, value: { subject: s, body: b } };
 }
 
