@@ -3,6 +3,7 @@ import { logout } from "../login/actions";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { authDisabled } from "@/lib/auth/open-mode";
+import { devLoginEnabled } from "@/lib/auth/dev-login";
 import { canTrack, isAdmin, hasGrant, isTrackOnly } from "@/lib/auth/permissions";
 import { currentUser } from "@/server/users-store";
 import { queryRequests } from "@/server/dashboard-store";
@@ -45,10 +46,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               { href: "/admin/settings/webhooks", label: "Webhooks" },
               { href: "/admin/settings/api-keys", label: "מפתחות API" },
             ] },
+            { title: "בדיקות", items: [
+              { href: "/admin/mail", label: "מרכז מיילים" },
+              ...(devLoginEnabled() ? [{ href: "/dev-login", label: "כניסה כמשתמש לבדיקה" }] : []),
+            ] },
           ] : []}
         />
         {authDisabled() ? (
-          <span className="ms-auto shrink-0 rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
+          <span className="ms-auto flex shrink-0 items-center gap-2">
+            <span className="rounded-md bg-warning/15 px-2 py-1 text-xs">מצב פתוח: ללא סיסמה (זמני)</span>
+            <Link href="/dev-login" className="text-xs underline underline-offset-2">החלפת משתמש</Link>
+          </span>
         ) : (
           <form action={logout} className="ms-auto flex shrink-0 items-center gap-2">
             {user && <span className="hidden text-xs text-muted-foreground sm:inline">{user.name}</span>}
@@ -59,6 +67,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {acting && user && (
         <div className="flex flex-wrap items-center gap-3 border-b bg-warning/15 px-4 py-1.5 text-sm" role="status">
           <span>מחובר/ת כ-{user.name} ({user.email})</span>
+          {devLoginEnabled() && <Link href="/dev-login" className="underline underline-offset-2">החלפת משתמש</Link>}
           <form action={stopImpersonatingAction}>
             <SubmitButton variant="outline" size="sm">חזרה למנהל</SubmitButton>
           </form>
