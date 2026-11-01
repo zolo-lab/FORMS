@@ -161,12 +161,13 @@ export function FormRenderer({
 
       {!readonly && !cardMode && (
         <div className="flex justify-between gap-2 border-t pt-4">
-          {wizard && prev !== null ? <Button variant="outline" onClick={() => go(prev)}>הקודם</Button> : <span />}
+          {/* The step forward ("הבא" / "שליחה") at the start of the line – the right side in Hebrew; "הקודם" at the end. */}
           {lastStep ? (
-            onSubmit && <Button disabled={submitting} onClick={handleSubmit}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button>
+            onSubmit ? <Button className="min-w-32" disabled={submitting} onClick={handleSubmit}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button> : <span />
           ) : (
-            <Button onClick={handleNext}>הבא</Button>
+            <Button className="min-w-32" onClick={handleNext}>הבא</Button>
           )}
+          {wizard && prev !== null ? <Button variant="outline" onClick={() => go(prev)}>הקודם</Button> : <span />}
         </div>
       )}
     </div>

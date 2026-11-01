@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { FormRenderer } from "@/components/forms/FormRenderer";
+import { ViewToggle, useFillView } from "@/components/forms/ViewToggle";
 import { OnDocumentFill } from "@/components/pdf/OnDocumentFill";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
 import type { Answers } from "@/lib/forms/conditions";
@@ -22,7 +22,7 @@ export interface TestFillPdf {
  */
 export function FormTestFill({ definition, pdf }: { definition: FormDefinition; pdf?: TestFillPdf }) {
   const onDocument = !!pdf && pdf.mapping.stamps.length > 0;
-  const [mode, setMode] = useState<"document" | "form">(onDocument ? "document" : "form");
+  const [mode, setMode] = useFillView(onDocument);
   const [answers, setAnswers] = useState<Answers>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [done, setDone] = useState<Answers | null>(null);
@@ -53,10 +53,8 @@ export function FormTestFill({ definition, pdf }: { definition: FormDefinition; 
   return (
     <div className="space-y-4">
       {onDocument && (
-        <div role="group" aria-label="אופן המילוי" className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">מילוי:</span>
-          <Button size="sm" variant={mode === "document" ? "default" : "outline"} onClick={() => setMode("document")}>על גבי המסמך</Button>
-          <Button size="sm" variant={mode === "form" ? "default" : "outline"} onClick={() => setMode("form")}>טופס</Button>
+        <div className="flex justify-end">
+          <ViewToggle view={mode} onChange={setMode} />
         </div>
       )}
       {mode === "document" && pdf ? (

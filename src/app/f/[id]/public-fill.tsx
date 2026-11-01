@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { OnDocumentFill } from "@/components/pdf/OnDocumentFill";
+import { ViewToggle, useFillView } from "@/components/forms/ViewToggle";
 import type { Answers } from "@/lib/forms/conditions";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import type { FormDefinition } from "@/lib/forms/schema";
@@ -15,7 +15,7 @@ type Done = { message?: string; waitingFor: string[]; completed: boolean };
 /** The form from its own link: the first step's fields, on the document or as a form, and "שליחה" opens the request. */
 export function PublicFill({ formId, definition, role, pdf, lookups }: { formId: string; definition: FormDefinition; role: "requester" | "employee"; pdf?: { url: string; mapping: PdfMapping }; lookups?: Lookups }) {
   const onDocument = !!pdf && pdf.mapping.stamps.length > 0;
-  const [mode, setMode] = useState<"document" | "form">(onDocument ? "document" : "form");
+  const [mode, setMode] = useFillView(onDocument);
   const [answers, setAnswers] = useState<Answers>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [done, setDone] = useState<Done | null>(null);
@@ -51,10 +51,8 @@ export function PublicFill({ formId, definition, role, pdf, lookups }: { formId:
   return (
     <div className="space-y-4">
       {onDocument && (
-        <div role="group" aria-label="אופן המילוי" className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">מילוי:</span>
-          <Button size="sm" variant={mode === "document" ? "default" : "outline"} onClick={() => setMode("document")}>על גבי המסמך</Button>
-          <Button size="sm" variant={mode === "form" ? "default" : "outline"} onClick={() => setMode("form")}>טופס</Button>
+        <div className="flex justify-end">
+          <ViewToggle view={mode} onChange={setMode} />
         </div>
       )}
       {failed && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{failed}</p>}
