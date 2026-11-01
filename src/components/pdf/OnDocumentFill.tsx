@@ -2,6 +2,10 @@
 import type { FilledItem } from "@/lib/forms/role-view";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SignaturePicker } from "@/components/forms/fields/signature";
+import { FormRenderer } from "@/components/forms/FormRenderer";
+import type { UploadFn } from "@/components/forms/fields/types";
+import type { Lookups } from "@/lib/forms/lookups";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Answers } from "@/lib/forms/conditions";
@@ -13,7 +17,7 @@ import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
 import { withCopies } from "@/lib/forms/copy";
 import { withDefaults } from "@/lib/forms/defaults";
-import { cellRef, inputAttrs, isLockedOnDocument, readCheck, readText, setStampValue, simpleStamps, stampField, stampValue, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { offDocumentFields, cellRef, inputAttrs, isLockedOnDocument, readCheck, readText, setStampValue, simpleStamps, stampField, stampValue, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
 import { PageCanvas } from "./PageCanvas";
 import { usePdfDocument } from "./usePdfDocument";
@@ -37,9 +41,12 @@ interface Props {
   filled?: FilledItem[];
   /** More buttons of this step (e.g. "דחייה"), on the same line as "שליחה", next to it. */
   actions?: ReactNode;
+  /** For the fields asked after the document (attachments, option lists). */
+  lookups?: Lookups;
+  onUpload?: UploadFn;
 }
 
-function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "role" | "onSubmit" | "onErrors">) {
+function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "role" | "onSubmit" | "onErrors" | "lookups" | "onUpload">) {
   const { doc, error } = usePdfDocument({ url: pdf.url });
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -156,12 +163,18 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 }
 
 /** Fill the form directly on the PDF pages. Shows how many required fields remain and jumps to the next one. */
-export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled, actions }: Props) {
+export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled, actions, lookups, onUpload }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Default values show on the document; setField keeps them in the answers it passes up.
   const answers = useMemo(() => withCopies(definition, withDefaults(definition, rawAnswers, today)), [definition, rawAnswers, today]);
   const result = useMemo(() => validateAnswers(definition, answers, { role }), [definition, answers, role]);
   const remaining = Object.keys(result.errors).length;
+  // Fields with no place on the document (e.g. "צילום ת.ז."): asked in a list after the pages, same answers.
+  const extra = useMemo(() => {
+    const offEach = pdfs.map((p) => new Set(offDocumentFields(p.mapping, definition).map((f) => f.id)));
+    const off = definition.pages.flatMap((p) => p.fields).filter((f) => offEach.length > 0 && offEach.every((ids) => ids.has(f.id)));
+    return off.length ? { ...definition, settings: { ...definition.settings, layout: "single" as const }, pages: [{ id: "off-document", title: "", fields: off }] } : null;
+  }, [pdfs, definition]);
   const [busy, setBusy] = useState(false);
 
   function goNext() {
@@ -169,7 +182,11 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
     if (!key) return;
     const [firstId, row, col] = key.split(".");
     const sel = row !== undefined && col !== undefined ? `[data-field-id="${firstId}[${row}].${col}"]` : `[data-field-id="${firstId}"]`;
-    const el = document.querySelector<HTMLElement>(sel) ?? document.querySelector<HTMLElement>(`[data-field-id^="${firstId}["]`) ?? document.querySelector<HTMLElement>(`[data-field-id="${firstId}"]`);
+    const el =
+      document.querySelector<HTMLElement>(sel) ??
+      document.querySelector<HTMLElement>(`[data-field-id^="${firstId}["]`) ??
+      document.querySelector<HTMLElement>(`[data-field-id="${firstId}"]`) ??
+      document.getElementById(`f-${firstId}`);
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
     el?.focus({ preventScroll: true });
     onErrors(result.errors);
@@ -190,6 +207,15 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
       {pdfs.map((p) => (
         <PdfPages key={p.url} pdf={p} definition={definition} answers={answers} onChange={onChange} errors={errors} filled={filled} />
       ))}
+      {extra && (
+        <Card className="space-y-3 p-4" aria-labelledby="off-doc-title">
+          <div>
+            <h2 id="off-doc-title" className="font-semibold">עוד פרטים למילוי</h2>
+            <p className="text-sm text-muted-foreground">אין להם מקום על המסמך, והם נשלחים יחד איתו.</p>
+          </div>
+          <FormRenderer definition={extra} answers={rawAnswers} onChange={onChange} errors={errors} role={role} lookups={lookups} onUpload={onUpload} fieldsOnly />
+        </Card>
+      )}
       {/* Sending comes after the document, at the start of the line (the right side in Hebrew), and stays in reach. */}
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t bg-background/95 py-3 backdrop-blur">
         <Button className="min-w-32" disabled={busy} aria-busy={busy || undefined} onClick={submit}>{busy ? "שולח…" : "שליחה"}</Button>

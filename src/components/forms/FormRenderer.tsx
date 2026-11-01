@@ -35,10 +35,12 @@ export interface FormRendererProps {
   today?: string;
   /** More buttons of this step (e.g. "דחייה"), on the same line as "שליחה", next to it. */
   actions?: ReactNode;
+  /** Only the fields: no page navigation, sending or summary alert (used inside another flow, e.g. after the document). */
+  fieldsOnly?: boolean;
 }
 
 export function FormRenderer({
-  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition, actions,
+  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition, actions, fieldsOnly = false,
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
@@ -159,11 +161,11 @@ export function FormRenderer({
         </section>
       ))}
 
-      {!cardMode && Object.keys(errors).length > 0 && (
+      {!cardMode && !fieldsOnly && Object.keys(errors).length > 0 && (
         <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש שדות שדורשים תיקון</p>
       )}
 
-      {!readonly && !cardMode && (
+      {!readonly && !cardMode && !fieldsOnly && (
         <div className="flex justify-between gap-2 border-t pt-4">
           {/* The step forward ("הבא" / "שליחה") at the start of the line – the right side in Hebrew; "הקודם" at the end. */}
           {lastStep ? (
