@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { authDisabled } from "@/lib/auth/open-mode";
-import { devLoginAllows, devLoginEnabled } from "@/lib/auth/dev-login";
+import { devLoginAllows, devLoginEnabled, devSignAllows } from "@/lib/auth/dev-login";
+import { createToken } from "@/lib/auth/tokens";
+import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { RETURN_COOKIE, SESSION_COOKIE, SESSION_TTL_MS, createUserSessionToken } from "@/lib/auth/session";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -30,4 +32,30 @@ export async function devLoginAsManagerAction() {
   jar.delete(SESSION_COOKIE);
   jar.delete(RETURN_COOKIE);
   redirect("/admin/requests");
+}
+
+/**
+ * "כניסה וחתימה" for someone who is not a user (the employee, an approver by e-mail): opens their waiting step with a
+ * fresh link of its own, like a reminder does, so the link already sent by mail keeps working. The one-time code is
+ * skipped: on the test screen there is no mailbox to read it from.
+ */
+export async function devSignAsAction(fd: FormData) {
+  if (!devLoginEnabled()) redirect("/login");
+  const stepId = String(fd.get("stepId") ?? "");
+  const [row] = UUID.test(stepId)
+    ? await db
+        .select({ step: schema.signingSteps, request: schema.requests })
+        .from(schema.signingSteps)
+        .innerJoin(schema.requests, eq(schema.requests.id, schema.signingSteps.requestId))
+        .where(eq(schema.signingSteps.id, stepId))
+    : [];
+  const secret = process.env.SESSION_SECRET;
+  const waiting = row && ["active", "in_progress"].includes(row.step.status) && ["in_progress", "returned"].includes(row.request.status);
+  if (!row || !waiting || !secret || !devSignAllows(row.step.assigneeEmail)) redirect("/dev-login?error=step");
+  const { token, hash } = createToken();
+  await db.insert(schema.stepTokens).values({ stepId: row.step.id, tokenHash: hash, expiresAt: row.request.expiresAt });
+  if (row.step.otpRequired) {
+    (await cookies()).set(otpCookieName(row.step.id), otpCookieValue(secret, row.step.id, Date.now() + OTP_COOKIE_TTL_MS), { ...cookieOpts, maxAge: OTP_COOKIE_TTL_MS / 1000 });
+  }
+  redirect(`/s/${token}`);
 }

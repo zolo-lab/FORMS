@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { asc } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authDisabled } from "@/lib/auth/open-mode";
-import { DEV_LOGIN_GROUP_LABELS, devLoginAllows, devLoginEnabled, devLoginGroup, type DevLoginGroup } from "@/lib/auth/dev-login";
-import { devLoginAction, devLoginAsManagerAction } from "./actions";
+import { DEV_LOGIN_GROUP_LABELS, devLoginAllows, devLoginEnabled, devLoginGroup, devSignAllows, type DevLoginGroup } from "@/lib/auth/dev-login";
+import { devLoginAction, devLoginAsManagerAction, devSignAsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +17,64 @@ export default async function DevLoginPage({ searchParams }: { searchParams: Pro
   const { error } = await searchParams;
   const users = (await db.select().from(schema.users).orderBy(asc(schema.users.name))).filter((u) => devLoginAllows(u));
   const open = authDisabled();
+  // Everyone a request is waiting for right now who signs through a link (the employee, an approver by e-mail…).
+  // Steps of users are reached by entering as the user (their "לטיפולי"), so they are listed below, not here.
+  const userEmails = new Set(users.map((u) => u.email.toLowerCase()));
+  const waiting = (
+    await db
+      .select({ step: schema.signingSteps, request: schema.requests, pkg: schema.packageTemplates.name })
+      .from(schema.signingSteps)
+      .innerJoin(schema.requests, eq(schema.requests.id, schema.signingSteps.requestId))
+      .innerJoin(schema.packageTemplates, eq(schema.packageTemplates.id, schema.requests.packageTemplateId))
+      .where(and(inArray(schema.signingSteps.status, ["active", "in_progress"]), inArray(schema.requests.status, ["in_progress", "returned"]), ne(schema.signingSteps.role, "requester")))
+      .orderBy(desc(schema.signingSteps.activatedAt))
+      .limit(60)
+  ).filter((w) => devSignAllows(w.step.assigneeEmail) && !userEmails.has((w.step.assigneeEmail ?? "").toLowerCase()));
+  const people = new Map<string, typeof waiting>();
+  for (const w of waiting) {
+    const key = (w.step.assigneeEmail ?? w.step.assigneePhone ?? w.step.assigneeName ?? w.step.id).toLowerCase();
+    people.set(key, [...(people.get(key) ?? []), w]);
+  }
   return (
     <main className="mx-auto max-w-xl space-y-6 px-4 py-10">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">כניסה כמשתמש לבדיקה</h1>
         <p className="text-sm text-muted-foreground">סביבת בדיקה בלבד, בלי סיסמה. בחרו מי אתם עכשיו כדי לעבור על שרשרת החתימות מהצד שלו. בכל רגע אפשר לחזור לכאן מ&quot;החלפת משתמש&quot; בראש המסך.</p>
       </header>
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">אי אפשר להיכנס כמשתמש הזה.</p>}
+      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error === "step" ? "המסמך כבר לא ממתין לחתימה (נחתם, בוטל או פג תוקף)." : "אי אפשר להיכנס כמשתמש הזה."}</p>}
+
+      {people.size > 0 && (
+        <section className="space-y-2" aria-labelledby="g-signers">
+          <h2 id="g-signers" className="text-sm font-medium text-muted-foreground">ממתינים לחתימה עכשיו</h2>
+          <p className="text-xs text-muted-foreground">מי שהטופס נשלח אליו (עובד, גורם במייל). הכניסה פותחת את המסמך שלו למילוי ולחתימה, בלי קוד חד-פעמי. הקישור שנשלח אליו במייל ממשיך לעבוד.</p>
+          <ul className="space-y-2">
+            {[...people.values()].map((list) => {
+              const first = list[0]!.step;
+              return (
+                <li key={first.id}>
+                  <Card className="space-y-2 px-4 py-3">
+                    <p className="min-w-0">
+                      <span className="block truncate font-medium">{first.assigneeName || first.assigneeEmail || first.assigneePhone}</span>
+                      {first.assigneeEmail && first.assigneeEmail !== first.assigneeName && <bdi dir="ltr" className="block truncate text-xs text-muted-foreground">{first.assigneeEmail}</bdi>}
+                    </p>
+                    <ul className="space-y-1">
+                      {list.map((w) => (
+                        <li key={w.step.id}>
+                          <form action={devSignAsAction} className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-t pt-2 text-sm">
+                            <input type="hidden" name="stepId" value={w.step.id} />
+                            <span className="min-w-0 truncate">{w.pkg} · {w.request.subjectName}</span>
+                            <Button type="submit" size="sm" aria-label={`כניסה וחתימה – ${w.pkg} – ${w.request.subjectName}`}>כניסה וחתימה</Button>
+                          </form>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {open && (
         <section className="space-y-2" aria-labelledby="g-system">

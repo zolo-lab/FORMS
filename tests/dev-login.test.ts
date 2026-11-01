@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { devLoginAllows, devLoginEnabled, devLoginGroup } from "@/lib/auth/dev-login";
+import { devLoginAllows, devLoginEnabled, devLoginGroup, devSignAllows } from "@/lib/auth/dev-login";
 
 describe("test login screen", () => {
   const real = { email: "secretary@misrad.org.il", active: true };
@@ -20,6 +20,13 @@ describe("test login screen", () => {
     expect(devLoginAllows(real, { DEMO_LOGIN: "1" })).toBe(false);
     expect(devLoginAllows(demo, { DEMO_LOGIN: "1" })).toBe(true);
     expect(devLoginAllows(demo, {})).toBe(false);
+  });
+
+  it("opens a signer's waiting step on the same terms", () => {
+    expect(devSignAllows("employee@gmail.com", { AUTH_DISABLED: "1" })).toBe(true);
+    expect(devSignAllows("employee@gmail.com", { DEMO_LOGIN: "1" })).toBe(false);
+    expect(devSignAllows("employee@example.test", { DEMO_LOGIN: "1" })).toBe(true);
+    expect(devSignAllows(null, { DEMO_LOGIN: "1" })).toBe(false);
   });
 
   it("groups users by what they do", () => {

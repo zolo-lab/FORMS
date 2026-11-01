@@ -19,6 +19,12 @@ export function devLoginAllows(user: { email: string; active: boolean }, env: En
   return env.DEMO_LOGIN === "1" && isDemoAddress(user.email);
 }
 
+/** May this person's waiting step be opened from the test login screen? Same rule, by the address the step goes to. */
+export function devSignAllows(email: string | null | undefined, env: Env = process.env): boolean {
+  if (authDisabled(env)) return true;
+  return env.DEMO_LOGIN === "1" && !!email && isDemoAddress(email);
+}
+
 export type DevLoginGroup = "admin" | "manager" | "track";
 
 export const DEV_LOGIN_GROUP_LABELS: Record<DevLoginGroup, string> = {
