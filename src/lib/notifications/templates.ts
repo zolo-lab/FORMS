@@ -15,6 +15,10 @@ export function renderTemplate(text: string, vars: TemplateVars): string {
 }
 
 export const DEFAULT_TEMPLATES: Record<string, MessageTemplate> = {
+  sent_to_creator: {
+    subject: "נשלח טופס {{form}} ל{{subject}}",
+    body: "שלום {{name}},\nהטופס \"{{form}}\" של {{subject}} נשלח לדרך.\nממתין עכשיו ל: {{stepName}}\nלמעקב אחרי הבקשה: {{link}}\n{{org}}",
+  },
   step_invite: {
     subject: "מסמכים הממתינים לך – {{org}}",
     body: "שלום {{name}},\nממתינים לך מסמכים למילוי וחתימה ב{{org}}.\nלמעבר למסמכים: {{link}}\nיש להשלים עד {{dueDate}}.",

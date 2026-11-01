@@ -20,7 +20,7 @@ export const RECIPIENT_LABELS: Record<RecipientKind, string> = {
   fixed: "כתובות קבועות",
 };
 
-export type TriggerKey = "step_invite" | "returned" | "reminder" | "step_done" | "completed" | "declined" | "completion_docs" | "weekly_digest" | "otp";
+export type TriggerKey = "sent_to_creator" | "step_invite" | "returned" | "reminder" | "step_done" | "completed" | "declined" | "completion_docs" | "weekly_digest" | "otp";
 
 export interface TriggerDef {
   key: TriggerKey;
@@ -72,6 +72,7 @@ export const SAMPLE_VARS: Record<string, string> = {
 const PERSON_VARS = ["name", "org", "form", "subject", "creatorName", "creatorEmail", "note"];
 
 export const TRIGGERS: TriggerDef[] = [
+  { key: "sent_to_creator", label: "אישור שליחה לשולח", when: "כשבקשה נשלחה לדרך, למי ששלח אותה (מה נשלח ולמי)", defaults: ["creator"], allowed: ["creator", "secretariat", "fixed"], vars: [...PERSON_VARS, "stepName", "link"] },
   { key: "step_invite", label: "הזמנה למילוי וחתימה", when: "כשמגיע תורו של מישהו למלא או לחתום", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "dueDate"] },
   { key: "reminder", label: "תזכורת", when: "לפי מדיניות התזכורות, למי שעוד לא מילא", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "dueDate"] },
   { key: "returned", label: "הוחזר לתיקון", when: "כשמישהו דוחה ומחזיר את הבקשה לשלב קודם", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "reason"] },
