@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { authDisabled } from "@/lib/auth/open-mode";
+import { devLoginEnabled } from "@/lib/auth/dev-login";
 import { buttonVariants } from "@/components/ui/button";
 import { LOGIN_ERRORS, googleConfigured } from "@/lib/auth/google";
 import { LoginForm } from "./login-form";
@@ -21,6 +23,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </a>
       )}
       {(process.env.ADMIN_PASSWORD || demo) && <LoginForm next={next ?? ""} />}
+      {devLoginEnabled() && <Link href="/dev-login" className="mt-6 text-center text-sm underline underline-offset-2">כניסה כמשתמש לבדיקה (בלי סיסמה)</Link>}
     </main>
   );
 }
