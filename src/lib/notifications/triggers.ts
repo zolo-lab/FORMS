@@ -62,7 +62,7 @@ export const SAMPLE_VARS: Record<string, string> = {
   org: "עמותת הדוגמה",
   form: "קליטת עובד",
   subject: "דנה כהן",
-  link: "https://gybs-forms.vercel.app/s/…",
+  link: "https://gybs-forms.vercel.app/s/sample-link-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd",
   dueDate: "15.11.2026",
   reason: "חסר צילום ת\"ז",
   stepName: "העובד",
