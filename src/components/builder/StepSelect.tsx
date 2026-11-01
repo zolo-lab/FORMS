@@ -11,13 +11,13 @@ export type { StepView };
  * "באיזה שלב השדה מופיע": one option per step of the form ("שלב 2 · העובד"). A field that is in no step says so,
  * and is never shown as belonging to a step the form does not have.
  */
-export function StepSelect({ views, value, onChange, className, id }: { views: StepView[]; value: FillerRole | undefined; onChange: (role: FillerRole) => void; className?: string; id?: string }) {
+export function StepSelect({ views, value, onChange, className, id, label = "באיזה שלב" }: { views: StepView[]; value: FillerRole | undefined; onChange: (role: FillerRole) => void; className?: string; id?: string; label?: string }) {
   const role = value ?? "employee";
   const inStep = views.some((v) => v.role === role);
   return (
     <Select
       id={id}
-      aria-label="באיזה שלב"
+      aria-label={label}
       className={cn(className, !inStep && "border-destructive text-destructive")}
       value={inStep ? role : ""}
       onChange={(e) => e.target.value && onChange(e.target.value as FillerRole)}

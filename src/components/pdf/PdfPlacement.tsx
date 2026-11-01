@@ -485,6 +485,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <span>· העברה לשלב:</span>
             <StepSelect
               className="h-9 w-64"
+              label="העברת התיבות המסומנות לשלב"
               views={steps}
               value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
               onChange={(r) => {
