@@ -51,13 +51,19 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <Input id="pk-name" name="name" defaultValue={pkg.name} required />
             </div>
           )}
-          <div className="space-y-1">
-            <Label htmlFor="pk-org">{formId ? "הטופס זמין לארגון" : "זמינה לארגון"}</Label>
-            <Select id="pk-org" name="organizationId" defaultValue={pkg.organizationId ?? ""}>
-              <option value="">כל הארגונים</option>
-              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </Select>
-          </div>
+          <fieldset className="space-y-1 sm:col-span-2">
+            <legend className="text-sm font-medium">{formId ? "הטופס זמין לעמותות" : "זמינה לעמותות"}</legend>
+            <input type="hidden" name="orgsField" value="1" />
+            <div className="flex flex-wrap gap-x-4">
+              {orgs.map((o) => (
+                <label key={o.id} className="flex min-h-10 items-center gap-2 text-sm">
+                  <Checkbox name="organizationIds" value={o.id} defaultChecked={(pkg.organizationIds?.length ? pkg.organizationIds : pkg.organizationId ? [pkg.organizationId] : []).includes(o.id)} />
+                  {o.name}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">בלי סימון – לכל העמותות. לכל עמותה מסומנת יש קישור משלה למילוי; כשהטופס פתוח ליותר מעמותה אחת, הקישור הכללי (בלי עמותה) לא נפתח.</p>
+          </fieldset>
           {!formId && (
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="pk-desc">תיאור</Label>

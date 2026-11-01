@@ -9,8 +9,7 @@ import Link from "next/link";
 import { ChevronDown, Download, Redo2, Undo2, Sparkles } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
-import { CopyLinkButton } from "@/components/ui/copy-link-button";
-import { publicFillPath } from "@/lib/forms/public-link";
+import { FormLinks } from "@/components/forms/FormLinks";
 import { Badge } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
@@ -39,6 +38,8 @@ type SaveState = "saved" | "saving" | "dirty" | "error";
 
 export interface FormEditorProps {
   templateId: string;
+  /** The organizations the form's link opens for (a link per organization). */
+  linkOrgs?: { slug: string; name: string }[];
   initial: FormDefinition;
   initialVersion: number;
   initiallyPublished: boolean;
@@ -53,6 +54,8 @@ export interface FormEditorProps {
     packageId: string;
     drafts: StepDraft[];
     contacts: { id: string; label: string }[];
+    /** Active organizations (steps "לפי העמותה" / "רק לעמותות"). */
+    orgs?: { id: string; label: string }[];
     groups: { id: string; label: string }[];
     save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
@@ -65,7 +68,7 @@ export interface FormEditorProps {
 /** A draft as the server takes it (without the editor's own keys). */
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -298,7 +301,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         <Button variant="outline" size="sm" onClick={() => { setTab("edit"); setSelection(null); }}>הגדרות הטופס</Button>
-        {published && <CopyLinkButton path={publicFillPath(templateId)} variant="outline" size="sm" />}
+        {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
         <a
           href={`/preview/form/${templateId}`}
           target="_blank"

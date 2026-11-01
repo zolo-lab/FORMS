@@ -7,7 +7,40 @@ import type { Answers } from "./conditions";
 import { allFields, type FormDefinition } from "./schema";
 import type { StepRole } from "@/lib/workflow/types";
 
-export const publicFillPath = (formId: string) => `/f/${formId}`;
+/** The form's link; with an organization's short name (slug), the link of that organization: /f/<form id>/pnima. */
+export const publicFillPath = (formId: string, orgSlug?: string | null) => (orgSlug ? `/f/${formId}/${orgSlug}` : `/f/${formId}`);
+
+export interface LinkOrg {
+  id: string;
+  name: string;
+  slug: string | null;
+  registrationNumber?: string;
+}
+
+/**
+ * The organizations a form's link may be opened for: the ones ticked in the form's settings, else the one the form
+ * belongs to, else every active organization. Inactive organizations never.
+ */
+export function allowedOrgs<T extends LinkOrg & { active: boolean }>(form: { organizationId: string | null; organizationIds?: string[] | null }, orgs: T[]): T[] {
+  const active = orgs.filter((o) => o.active);
+  const ticked = form.organizationIds?.length ? form.organizationIds : form.organizationId ? [form.organizationId] : null;
+  return ticked ? active.filter((o) => ticked.includes(o.id)) : active;
+}
+
+export type LinkOrgResult<T> = { ok: true; org: T } | { ok: false; reason: "choose_org" | "org_not_allowed" | "no_organization" };
+
+/**
+ * The organization of one opening of the link: the one named in it (it must be allowed), or – on the link without one
+ * – the only organization the form is open to. A form open to several organizations needs the organization's link.
+ */
+export function linkOrg<T extends LinkOrg>(allowed: T[], slug: string | null | undefined): LinkOrgResult<T> {
+  if (slug) {
+    const org = allowed.find((o) => o.slug === slug.toLowerCase());
+    return org ? { ok: true, org } : { ok: false, reason: "org_not_allowed" };
+  }
+  if (allowed.length === 1) return { ok: true, org: allowed[0]! };
+  return { ok: false, reason: allowed.length ? "choose_org" : "no_organization" };
+}
 
 export type PublicStart = { ok: true; role: "requester" | "employee" } | { ok: false; reason: "no_steps" | "first_step_is_someone" };
 

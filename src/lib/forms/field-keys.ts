@@ -132,7 +132,20 @@ export function sectionKey(heading: string | undefined): string {
 }
 
 /** The id to give a field: section prefix + label key, always valid (falls back to `fallback`). */
+/**
+ * The organization's own fields get fixed ids, whatever section they sit in: they fill themselves from the
+ * organization of the request (prefill.ts, ORG_FIELD_IDS).
+ */
+export function orgFieldKey(label: string): "org_name" | "org_number" | null {
+  const n = normalizeText(label);
+  if (/(^| )(שם )?(ה)?(עמותה|ארגונ|ארגון|מעסיק|המעסיק)( |$)/.test(n) && /שמ|שם|עמותה|ארגו/.test(n) && !/(מספר|חפ|ח פ|טלפונ|כתובת)/.test(n)) return /שמ|שם/.test(n) || n === "עמותה" || n === "העמותה" ? "org_name" : null;
+  if (/(מספר (ה)?עמותה|חפ|ח פ|מספר (ה)?ארגונ|מספר (ה)?ארגון)/.test(n)) return "org_number";
+  return null;
+}
+
 export function fieldKey(label: string, section?: string, fallback = "field"): string {
+  const org = orgFieldKey(label);
+  if (org) return org;
   const base = labelKey(label);
   const prefix = sectionKey(section);
   const key = [prefix, base].filter(Boolean).join("_");

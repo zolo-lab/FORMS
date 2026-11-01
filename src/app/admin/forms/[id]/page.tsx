@@ -1,3 +1,5 @@
+import { formLinkOrgs } from "@/server/public-fill";
+import { listOrgs } from "@/server/orgs-store";
 import { notFound } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
@@ -16,7 +18,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   const data = await getEditorData(id);
   if (!data) notFound();
   const pkgId = await formPackageId(id, data.template.title);
-  const [pdf, groups, contacts, pkg] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups(), listContacts(), getPackage(pkgId)]);
+  const [pdf, groups, contacts, pkg, orgs] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups(), listContacts(), getPackage(pkgId), listOrgs()]);
 
   // Every step that goes to a person has its own role, so every step can be picked for a field ("שלב 2", "שלב 3"…).
   // Older forms had steps sharing a role: give them their own once, here.
@@ -31,6 +33,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   return (
     <FormEditor
       templateId={id}
+      linkOrgs={(await formLinkOrgs([id])).get(id) ?? []}
       initialTab={initialTab}
       needsPdf={!data.version.pdfFileId && data.template.publishedVersion === null}
       groups={groups.map((g) => ({ id: g.id, name: g.name }))}
@@ -39,6 +42,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         drafts,
         contacts: contacts.map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name })),
         groups: groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` })),
+        orgs: orgs.filter((o) => o.active).map((o) => ({ id: o.id, label: o.name })),
         save: saveStepsAction,
         sendSettings,
         sendSettingsOpen: !!(query.saved === "settings" || query.saved === "org" || query.settingsError || query.error),

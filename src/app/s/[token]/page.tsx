@@ -60,7 +60,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           pipeDefinition={pipeDefinition(ctx.definition, ctx.fullDefinition)}
           initialAnswers={answersForClient(
             ctx.definition,
-            withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone }, ctx.answers),
+            withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone, org: ctx.org }, ctx.answers),
           )}
           filled={ctx.filled}
           role={ctx.role}

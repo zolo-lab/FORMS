@@ -1,9 +1,11 @@
 /** Initial values for fields with `prefill`, taken from the request's subject (the employee the request is about). */
 import type { Answers } from "./conditions";
-import { allFields, type FormDefinition } from "./schema";
+import { allFields, type FormDefinition, type FormField } from "./schema";
 
 export interface PrefillSubject {
   name: string;
+  /** The organization of the request (from its link, or chosen when the request was opened). */
+  org?: { name: string; registrationNumber?: string | null } | null;
   idNumber?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -17,7 +19,21 @@ export const PREFILL_KEYS = [
   { key: "employee.idNumber", label: "מספר זהות של העובד" },
   { key: "employee.email", label: "מייל של העובד" },
   { key: "employee.phone", label: "טלפון של העובד" },
+  { key: "org.name", label: "שם העמותה (לפי הקישור)" },
+  { key: "org.registrationNumber", label: "ח\"פ / מספר העמותה" },
 ] as const;
+
+/**
+ * Fields with these ids are the organization's fields: they fill themselves from the request's organization (as if
+ * their prefill were set) and nobody types them.
+ */
+export const ORG_FIELD_IDS: Record<string, "org.name" | "org.registrationNumber"> = { org_name: "org.name", org_number: "org.registrationNumber" };
+
+/** The prefill of a field: its own setting, or the organization's for the fixed ids (org_name, org_number). */
+export const prefillOf = (f: { id: string; prefill?: string }): string | undefined => f.prefill ?? ORG_FIELD_IDS[f.id];
+
+/** Filled by the system from the request's organization: shown read-only, and the server sets the value. */
+export const isOrgField = (f: { id: string; prefill?: string }) => !!prefillOf(f)?.startsWith("org.");
 
 /** Splits "ישראל בן דוד" into first "ישראל" and last "בן דוד". */
 function splitName(name: string): { first: string; last: string } {
@@ -39,6 +55,10 @@ function valueFor(key: string, type: string, s: PrefillSubject): unknown {
       return s.email?.trim() || undefined;
     case "employee.phone":
       return s.phone?.trim() || undefined;
+    case "org.name":
+      return s.org?.name.trim() || undefined;
+    case "org.registrationNumber":
+      return s.org?.registrationNumber?.trim() || undefined;
     default:
       return undefined;
   }
@@ -48,9 +68,30 @@ function valueFor(key: string, type: string, s: PrefillSubject): unknown {
 export function withPrefill(def: FormDefinition, subject: PrefillSubject, answers: Answers): Answers {
   const out: Answers = { ...answers };
   for (const f of allFields(def)) {
-    if (!f.prefill || out[f.id] !== undefined) continue;
-    const v = valueFor(f.prefill, f.type, subject);
+    const key = prefillOf(f);
+    if (!key || out[f.id] !== undefined) continue;
+    const v = valueFor(key, f.type, subject);
     if (v !== undefined) out[f.id] = v as Answers[string];
   }
   return out;
+}
+
+/** The organization's fields always carry the request's organization, whatever was sent (they are not typed). */
+export function withOrgFields(def: FormDefinition, org: PrefillSubject["org"], answers: Answers): Answers {
+  if (!org) return answers;
+  const out: Answers = { ...answers };
+  for (const f of allFields(def)) {
+    const key = prefillOf(f);
+    if (!key?.startsWith("org.")) continue;
+    const v = valueFor(key, f.type, { name: "", org });
+    if (v === undefined) delete out[f.id];
+    else out[f.id] = v as Answers[string];
+  }
+  return out;
+}
+
+/** The organization's fields shown read-only (the system fills them; see `withOrgFields`). */
+export function lockOrgFields(def: FormDefinition): FormDefinition {
+  const lock = (f: FormField): FormField => ({ ...(isOrgField(f) ? { ...f, readOnly: true } : f), ...(f.fields ? { fields: f.fields.map(lock) } : {}) });
+  return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.map(lock) })) };
 }

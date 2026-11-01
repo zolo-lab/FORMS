@@ -109,7 +109,7 @@ export async function createPackage(name: string): Promise<string> {
   return row!.id;
 }
 
-export async function updatePackage(id: string, patch: { name: string; description: string | null; organizationId: string | null }) {
+export async function updatePackage(id: string, patch: { name: string; description: string | null; organizationId: string | null; organizationIds?: string[] }) {
   await db.update(packageTemplates).set(patch).where(eq(packageTemplates.id, id));
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE "package_templates" ADD COLUMN "organization_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

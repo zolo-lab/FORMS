@@ -3,7 +3,7 @@
  * Nothing is created until it is sent; then a request is opened, the first step is submitted through the usual signing
  * code (same validation, signatures, PDF), and the next steps go on by themselves.
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Answers } from "@/lib/forms/conditions";
 import { mergedDefinitionForStep } from "@/lib/forms/merge";
@@ -11,7 +11,8 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
-import { publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
+import { allowedOrgs, linkOrg, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
+import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { getFile } from "./storage";
@@ -21,11 +22,17 @@ import { submit } from "./signing";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-export type PublicForm =
-  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; organizationId: string | null }
-  | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" | "no_fields" };
+export type PublicOrg = { id: string; name: string; slug: string | null; registrationNumber: string; primaryColor: string | null; logoFileId: string | null };
 
-export async function publicForm(formId: string): Promise<PublicForm> {
+export type PublicForm =
+  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; initialAnswers: Answers }
+  | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" | "no_fields" | "choose_org" | "org_not_allowed" | "no_organization" };
+
+/**
+ * The form as opened from its link. `orgSlug` is the organization in the link (/f/<form>/<slug>); without one, the
+ * form must be open to a single organization.
+ */
+export async function publicForm(formId: string, orgSlug?: string | null): Promise<PublicForm> {
   if (!UUID.test(formId)) return { ok: false, reason: "not_found" };
   const [form] = await db.select().from(schema.formTemplates).where(eq(schema.formTemplates.id, formId));
   if (!form) return { ok: false, reason: "not_found" };
@@ -39,17 +46,23 @@ export async function publicForm(formId: string): Promise<PublicForm> {
   const start = publicStart(pkg?.workflow.steps ?? []);
   if (!pkg || pkg.archivedAt) return { ok: false, title: form.title, reason: "closed" };
   if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
+  const orgs = await db.select().from(schema.organizations);
+  const which = linkOrg(allowedOrgs(pkg, orgs), orgSlug);
+  if (!which.ok) return { ok: false, title: form.title, reason: which.reason };
+  const o = which.org;
+  const org: PublicOrg = { id: o.id, name: o.name, slug: o.slug, registrationNumber: o.registrationNumber, primaryColor: o.primaryColor, logoFileId: o.logoFileId };
   const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
   const role = publicRole(pkg.workflow.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
-  const definition = viewFor(role);
+  const definition = lockOrgFields(viewFor(role));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
-  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, organizationId: pkg.organizationId };
+  const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber }, {});
+  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, initialAnswers };
 }
 
 /** The published form's own document, for the link's on-document view. */
-export async function publicFormPdf(formId: string): Promise<Uint8Array | null> {
-  const view = await publicForm(formId);
+export async function publicFormPdf(formId: string, orgSlug?: string | null): Promise<Uint8Array | null> {
+  const view = await publicForm(formId, orgSlug);
   if (!view.ok || !view.pdf) return null;
   const [row] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.id, view.pdf.fileId));
   const storedId = row ? /([0-9a-f-]{36})$/.exec(row.blobUrl)?.[1] : undefined;
@@ -60,20 +73,17 @@ export async function publicFormPdf(formId: string): Promise<Uint8Array | null> 
 export type PublicSubmitResult =
   | { ok: true; message?: string; waitingFor: string[]; completed: boolean }
   | { ok: false; errors: FieldErrors }
-  | { ok: false; error: "not_found" | "closed" | "not_public" | "no_fields" | "no_organization" | "failed" };
+  | { ok: false; error: "not_found" | "closed" | "not_public" | "no_fields" | "no_organization" | "choose_org" | "org_not_allowed" | "failed" };
 
-export async function publicSubmit(formId: string, input: Answers): Promise<PublicSubmitResult> {
-  const view = await publicForm(formId);
+export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: string | null): Promise<PublicSubmitResult> {
+  const view = await publicForm(formId, orgSlug);
   if (!view.ok) return { ok: false, error: view.reason };
+  const org = view.org;
+  // The organization comes from the link, never from what was sent.
+  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber }, rawInput);
   // Check before anything is created, so a form with mistakes leaves nothing behind.
   const check = validateAnswers(view.definition, input, { role: view.role });
   if (!check.ok) return { ok: false, errors: check.errors };
-
-  // The form's organization (set in the form's settings); a form not bound to one goes to the first active one.
-  const [org] = view.organizationId
-    ? await db.select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.id, view.organizationId))
-    : await db.select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.active, true)).orderBy(asc(schema.organizations.name)).limit(1);
-  if (!org) return { ok: false, error: "no_organization" };
 
   const subject = subjectFromAnswers(view.definition, check.cleaned);
   const requestId = await createRequest({
@@ -105,4 +115,24 @@ export async function publicSubmit(formId: string, input: Answers): Promise<Publ
   // Should not happen (checked above): do not leave a half-made request behind.
   await db.delete(schema.requests).where(eq(schema.requests.id, requestId));
   return "errors" in r ? { ok: false, errors: r.errors } : { ok: false, error: "failed" };
+}
+
+/** The organizations each form's link opens for (its own package's ticked organizations), for the links in the admin. */
+export async function formLinkOrgs(templateIds: string[]): Promise<Map<string, { slug: string; name: string }[]>> {
+  const out = new Map<string, { slug: string; name: string }[]>();
+  if (!templateIds.length) return out;
+  const items = await db.select().from(schema.packageTemplateItems).where(inArray(schema.packageTemplateItems.templateId, templateIds));
+  const sizes = new Map<string, number>();
+  const all = items.length ? await db.select().from(schema.packageTemplateItems).where(inArray(schema.packageTemplateItems.packageTemplateId, [...new Set(items.map((i) => i.packageTemplateId))])) : [];
+  for (const i of all) sizes.set(i.packageTemplateId, (sizes.get(i.packageTemplateId) ?? 0) + 1);
+  const own = new Map<string, string>();
+  for (const i of items) if (sizes.get(i.packageTemplateId) === 1) own.set(i.templateId, i.packageTemplateId);
+  const pkgs = own.size ? await db.select().from(schema.packageTemplates).where(inArray(schema.packageTemplates.id, [...own.values()])) : [];
+  const orgs = await db.select().from(schema.organizations);
+  for (const [templateId, pkgId] of own) {
+    const pkg = pkgs.find((p) => p.id === pkgId);
+    if (!pkg) continue;
+    out.set(templateId, allowedOrgs(pkg, orgs).filter((o) => o.slug).map((o) => ({ slug: o.slug!, name: o.name })));
+  }
+  return out;
 }
