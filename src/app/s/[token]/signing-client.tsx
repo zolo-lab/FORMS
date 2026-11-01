@@ -55,12 +55,10 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => setPanel("decline")}>דחייה</Button>
-        {returnTargets.length > 0 && <Button variant="outline" onClick={() => setPanel("return")}>החזרה לשלב קודם</Button>}
-        <Button variant="outline" onClick={() => setPanel("delegate")}>העברה לאדם אחר</Button>
-      </div>
+    <>
+      {/* One "דחייה": back to an earlier step for a fix when there is one, otherwise the request is declined. */}
+      <Button variant="outline" onClick={() => setPanel(returnTargets.length > 0 ? "return" : "decline")}>דחייה</Button>
+      <Button variant="outline" onClick={() => setPanel("delegate")}>העברה לאדם אחר</Button>
       <Dialog open={panel === "decline"} onClose={() => setPanel(null)} title="דחיית הבקשה">
         <div className="space-y-3">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="סיבת הדחייה (חובה)" aria-label="סיבת הדחייה" />
@@ -68,14 +66,18 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
           <Button disabled={busy || !reason.trim()} onClick={() => send({ type: "decline", reason }, "הבקשה נדחתה")}>דחייה</Button>
         </div>
       </Dialog>
-      <Dialog open={panel === "return"} onClose={() => setPanel(null)} title="החזרה לשלב קודם">
+      <Dialog open={panel === "return"} onClose={() => setPanel(null)} title="דחייה – החזרה לתיקון">
         <div className="space-y-3">
-          <Select value={toStepId} onChange={(e) => setToStepId(e.target.value)} aria-label="שלב להחזרה">
-            {returnTargets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </Select>
+          {returnTargets.length > 1 ? (
+            <Select value={toStepId} onChange={(e) => setToStepId(e.target.value)} aria-label="לאיזה שלב להחזיר">
+              {returnTargets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </Select>
+          ) : (
+            <p className="text-sm text-muted-foreground">הבקשה תחזור ל{returnTargets[0]?.label} לתיקון.</p>
+          )}
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="מה צריך לתקן (חובה)" aria-label="הערה להחזרה" />
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <Button disabled={busy || !reason.trim() || !toStepId} onClick={() => send({ type: "return", toStepId, reason }, "הבקשה הוחזרה לתיקון")}>החזרה</Button>
+          <Button disabled={busy || !reason.trim() || !toStepId} onClick={() => send({ type: "return", toStepId, reason }, "הבקשה הוחזרה לתיקון")}>דחייה והחזרה</Button>
         </div>
       </Dialog>
       <Dialog open={panel === "delegate"} onClose={() => setPanel(null)} title="העברה לאדם אחר">
@@ -87,7 +89,7 @@ function ApproverActions({ token, returnTargets, onDone }: { token: string; retu
           <Button disabled={busy || !person.name.trim() || (!person.email.trim() && !person.phone.trim())} onClick={() => send({ type: "delegate", assignee: person }, "הבקשה הועברה")}>העברה</Button>
         </div>
       </Dialog>
-    </div>
+    </>
   );
 }
 
@@ -161,6 +163,9 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
     );
   }
 
+  // "דחייה" / "העברה לאדם אחר" sit on the same line as "שליחה", next to it.
+  const stepActions = action === "approve" ? <ApproverActions token={token} returnTargets={returnTargets} onDone={setDoneMsg} /> : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -182,13 +187,15 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
         </Card>
       )}
       {hasForm && canOnDoc && mode === "document" ? (
-        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} />
+        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} actions={stepActions} />
       ) : hasForm ? (
-        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} />
+        <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} actions={stepActions} />
       ) : (
-        <Button className="w-full sm:w-auto" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="min-w-32" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
+          {stepActions}
+        </div>
       )}
-      {action === "approve" && <ApproverActions token={token} returnTargets={returnTargets} onDone={setDoneMsg} />}
       {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
       <p className="text-xs text-muted-foreground" aria-live="polite">
         {saveState === "saving" && "שומר…"}
