@@ -58,9 +58,9 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const [pkg, orgs] = await Promise.all([UUID.test(input.packageId) ? getWizardPackage(input.packageId) : null, listOrganizations({ activeOnly: true })]);
   const org = orgs.find((o) => o.id === input.organizationId);
-  if (!pkg) errors["packageId"] = "ערכה לא נמצאה";
+  if (!pkg) errors["packageId"] = "הטופס לא נמצא";
   const { user, perms, access } = await viewer();
-  if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהערכה הזו";
+  if (pkg && !can(user, perms, pkg.id, "open")) errors["packageId"] = "אין לך הרשאה לפתוח בקשות מהטופס הזה";
   if (!org) errors["organizationId"] = "ארגון לא נמצא";
   else if (!orgAllowed(user, access, org.id)) errors["organizationId"] = "אין לך הרשאה לעמותה / לעסק הזה";
   let projectId: string | undefined;

@@ -118,6 +118,9 @@ describe("comb, initials and computed fields", () => {
     expect(inputAttrs(f("idNumber")).inputMode).toBe("numeric");
     expect(inputAttrs(f("mobile")).type).toBe("tel");
     expect(inputAttrs(f("firstName")).type).toBe("text");
+    // Hebrew text is typed right to left on the document; numbers, phones and ids stay left to right.
+    expect(inputAttrs(f("firstName")).dir).toBe("rtl");
+    expect(inputAttrs(f("idNumber")).dir).toBe("ltr");
   });
 });
 

@@ -17,7 +17,7 @@ test.describe("with a real request", () => {
 
   test("the employee link opens without logging in and names the employee", async ({ page, browser, baseURL }) => {
     await login(page, "/admin/requests/new");
-    await page.getByLabel("ערכת מסמכים").selectOption({ label: "קליטת עובד רגיל" });
+    await page.getByLabel("טופס", { exact: true }).selectOption({ label: "קליטת עובד רגיל" });
     await page.getByRole("button", { name: "הבא" }).click();
     const name = `חתימה e2e ${Date.now()}`;
     await page.getByLabel("שם העובד").fill(name);

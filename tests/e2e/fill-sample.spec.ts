@@ -12,7 +12,7 @@ test("fills the sample form end to end on mobile", async ({ page }) => {
   // Page 1: empty "next" shows required errors and stays on the page.
   await page.getByRole("button", { name: "הבא" }).click();
   await expect(page.getByText("שדה חובה").first()).toBeVisible();
-  await expect(page.getByText("שלב 1 מתוך 2")).toBeVisible();
+  await expect(page.getByText("עמוד 1 מתוך 2")).toBeVisible();
 
   await page.getByLabel("שם פרטי").fill("ישראל");
   await page.getByLabel("שם משפחה").fill("זולו");
@@ -44,7 +44,7 @@ test("fills the sample form end to end on mobile", async ({ page }) => {
   await yesNo.getByLabel("לא", { exact: true }).check();
 
   await page.getByRole("button", { name: "הבא" }).click();
-  await expect(page.getByText("שלב 2 מתוך 2")).toBeVisible();
+  await expect(page.getByText("עמוד 2 מתוך 2")).toBeVisible();
 
   // Page 2
   await page.getByLabel("שכר חודשי").fill("8500");

@@ -215,8 +215,8 @@ describe("addDetectedFields", () => {
   it("splits an empty form into one step per PDF page when asked", () => {
     const { definition } = run({ stepPerPage: true });
     expect(definition.pages.map((p) => [p.title, p.fields.map((f) => f.label)])).toEqual([
-      ["שלב 1", ["שם משפחה", "תעודת זהות", "מין"]],
-      ["שלב 2", ["האם עבדת בעבר", "חתימה"]],
+      ["עמוד 1", ["שם משפחה", "תעודת זהות", "מין"]],
+      ["עמוד 2", ["האם עבדת בעבר", "חתימה"]],
     ]);
     expect(new Set(definition.pages.map((p) => p.id)).size).toBe(2);
   });
@@ -258,7 +258,7 @@ describe("splitStepAt", () => {
     const r = splitStepAt(def([{ id: "p1", fields }]), "c")!;
     expect(r.definition.pages.map((p) => p.fields.map((x) => x.id))).toEqual([["a", "b"], ["c", "d"]]);
     expect(r.step).toBe(1);
-    expect(r.definition.pages[1]!.title).toBe("שלב 2");
+    expect(r.definition.pages[1]!.title).toBe("עמוד 2");
     expect(parseFormDefinition(r.definition).success).toBe(true);
   });
   it("does nothing at the first field of a step or for an unknown field", () => {

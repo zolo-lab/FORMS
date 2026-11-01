@@ -1,11 +1,16 @@
 "use client";
+import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components/packages/StepsEditor";
+import type { SaveStepsResult } from "@/app/admin/packages/actions";
+import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
+import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
+import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Download, Redo2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, Redo2, Undo2, Sparkles } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { publishAction, saveDraftAction } from "@/app/admin/forms/actions";
 import {
@@ -26,7 +31,7 @@ import { FieldSettings, PageSettings } from "./SettingsPanel";
 import { FormTestFill } from "@/components/forms/FormTestFill";
 import { PdfTab, type PdfState } from "./PdfTab";
 
-type TabId = "edit" | "preview" | "pdf" | "json";
+type TabId = "edit" | "preview" | "pdf" | "steps" | "json";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
@@ -41,10 +46,37 @@ export interface FormEditorProps {
   needsPdf?: boolean;
   /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
   groups?: { id: string; name: string }[];
+  /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
+  flow?: {
+    packageId: string;
+    drafts: StepDraft[];
+    contacts: { id: string; label: string }[];
+    groups: { id: string; label: string }[];
+    save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
+    /** Sending settings (recipients, reminders…), rendered on the server. */
+    sendSettings?: React.ReactNode;
+    /** Open the sending settings (they were just saved, or failed). */
+    sendSettingsOpen?: boolean;
+  };
 }
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [] }: FormEditorProps) {
-  const [def, setDef] = useState(initial);
+/** A draft as the server takes it (without the editor's own keys). */
+const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
+
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow }: FormEditorProps) {
+  // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
+  const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
+  // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
+  const [stepWork, setStepWork] = useState<EditorDraft[]>(() => (flow?.drafts ?? []).map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role })));
+  const [stepSaved, setStepSaved] = useState(stepWork);
+  const [stepState, setStepState] = useState<StepsSaveState>({ kind: "idle" });
+  const stepsDirty = JSON.stringify(stepWork.map(stripDraft)) !== JSON.stringify(stepSaved.map(stripDraft));
+  const ctx = { contacts: flow?.contacts, groups: flow?.groups, fields: emailFieldsOf(def) };
+  const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
+  const stepRoles = (views ?? []).map((v) => v.role);
+  const unassigned = flow ? unassignedFields(def, stepRoles) : [];
+  // "סימון שדות לשלב": the fields of one step are marked, in the responsive form and on the PDF.
+  const [focusRole, setFocusRole] = useState<FillerRole | "">("");
   // One history for the form and its boxes on the PDF: undoing a delete brings back the field and its boxes together.
   const [past, setPast] = useState<HistoryEntry[]>([]);
   const [future, setFuture] = useState<HistoryEntry[]>([]);
@@ -62,6 +94,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const first = useRef(true);
+  /** Runs once after the next successful autosave (e.g. saving the steps that follow a renamed field). */
+  const afterSave = useRef<(() => void) | null>(null);
   const [note, setNote] = useState<string | null>(null);
   /** Published once: answers are stored under the field ids, so ids stay and only the export keys are filled. */
   const everPublished = initiallyPublished || initialVersion > 1;
@@ -90,6 +124,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       stamps = renameStamps(stamps, from, to);
     }
     commit(next, pdf && { ...pdf, mapping: { ...pdf.mapping, stamps } });
+    followRename(pairs);
     setNote(`${pairs.length} שדות קיבלו שם מזהה.`);
   }
 
@@ -119,13 +154,13 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   }, [def, setPdf]);
 
   /** Box edits on the PDF. Deleting the last box of a field deletes the field (one undo step for both). */
-  const changePdf = useCallback((next: PdfState | null) => {
+  const changePdf = (next: PdfState | null) => {
     const cur = pdfRef.current;
     const lost = cur && next && cur.file.id === next.file.id ? fieldsLeftWithoutStamps(cur.mapping.stamps, next.mapping.stamps) : [];
     if (!lost.length) { setPdf(next); return; }
     commit(lost.reduce((d, id) => removeField(d, id), def), next);
     setSelection(null);
-  }, [commit, def, setPdf]);
+  };
 
   const step = (from: HistoryEntry[], to: (f: (h: HistoryEntry[]) => HistoryEntry[]) => void, take: "last" | "first") => {
     if (!from.length) return from;
@@ -150,6 +185,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       setVersion(r.version);
       setPublished(false);
       setSave("saved");
+      const then = afterSave.current;
+      afterSave.current = null;
+      then?.();
     }, 1200);
     return () => clearTimeout(t);
   }, [def, pdf, templateId]);
@@ -180,7 +218,55 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     else if (loc.page < def.pages.length - 1) commit(moveField(def, id, { page: loc.page + 1, index: 0 }));
   };
 
+  // A step whose role is about to change takes its fields along on save: check the steps as if it already had.
+  const pendingMoves = new Map(stepWork.filter((d) => d.origRole && d.origRole !== d.role).map((d) => [d.origRole!, d.role] as const));
+  // Leaving the page with unsaved steps asks first.
+  useEffect(() => {
+    if (!stepsDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [stepsDirty]);
+
+  /** Steps edits: every step that goes to a person keeps its own role; roles still held by fields are not reused. */
+  function changeSteps(next: EditorDraft[]) {
+    const held = answerFields(def).map(fieldRole).filter((r) => !next.some((d) => d.role === r));
+    setStepWork(assignRoles(next, held));
+    setStepState({ kind: "idle" });
+  }
+
+  async function saveSteps(work = stepWork) {
+    if (!flow) return;
+    setStepState({ kind: "saving" });
+    const r = await flow.save(flow.packageId, work.map(stripDraft));
+    if (!r.ok) { setStepState({ kind: "error", errors: r.errors }); return; }
+    // A step whose role changed (e.g. a person step became "the employee") takes its fields along.
+    const moved = new Map(work.filter((d) => d.origRole && d.origRole !== d.role).map((d) => [d.origRole!, d.role]));
+    if (moved.size) {
+      let next = def;
+      for (const f of answerFields(def)) { const to = moved.get(fieldRole(f)); if (to) next = updateField(next, f.id, { filledBy: to }); }
+      if (next !== def) commit(next);
+    }
+    const now = work.map((d) => ({ ...d, origRole: d.role }));
+    setStepWork(now);
+    setStepSaved(now);
+    setStepState({ kind: "saved" });
+  }
+
+  /** A field renamed: a step sent to its email follows, saved right after the form itself is saved. */
+  function followRename(pairs: [string, string][]) {
+    const map = new Map(pairs);
+    if (!stepWork.some((d) => d.fieldId && map.has(d.fieldId))) return;
+    const next = stepWork.map((d) => (d.fieldId && map.has(d.fieldId) ? { ...d, fieldId: map.get(d.fieldId) } : d));
+    setStepWork(next);
+    afterSave.current = () => void saveSteps(next);
+  }
+
   async function onPublish() {
+    if (unassigned.length) {
+      setIssues([`${unassigned.length} שדות לא משויכים לאף שלב (${unassigned.slice(0, 3).map((f) => f.label || f.id).join(", ")}${unassigned.length > 3 ? "…" : ""}). בחרו "סימון שדות לשלב" כדי לשייך אותם.`]);
+      return;
+    }
     const problems = publishIssues(def);
     if (problems.length) { setIssues(problems.map((p) => p.message)); return; }
     setSave("saving");
@@ -219,15 +305,21 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           צפייה בטופס (בחלון חדש)
         </a>
         <div className="ms-auto flex flex-wrap items-center gap-1">
-          <Button variant="outline" size="sm" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית והשלב, לשדות שעדיין אין להם">
-            <Sparkles className="size-4" />שמות מזהים
-          </Button>
-          <Button variant="outline" size="sm" onClick={downloadDictionary} title="קובץ Excel עם כל השדות: מזהה, שם, סוג, שלב וממלא">
-            <Download className="size-4" />רשימת השדות (Excel)
-          </Button>
-          {pdf && pdf.mapping.stamps.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => commit(orderByPdf(def, pdf.mapping.stamps))} title="מסדר את השדות בכל שלב לפי המקום שלהם במסמך">סידור לפי ה-PDF</Button>
-          )}
+          <details className="relative">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
+            <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
+              <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
+                <Sparkles className="size-4" />שמות מזהים לשדות
+              </Button>
+              <Button variant="ghost" size="sm" className="justify-start" onClick={downloadDictionary}>
+                <Download className="size-4" />רשימת השדות (Excel)
+              </Button>
+              {pdf && pdf.mapping.stamps.length > 0 && (
+                <Button variant="ghost" size="sm" className="justify-start" onClick={() => commit(orderByPdf(def, pdf.mapping.stamps))} title="מסדר את השדות בכל עמוד לפי המקום שלהם במסמך">סידור השדות לפי ה-PDF</Button>
+              )}
+              <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("json"); setJsonText(exportJson); setJsonError(null); }}>JSON (גיבוי והעברה)</Button>
+            </div>
+          </details>
           <Button variant="ghost" size="icon" aria-label="ביטול" disabled={!past.length} onClick={undo}><Undo2 className="size-4" /></Button>
           <Button variant="ghost" size="icon" aria-label="שחזור" disabled={!future.length} onClick={redo}><Redo2 className="size-4" /></Button>
           <Button onClick={onPublish} disabled={published || save === "saving"}>{published ? "פורסם" : "פרסום"}</Button>
@@ -256,13 +348,56 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <p className="border-b bg-muted px-4 py-1.5 text-xs text-muted-foreground">גרסה {version} נעולה. כל שינוי ייצור אוטומטית גרסה {version + 1} כטיוטה.</p>
       )}
 
-      <div className="px-4 pt-2">
+      <div className="flex flex-wrap items-end gap-x-4 px-4 pt-2">
         <Tabs<TabId>
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
-          tabs={[{ id: "pdf", label: "מסמך PDF" }, { id: "edit", label: "עריכה (רספונסיבי)" }, { id: "preview", label: "תצוגה מקדימה" }, { id: "json", label: "JSON" }]}
+          tabs={[
+            { id: "pdf", label: "מסמך PDF" },
+            { id: "edit", label: "עריכה (רספונסיבי)" },
+            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
+            { id: "preview", label: "תצוגה מקדימה" },
+            ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
+          ]}
         />
       </div>
+      {views && (tab === "edit" || tab === "pdf") && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-muted/40 px-4 py-2 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="font-medium">סימון שדות לשלב</span>
+            <Select className="h-9 w-64" aria-label="סימון שדות לשלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
+              <option value="">— בחרו שלב —</option>
+              {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+              {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
+            </Select>
+          </label>
+          {focusRole && focusRole !== "unassigned" && (
+            <span className="text-muted-foreground">
+              <strong className="text-foreground">{answerFields(def).filter((f) => fieldRole(f) === focusRole).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי להוסיף אותו לשלב, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מכניסה אותה לשלב או מוציאה ממנו."}
+            </span>
+          )}
+          {focusRole === "unassigned" && (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-destructive">השדות המודגשים לא שייכים לאף שלב.</span>
+              <label className="flex items-center gap-2">
+                העברת כולם ל
+                <Select className="h-9 w-56" aria-label="העברת השדות שלא משויכים לשלב" value="" onChange={(e) => { const r = e.target.value as FillerRole; if (!r) return; commit(unassigned.reduce((d, f) => updateField(d, f.id, { filledBy: r }), def)); setIssues([]); setFocusRole(r); }}>
+                  <option value="">בחרו שלב…</option>
+                  {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+                </Select>
+              </label>
+            </span>
+          )}
+          {focusRole && <Button variant="ghost" size="sm" onClick={() => setFocusRole("")}>סיום</Button>}
+          {!focusRole && unassigned.length > 0 && (
+            <span className="flex flex-wrap items-center gap-2 text-destructive">
+              {unassigned.length} שדות לא משויכים לאף שלב.
+              <Button variant="outline" size="sm" onClick={() => setFocusRole("unassigned")}>הצגה</Button>
+              <Button variant="outline" size="sm" onClick={() => { commit(unassigned.reduce((d, f) => updateField(d, f.id, { filledBy: views[0]!.role }), def)); setIssues([]); }}>שיוך כולם לשלב 1</Button>
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === "edit" && (
@@ -278,6 +413,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             <div className="order-1 lg:order-none lg:overflow-auto">
               <Canvas
                 def={def}
+                focusRole={focusRole || undefined}
+                stepNames={views ? Object.fromEntries([...views].reverse().map((v) => [v.role, v.label])) : undefined}
                 selection={selection}
                 onSelect={setSelection}
                 onPatchField={(id, patch) => commit(updateField(def, id, patch))}
@@ -300,6 +437,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   def={def}
                   field={selectedField}
                   groups={groups}
+                  steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onMoveToPage={(pi) => commit(moveField(def, selectedField.id, { page: pi, index: def.pages[pi]!.fields.length }))}
                   onRename={(to) => {
@@ -307,6 +445,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                     if (r.error) return r.error;
                     // The places on the document follow the new id.
                     commit(r.def, pdf && { ...pdf, mapping: { ...pdf.mapping, stamps: renameStamps(pdf.mapping.stamps, selectedField.id, to) } });
+                    followRename([[selectedField.id, to]]);
                     setSelection({ kind: "field", id: to });
                   }}
                 />
@@ -330,7 +469,34 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </div>
         )}
 
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
+        {tab === "steps" && flow && (
+          <div className="mx-auto max-w-3xl space-y-6 p-4">
+            <section className="space-y-3" aria-labelledby="steps-h">
+              <div>
+                <h2 id="steps-h" className="text-lg font-semibold">שלבי הטופס</h2>
+                <p className="text-sm text-muted-foreground">הטופס עובר בין השלבים לפי הסדר. אילו שדות ממלאים בכל שלב בוחרים ב&quot;סימון שדות לשלב&quot; בלשוניות העריכה וה-PDF, או בהגדרות השדה.</p>
+              </div>
+              <StepsEditor
+                drafts={stepWork}
+                onChange={changeSteps}
+                contacts={flow.contacts}
+                groups={flow.groups}
+                emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
+                dirty={stepsDirty}
+                state={stepState}
+                onSave={() => void saveSteps()}
+                waitingForForm={save !== "saved"}
+              />
+            </section>
+            {flow.sendSettings && (
+              <details className="rounded-lg border bg-card p-4" open={flow.sendSettingsOpen}>
+                <summary className="cursor-pointer font-semibold">הגדרות שליחה: מקבלי המסמכים, תזכורות ותוקף הקישורים</summary>
+                <div className="mt-4">{flow.sendSettings}</div>
+              </details>
+            )}
+          </div>
+        )}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

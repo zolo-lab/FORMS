@@ -47,7 +47,7 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
             <Input id="et-name" name="name" defaultValue={t.name} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="et-pkg">ערכה</Label>
+            <Label htmlFor="et-pkg">טופס</Label>
             <Select id="et-pkg" name="packageTemplateId" defaultValue={t.packageTemplateId ?? ""}>
               <option value="">ללא – לפי מזהי שדות</option>
               {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -120,7 +120,7 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
       <section className="space-y-2" aria-labelledby="et-preview">
         <h2 id="et-preview" className="text-lg font-semibold">תצוגה מקדימה</h2>
         {preview.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t.packageTemplateId ? "אין עדיין בקשות בערכה הזו." : "בחרו ערכה כדי לראות את 5 הבקשות האחרונות בפורמט הזה."}</p>
+          <p className="text-sm text-muted-foreground">{t.packageTemplateId ? "אין עדיין בקשות בטופס הזה." : "בחרו טופס כדי לראות את 5 הבקשות האחרונות בפורמט הזה."}</p>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full text-xs">

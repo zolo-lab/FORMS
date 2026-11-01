@@ -64,8 +64,9 @@ async function toWizardPackages(pkgs: (typeof packageTemplates.$inferSelect)[]):
 
 /** Active packages with the form the requester must fill, built from each form's published version. */
 export async function listPackagesForWizard(): Promise<WizardPackage[]> {
-  const pkgs = await db.select().from(packageTemplates).where(isNull(packageTemplates.archivedAt)).orderBy(asc(packageTemplates.name));
-  return toWizardPackages(pkgs);
+  const [pkgs, withForms] = await Promise.all([db.select().from(packageTemplates).where(isNull(packageTemplates.archivedAt)).orderBy(asc(packageTemplates.name)), packageIdsWithForms()]);
+  // A request is opened from a form (its own settings); routes left without any form are not offered.
+  return toWizardPackages(pkgs.filter((p) => withForms.has(p.id)));
 }
 
 /** One active package in the same shape, or null (unknown or archived). */
@@ -83,7 +84,9 @@ export async function listPackageSummaries(includeArchived = false) {
     .where(includeArchived ? undefined : isNull(packageTemplates.archivedAt))
     .orderBy(asc(packageTemplates.name));
   const items = pkgs.length ? await db.select().from(packageTemplateItems).where(inArray(packageTemplateItems.packageTemplateId, pkgs.map((p) => p.id))) : [];
-  return pkgs.map((p) => ({ ...p, documentCount: items.filter((i) => i.packageTemplateId === p.id).length }));
+  return pkgs
+    .map((p) => ({ ...p, documentCount: items.filter((i) => i.packageTemplateId === p.id).length }))
+    .filter((p) => p.documentCount > 0);
 }
 
 export async function getPackage(id: string) {
@@ -164,4 +167,39 @@ async function renumber(packageId: string) {
 /** Forms that can be added to a package: not archived. */
 export async function availableForms() {
   return db.select({ id: formTemplates.id, title: formTemplates.title, publishedVersion: formTemplates.publishedVersion }).from(formTemplates).where(isNull(formTemplates.archivedAt)).orderBy(asc(formTemplates.title));
+}
+
+// ───────────────────────── A form's own sending settings ─────────────────────────
+
+/**
+ * Every form carries its own signing route and sending settings (like iForms): they are stored as a package that
+ * holds just that form. This returns that package, creating it on first use. Old multi-form or empty packages are
+ * not a form's own package and are left alone.
+ */
+export async function formPackageId(templateId: string, title?: string): Promise<string> {
+  const mine = await db.select({ pkg: packageTemplateItems.packageTemplateId }).from(packageTemplateItems).where(eq(packageTemplateItems.templateId, templateId));
+  if (mine.length) {
+    const all = await db.select().from(packageTemplateItems).where(inArray(packageTemplateItems.packageTemplateId, mine.map((m) => m.pkg)));
+    const own = mine.find((m) => all.filter((i) => i.packageTemplateId === m.pkg).length === 1);
+    if (own) return own.pkg;
+  }
+  const name = title ?? (await db.select({ title: formTemplates.title }).from(formTemplates).where(eq(formTemplates.id, templateId)))[0]?.title ?? "טופס";
+  const id = await createPackage(name);
+  await db.insert(packageTemplateItems).values({ packageTemplateId: id, templateId, order: 1, required: true });
+  return id;
+}
+
+/** Keep the form's own package in step with the form: its name, and archived when the form is. */
+export async function syncFormPackage(templateId: string, patch: { name?: string; archived?: boolean }) {
+  const id = await formPackageId(templateId);
+  const set: Partial<typeof packageTemplates.$inferInsert> = {};
+  if (patch.name) set.name = patch.name;
+  if (patch.archived !== undefined) set.archivedAt = patch.archived ? new Date() : null;
+  if (Object.keys(set).length) await db.update(packageTemplates).set(set).where(eq(packageTemplates.id, id));
+}
+
+/** Ids of packages that hold at least one form. */
+export async function packageIdsWithForms(): Promise<Set<string>> {
+  const items = await db.selectDistinct({ pkg: packageTemplateItems.packageTemplateId }).from(packageTemplateItems);
+  return new Set(items.map((i) => i.pkg));
 }

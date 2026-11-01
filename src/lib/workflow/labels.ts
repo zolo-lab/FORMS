@@ -6,6 +6,12 @@ export const ROLE_LABELS: Record<StepRole, string> = {
   approver: "מאשר",
   payroll: "חשבות שכר",
   hr: "משאבי אנוש",
+  approver2: "מאשר 2",
+  approver3: "מאשר 3",
+  approver4: "מאשר 4",
+  approver5: "מאשר 5",
+  approver6: "מאשר 6",
+  unassigned: "לא משויך לשלב",
 };
 
 export const REQUEST_STATUS_LABEL = {
@@ -30,3 +36,9 @@ export const STEP_STATUS_LABEL: Record<string, string> = {
   cancelled: "בוטל",
   delegated: "הואצל",
 };
+
+/** A step of a sent request, named the same way as in the form editor: "שלב 3 · דנה כהן". */
+export function runStepLabel(s: { order: number; role: string; assigneeName?: string | null }): string {
+  const who = s.role === "requester" ? "השולח" : s.role === "employee" ? (s.assigneeName ? `העובד – ${s.assigneeName}` : "העובד") : s.assigneeName || "מאשר";
+  return `שלב ${s.order} · ${who}`;
+}

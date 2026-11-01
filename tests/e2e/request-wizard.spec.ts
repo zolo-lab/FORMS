@@ -17,7 +17,7 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
 
   await expect(page.getByRole("heading", { name: "בקשה חדשה" })).toBeVisible();
   // The dev DB also holds throwaway packages from parallel DB tests: pick the seeded one explicitly.
-  await page.getByLabel("ערכת מסמכים").selectOption({ label: "קליטת עובד רגיל" });
+  await page.getByLabel("טופס", { exact: true }).selectOption({ label: "קליטת עובד רגיל" });
   await page.getByRole("button", { name: "הבא" }).click();
 
   // Step 2 validates the name before moving on.

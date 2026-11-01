@@ -24,6 +24,8 @@ interface Props {
   role: FillerRole;
   subjectName: string;
   action: string;
+  /** The step is set to "רק טופס רספונסיבי": no on-document mode. */
+  formOnly?: boolean;
   returnTargets?: { id: string; label: string }[];
   pdfDocs?: OnDocPdf[];
   /** Option lists of dynamic sources (group members …), built on the server. */
@@ -102,12 +104,12 @@ const ACTION_ERRORS: Record<string, string> = {
   closed: "הפעולה כבר בוצעה. רעננו את הדף.",
 };
 
-export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, returnTargets = [], pdfDocs = [], lookups }: Props) {
+export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, formOnly = false, returnTargets = [], pdfDocs = [], lookups }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const hasForm = definition.pages.length > 0;
   // On-document mode only when every field of this role is placed on a PDF.
   const onDocPdfs = pdfDocs.filter((d) => coversAll(d.mapping, definition));
-  const canOnDoc = hasForm && pdfDocs.length > 0 && onDocPdfs.length === pdfDocs.length && pdfDocs.length === 1;
+  const canOnDoc = !formOnly && hasForm && pdfDocs.length > 0 && onDocPdfs.length === pdfDocs.length && pdfDocs.length === 1;
   const isDesktop = useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches, () => false);
   const [chosen, setChosen] = useState<"form" | "document" | null>(null);
   const mode = chosen ?? (isDesktop && canOnDoc ? "document" : "form");

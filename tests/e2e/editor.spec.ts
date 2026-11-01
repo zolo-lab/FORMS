@@ -29,7 +29,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 
   // The full-screen preview shows the saved version.
   await expect(async () => {
-    await page.goto(`/preview/form/${id}`);
+    await page.goto(`/preview/form/${id}?all=1`);
     const label = page.locator("label", { hasText: "שם מלא" });
     await expect(label).toBeVisible({ timeout: 2000 });
     await expect(label).toHaveClass(/text-2xl/);

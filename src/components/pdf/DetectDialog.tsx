@@ -151,7 +151,7 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
       {canSplit && (
         <label className="flex items-center gap-2">
           <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} />
-          <span>שלב נפרד לכל עמוד ב-PDF (נוח למילוי בחלקים)</span>
+          <span>עמוד נפרד בטופס לכל עמוד ב-PDF (נוח למילוי בחלקים)</span>
         </label>
       )}
       {badKey && <p className="text-destructive">מזהה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות.</p>}

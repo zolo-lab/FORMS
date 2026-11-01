@@ -25,6 +25,11 @@ describe("labels and types", () => {
     expect(cleanLabel("3. שם פרטי:*")).toBe("שם פרטי");
     expect(cleanLabel("א) כתובת __")).toBe("כתובת");
     expect(cleanLabel("  תאריך  לידה : ")).toBe("תאריך לידה");
+    // Form 101: a bracketed remark, stored in visual order, is not part of the name.
+    expect(cleanLabel("מספר זהות ) 9 ספרות(")).toBe("מספר זהות");
+    expect(cleanLabel("מספר דרכון (למי שאין מספר ת.ז.)")).toBe("מספר דרכון");
+    expect(typeFromLabel(cleanLabel("מספר זהות ) 9 ספרות("))).toBe("id_number");
+    expect(typeFromLabel("מספר דרכון למי שאין מספר ת.ז.")).toBe("short_text");
   });
   it("reads the type from the words", () => {
     expect(typeFromLabel("תאריך לידה")).toBe("date");

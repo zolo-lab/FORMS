@@ -61,6 +61,8 @@ function assigneeFrom(value: unknown, contacts: Record<string, Person> = {}): As
   return {};
 }
 
+const withoutEmpty = (a: AssigneeFields): AssigneeFields => Object.fromEntries(Object.entries(a).filter(([, v]) => !!v)) as AssigneeFields;
+
 /**
  * Build the (all pending) steps of a request from the package workflow.
  * A `group_all` step becomes one parallel step per member (none when the group is empty: the step is
@@ -109,7 +111,11 @@ function find(steps: EngineStep[], id: string): EngineStep {
 const clone = (steps: EngineStep[]) => steps.map((s) => ({ ...s }));
 
 /** Activate the lowest order that still has work; skip steps whose `skipIf` holds. Repeats until something is active or all done. */
-export function activateNext(input: EngineStep[], answers: Answers): EngineResult {
+/**
+ * `contacts` resolves a "group" dropdown answer (a contact id). A step routed by a field ("המייל שמולא בשדה") whose
+ * person is still unknown takes it from the answers when it is activated, so an email filled in step 9 reaches step 10.
+ */
+export function activateNext(input: EngineStep[], answers: Answers, contacts: Record<string, Person> = {}): EngineResult {
   const steps = clone(input);
   const events: EngineEvent[] = [];
   if (steps.some((s) => s.status === "declined" || s.status === "expired")) return { steps, events };
@@ -134,6 +140,7 @@ export function activateNext(input: EngineStep[], answers: Answers): EngineResul
         events.push({ type: "step_skipped", stepId: s.id });
       } else {
         s.status = "active";
+        if (s.assigneeFromFieldId && !s.assigneeEmail && !s.assigneePhone) Object.assign(s, withoutEmpty(assigneeFrom(answers[s.assigneeFromFieldId], contacts)));
         events.push({ type: "step_activated", stepId: s.id, payload: { order: s.order, role: s.role } });
       }
     }
@@ -153,12 +160,12 @@ export function openStep(input: EngineStep[], stepId: string): EngineResult {
   return { steps, events };
 }
 
-export function completeStep(input: EngineStep[], stepId: string, answers: Answers): EngineResult {
+export function completeStep(input: EngineStep[], stepId: string, answers: Answers, contacts: Record<string, Person> = {}): EngineResult {
   const steps = clone(input);
   const s = find(steps, stepId);
   if (s.status !== "active" && s.status !== "in_progress") throw new Error(`cannot complete a ${s.status} step`);
   s.status = "completed";
-  const next = activateNext(steps, answers);
+  const next = activateNext(steps, answers, contacts);
   return { steps: next.steps, events: [{ type: "step_completed", stepId }, ...next.events] };
 }
 

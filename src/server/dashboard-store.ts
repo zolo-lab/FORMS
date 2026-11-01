@@ -210,8 +210,10 @@ export async function requestKpis(orgId?: string, now = new Date(), scope: Scope
   };
 }
 
+/** The forms requests can be opened from (each form's own route; routes left without a form are not listed). */
 export async function listPackages() {
-  return db.select({ id: packageTemplates.id, name: packageTemplates.name }).from(packageTemplates).orderBy(asc(packageTemplates.name));
+  const withForm = db.selectDistinct({ id: schema.packageTemplateItems.packageTemplateId }).from(schema.packageTemplateItems);
+  return db.select({ id: packageTemplates.id, name: packageTemplates.name }).from(packageTemplates).where(inArray(packageTemplates.id, withForm)).orderBy(asc(packageTemplates.name));
 }
 
 /** Label → text of every answer collected so far, across the request's (pinned) documents. */

@@ -39,6 +39,15 @@ async function ensurePackage(name: string, description: string, workflow: Workfl
   if (existing.length === 0) await db.insert(schema.packageTemplates).values({ name, description, workflow });
 }
 
+const ONBOARDING_FORM = {
+  schemaVersion: 1 as const,
+  title: "קליטת עובד רגיל",
+  pages: [{ id: "p1", title: "פרטי העובד", fields: [
+    { id: "phone", type: "phone" as const, label: "טלפון נייד", filledBy: "employee" as const },
+    { id: "notes", type: "short_text" as const, label: "הערות", filledBy: "employee" as const },
+  ] }],
+};
+
 async function main() {
   for (const o of ORGS) {
     await db
@@ -60,6 +69,16 @@ async function main() {
       .update(schema.packageTemplates)
       .set({ workflow: ONBOARDING_WORKFLOW })
       .where(eq(schema.packageTemplates.id, existing[0]!.id));
+  }
+
+  // A request is opened from a form now: the seeded onboarding route carries one simple published form (the e2e
+  // request and signing tests open requests from it). Left alone once the route has a form.
+  const [onboarding] = await db.select().from(schema.packageTemplates).where(eq(schema.packageTemplates.name, name));
+  const hasForm = onboarding && (await db.select().from(schema.packageTemplateItems).where(eq(schema.packageTemplateItems.packageTemplateId, onboarding.id))).length > 0;
+  if (onboarding && !hasForm) {
+    const [tpl] = await db.insert(schema.formTemplates).values({ slug: "onboarding-basic", title: "קליטת עובד רגיל", status: "active", publishedVersion: 1 }).returning();
+    await db.insert(schema.formTemplateVersions).values({ templateId: tpl!.id, version: 1, definition: ONBOARDING_FORM, publishedAt: new Date() });
+    await db.insert(schema.packageTemplateItems).values({ packageTemplateId: onboarding.id, templateId: tpl!.id, order: 1 });
   }
 
   // Same engine, different documents: attach the termination forms to this package under /admin/packages.

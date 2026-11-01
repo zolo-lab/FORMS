@@ -33,7 +33,7 @@ export default async function ExportTemplatesPage({ searchParams }: { searchPara
             <Input id="et-name" name="name" placeholder='למשל "פריוריטי – קליטת עובדים"' required />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="et-pkg">ערכה (מאיזה טפסים לוקחים את השדות)</Label>
+            <Label htmlFor="et-pkg">טופס (ממנו לוקחים את השדות)</Label>
             <Select id="et-pkg" name="packageTemplateId" defaultValue="">
               <option value="">ללא – לפי מזהי שדות</option>
               {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -59,7 +59,7 @@ export default async function ExportTemplatesPage({ searchParams }: { searchPara
           {templates.map((t) => (
             <li key={t.id} className="flex flex-wrap items-center gap-3 p-3">
               <Link href={`/admin/settings/exports/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
-              <span className="text-sm text-muted-foreground">{t.packageName ?? "כל הערכות"} · {t.template.columns.length} עמודות</span>
+              <span className="text-sm text-muted-foreground">{t.packageName ?? "כל הטפסים"} · {t.template.columns.length} עמודות</span>
             </li>
           ))}
         </ul>

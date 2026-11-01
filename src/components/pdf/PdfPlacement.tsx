@@ -1,4 +1,5 @@
 "use client";
+import { StepSelect, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -40,6 +41,10 @@ export interface PdfPlacementProps {
    */
   /** Change a field of the form from the stamp panel (e.g. who fills it). */
   onFieldPatch?: (fieldId: string, patch: Partial<FormField>) => void;
+  /** The form's steps, to choose the step a field belongs to. */
+  steps?: StepView[];
+  /** Set by the editor's "הדגשת השדות של": boxes of other steps fade. When given, the local "צפה כ-" picker is hidden. */
+  focusRole?: FillerRole | "";
   onDrawElement?: (entry: PaletteEntry, page: number, at: { x: number; y: number }) => string;
   /** Copy/paste of an element: make a copy of its field and return the new field id (null = keep the same field). */
   onCloneField?: (fieldId: string) => string | null;
@@ -49,7 +54,7 @@ export interface PdfPlacementProps {
   onSplitStep?: (fieldId: string) => void;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -62,7 +67,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
   /** "צפה כ-": stamps of other roles are dimmed. */
-  const [viewAs, setViewAs] = useState<FillerRole | "">("");
+  const [localViewAs, setViewAs] = useState<FillerRole | "">("");
+  const viewAs = focusRole !== undefined ? focusRole : localViewAs;
   /** Rows offered per table in the list; at least as many as are already placed (so their names resolve). */
   const [tableRowsSet, setTableRows] = useState<Record<string, number>>({});
   const tableRows = useMemo(() => {
@@ -103,8 +109,16 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     history.current.past = [...history.current.past.slice(-49), latest.current];
     history.current.future = [];
   };
-  const roleOf = (s: PdfStamp): FillerRole | "none" => allFields(definition).find((f) => f.id === baseFieldId(s.fieldId))?.filledBy ?? "none";
-  const rolesUsed = [...new Set(mapping.stamps.map(roleOf))].filter((r): r is FillerRole => r !== "none");
+  /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
+  const roleOf = (s: PdfStamp): FillerRole | "none" => {
+    const f = allFields(definition).find((x) => x.id === baseFieldId(s.fieldId));
+    return f ? (f.filledBy ?? "employee") : "none";
+  };
+  const stepRoles = new Set(steps.map((v) => v.role));
+  /** A box whose field is in no step of the form is drawn as "not in a step". */
+  const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
+  const rolesUsed = [...new Set(mapping.stamps.map(shownRole))].filter((r): r is FillerRole => r !== "none");
+  const roleName = (r: FillerRole) => steps.filter((v) => v.role === r).map((v) => v.label).join(" / ") || ROLE_LABELS[r];
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
   /** The form field a stamp writes; a table cell resolves to its column. */
   const fieldOf = (s: PdfStamp): FormField | undefined => {
@@ -210,6 +224,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     e.stopPropagation();
     // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
     rootRef.current?.focus({ preventScroll: true });
+    // "סימון שדות לשלב": a click puts the box's field in the chosen step, or takes it out; nothing moves.
+    if (mode === "move" && focusRole && focusRole !== "unassigned" && onFieldPatch) {
+      const r = roleOf(stamp);
+      if (r !== "none") onFieldPatch(baseFieldId(stamp.fieldId), { filledBy: r === focusRole ? "unassigned" : focusRole });
+      return;
+    }
     if (mode === "move" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       // Toggle membership in the multi-selection; no drag.
       if (group.includes(stamp.id)) {
@@ -422,13 +442,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               )}
             </div>
           )}
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          {focusRole === undefined && <label className="flex items-center gap-1 text-xs text-muted-foreground">
             צפה כ-
             <Select className="h-8 w-32" aria-label="צפה כתפקיד" value={viewAs} onChange={(e) => setViewAs(e.target.value as FillerRole | "")}>
               <option value="">כולם</option>
               {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </Select>
-          </label>
+          </label>}
           {onPreview && <Button className="lg:ms-auto" variant="secondary" disabled={previewBusy} onClick={onPreview}>{previewBusy ? "מכין…" : "תצוגה מקדימה עם נתוני דוגמה"}</Button>}
         </div>
         {doc && pages.length > 1 && (
@@ -454,9 +474,25 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
         {rolesUsed.length > 0 && (
           <ul aria-label="מקרא תפקידים" className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {rolesUsed.map((r) => (
-              <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{ROLE_LABELS[r]}</li>
+              <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{roleName(r)}</li>
             ))}
           </ul>
+        )}
+        {onFieldPatch && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm" aria-label="תיבות מסומנות">
+            <span className="font-medium">{group.length === 1 ? "תיבה אחת מסומנת" : `${group.length} תיבות מסומנות`}</span>
+            <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
+            <span>· העברה לשלב:</span>
+            <StepSelect
+              className="h-9 w-64"
+              views={steps}
+              value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
+              onChange={(r) => {
+                const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
+                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r });
+              }}
+            />
+          </div>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
         <div ref={attachViewer} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
@@ -505,10 +541,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       onPointerDown={(e) => startDrag(e, s, "move")}
                       className={cn(
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
-                        inGroup ? ROLE_OVERLAY[roleOf(s)].boxActive : ROLE_OVERLAY[roleOf(s)].box,
+                        inGroup ? ROLE_OVERLAY[shownRole(s)].boxActive : ROLE_OVERLAY[shownRole(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                         s.guessed && "border-dashed",
-                        viewAs && (roleOf(s) === "none" ? "employee" : roleOf(s)) !== viewAs && !inGroup && "opacity-25",
+                        viewAs && shownRole(s) !== "none" && shownRole(s) !== viewAs && !inGroup && "opacity-25",
+                        viewAs && shownRole(s) === viewAs && "ring-2 ring-primary ring-offset-1",
                       )}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
@@ -571,15 +608,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               ))}
             </div>
             {onSplitStep && fieldOf(selectedStamp) && !tableCellOf(selectedStamp.fieldId) && (
-              <Button size="sm" variant="outline" className="min-h-9" onClick={() => onSplitStep(selectedStamp.fieldId)}>שלב חדש מכאן</Button>
+              <Button size="sm" variant="outline" className="min-h-9" onClick={() => onSplitStep(selectedStamp.fieldId)}>עמוד חדש מכאן</Button>
             )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
-                <Label className="text-muted-foreground">מי ממלא</Label>
-                <Select className="h-9" aria-label="מי ממלא" value={roleOf(selectedStamp) === "none" ? "" : roleOf(selectedStamp)} onChange={(e) => onFieldPatch(baseFieldId(selectedStamp.fieldId), { filledBy: (e.target.value || undefined) as FillerRole | undefined })}>
-                  <option value="">ללא תפקיד מוגדר</option>
-                  {fillerRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                </Select>
+                <Label className="text-muted-foreground">{group.length > 1 ? `באיזה שלב (${group.length} תיבות מסומנות)` : "באיזה שלב"}</Label>
+                <StepSelect
+                  className="h-9"
+                  views={steps}
+                  value={roleOf(selectedStamp) === "none" ? undefined : (roleOf(selectedStamp) as FillerRole)}
+                  onChange={(r) => {
+                    // Every marked box (Shift/Ctrl+click) goes to the chosen step together.
+                    const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
+                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r });
+                  }}
+                />
               </div>
             )}
             {selectedStamp.kind === "stamp_image" && (

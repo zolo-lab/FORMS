@@ -230,3 +230,27 @@ describe("requester as assignee (6.15a)", () => {
     expect(s2.assigneeEmail).toBeUndefined();
   });
 });
+
+describe("a step routed by a field filled in an earlier step", () => {
+  it("takes the email when it is activated, not when the request is sent", async () => {
+    const { planSteps, activateNext, completeStep } = await import("@/lib/workflow/engine");
+    let n = 0;
+    const steps = planSteps(
+      { steps: [
+        { order: 1, role: "requester", action: "fill" },
+        { order: 2, role: "employee", action: "fill_and_sign" },
+        { order: 3, role: "approver", action: "approve", assigneeKind: "from_field", assigneeFromFieldId: "managerEmail" },
+      ] },
+      {},
+      () => `s${++n}`,
+    ).map((s) => (s.role === "employee" ? { ...s, assigneeEmail: "emp@example.org" } : s));
+    let r = activateNext(steps, {});
+    r = completeStep(r.steps, "s1", {});
+    expect(r.steps.find((s) => s.id === "s3")!.assigneeEmail).toBeUndefined();
+    // The employee fills the manager's email in step 2; step 3 goes there.
+    r = completeStep(r.steps, "s2", { managerEmail: "boss@example.org" });
+    const s3 = r.steps.find((s) => s.id === "s3")!;
+    expect(s3.status).toBe("active");
+    expect(s3.assigneeEmail).toBe("boss@example.org");
+  });
+});

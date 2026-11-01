@@ -68,9 +68,9 @@ export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "expor
 
 export const GRANT_LABELS: Record<keyof UserGrants, string> = {
   viewAll: "רואה את כל הבקשות (לא רק את שלו)",
-  openAll: "רשאי לפתוח בקשות מכל הערכות",
+  openAll: "רשאי לפתוח בקשות מכל הטפסים",
   cancel: "יכול לבטל בקשות ולמחוק טיוטות",
-  manageForms: "יכול לבנות טפסים וערכות",
+  manageForms: "יכול לבנות טפסים",
   export: "רשאי לייצא דוחות (Excel / CSV / PDF חתומים)",
   followUp: "מסמן טיפול אחרי חתימה (למשל \"עודכן בשכר\")",
   trackOnly: "מעקב בלבד – רואה מי ממתין ושולח תזכורת, בלי גישה לתוכן הטפסים",

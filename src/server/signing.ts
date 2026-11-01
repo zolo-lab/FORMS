@@ -18,7 +18,7 @@ import { getFile, putFile } from "./storage";
 import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, otpCookieName, otpCookieValue, verifyOtpCookie } from "@/lib/auth/otp";
 import { delegateError } from "@/lib/workflow/delegate";
 import { checkUpload } from "@/lib/forms/upload";
-import { ROLE_LABELS } from "@/lib/workflow/labels";
+import { runStepLabel } from "@/lib/workflow/labels";
 
 const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
 
@@ -72,7 +72,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   const siblings = await db.select().from(signingSteps).where(eq(signingSteps.requestId, request.id)).orderBy(signingSteps.order);
   const returnTargets = siblings
     .filter((s) => s.order < step.order && s.status === "completed" && s.role !== "requester") // the requester has no signing link, so a request returned to them would be stuck
-    .map((s) => ({ id: s.id, label: `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}` }));
+    .map((s) => ({ id: s.id, label: runStepLabel(s) }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
   return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: view.definition, fullDefinition: merged, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
@@ -126,7 +126,7 @@ async function doneInfo(ctx: SigningContext, status: string): Promise<DoneInfo> 
   return {
     message: ctx.thankYou,
     completed: status === "completed",
-    waitingFor: open.map((s) => `${ROLE_LABELS[s.role as FillerRole] ?? s.role}${s.assigneeName ? ` – ${s.assigneeName}` : ""}`),
+    waitingFor: open.map((s) => runStepLabel(s)),
   };
 }
 

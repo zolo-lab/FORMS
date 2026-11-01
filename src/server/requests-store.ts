@@ -28,7 +28,7 @@ import {
   type EngineStep,
 } from "@/lib/workflow/engine";
 import { renderDefault } from "@/lib/notifications/templates";
-import { peopleForWorkflow } from "./people-store";
+import { listContacts, peopleForWorkflow } from "./people-store";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
 import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
@@ -324,13 +324,13 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
       ? { ...st, assigneeName: req.subjectName, assigneeEmail: req.subjectEmail ?? undefined, assigneePhone: req.subjectPhone ?? undefined }
       : st,
   );
-  let result: EngineResult = activateNext(planned, answers);
+  let result: EngineResult = activateNext(planned, answers, people.contacts);
   const evs = [...result.events];
   // Requester steps are filled by whoever created the request: complete them right away.
   for (;;) {
     const mine = result.steps.find((s) => s.role === "requester" && s.status === "active");
     if (!mine) break;
-    const done = completeStep(result.steps, mine.id, answers);
+    const done = completeStep(result.steps, mine.id, answers, people.contacts);
     result = done;
     evs.push(...done.events);
   }
@@ -388,7 +388,9 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
       break;
     case "submit": {
       answers = { ...answers, ...action.answers };
-      result = completeStep(steps, stepId, answers);
+      // A later step may be routed by a field filled up to now (a contact id when the field lists a group).
+      const contacts = Object.fromEntries((await listContacts()).map((c) => [c.id, { id: c.id, name: c.name, email: c.email ?? undefined, phone: c.phone ?? undefined }]));
+      result = completeStep(steps, stepId, answers, contacts);
       break;
     }
     case "decline":

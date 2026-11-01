@@ -1,4 +1,6 @@
 "use client";
+import type { StepView } from "./StepSelect";
+import type { FillerRole } from "@/lib/forms/schema";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -33,8 +35,12 @@ export function PdfTab({
   onChange,
   onDefinitionChange,
   templateId,
+  steps,
+  focusRole,
 }: {
   templateId?: string;
+  steps?: StepView[];
+  focusRole?: FillerRole | "";
   definition: FormDefinition;
   pdf: PdfState | null;
   onChange: (p: PdfState | null) => void;
@@ -238,15 +244,17 @@ export function PdfTab({
       {pdf && (
         <PdfPlacement
           definition={definition}
+          steps={steps}
+          focusRole={focusRole}
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}
           onMappingChange={(mapping) => onChange({ ...pdf, mapping })}
           onSplitStep={(fieldId) => {
             const r = splitStepAt(defRef.current, fieldId);
-            if (!r) { setGuessNote("זה כבר תחילת שלב, אין מה לחתוך."); return; }
+            if (!r) { setGuessNote("זה כבר תחילת עמוד, אין מה לחתוך."); return; }
             changeDefinition(r.definition);
-            setGuessNote(`נוצר שלב חדש (${r.definition.pages[r.step]!.title}). אפשר לשנות לו שם בלשונית העריכה.`);
+            setGuessNote(`נוצר עמוד חדש (${r.definition.pages[r.step]!.title}). אפשר לשנות לו שם בלשונית העריכה.`);
           }}
           onSuggest={async (fieldId) => {
             try {

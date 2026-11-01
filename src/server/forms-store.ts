@@ -4,6 +4,8 @@ import { db, schema } from "@/db";
 import { blankForm, publishIssues } from "@/lib/forms/builder";
 import { parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
+import { formPackageId, getPackage, syncFormPackage } from "./packages-store";
+import { unassignedFields } from "@/lib/workflow/step-fields";
 
 const { formTemplates, formTemplateVersions, pdfFiles, packageDocuments, packageTemplateItems, requests, webhooks } = schema;
 
@@ -23,6 +25,8 @@ export async function createTemplate(
     .values({ slug: `form-${nanoid(8).toLowerCase().replace(/[^a-z0-9]/g, "x")}`, title, kind })
     .returning({ id: formTemplates.id });
   await db.insert(formTemplateVersions).values({ templateId: t!.id, version: 1, definition: { ...def, title }, ...(pdf ?? {}) });
+  // The form's signing route and sending settings live with it from the start.
+  await formPackageId(t!.id, title);
   return t!.id;
 }
 
@@ -72,10 +76,12 @@ export async function saveDraft(
       pdfMapping: pdf ? pdf.pdfMapping : version.pdfMapping,
     });
     await db.update(formTemplates).set({ title: parsed.data.title }).where(eq(formTemplates.id, templateId));
+    if (parsed.data.title !== data.template.title) await syncFormPackage(templateId, { name: parsed.data.title });
     return { version: version.version + 1 };
   }
   await db.update(formTemplateVersions).set({ definition: parsed.data, ...extra }).where(eq(formTemplateVersions.id, version.id));
   await db.update(formTemplates).set({ title: parsed.data.title }).where(eq(formTemplates.id, templateId));
+  if (parsed.data.title !== data.template.title) await syncFormPackage(templateId, { name: parsed.data.title });
   return { version: version.version };
 }
 
@@ -88,6 +94,10 @@ export async function publishTemplate(templateId: string): Promise<{ ok: true; v
   const issues = publishIssues(data.version.definition).map((i) => i.message);
   // Every new form starts from a PDF; forms published before that rule keep working without one.
   if (!data.version.pdfFileId && data.template.publishedVersion === null) issues.unshift(NEEDS_PDF);
+  // Every field must be in a step of the form, or nobody would ever fill it.
+  const pkg = await getPackage(await formPackageId(templateId, data.template.title));
+  const orphans = unassignedFields(data.version.definition, (pkg?.pkg.workflow.steps ?? []).map((s) => s.role));
+  if (orphans.length) issues.push(`${orphans.length} שדות לא משויכים לאף שלב: ${orphans.slice(0, 5).map((f) => f.label || f.id).join(", ")}`);
   if (issues.length) return { ok: false, issues };
   await db.update(formTemplateVersions).set({ publishedAt: new Date() }).where(eq(formTemplateVersions.id, data.version.id));
   await db
@@ -113,6 +123,7 @@ export async function setArchived(templateId: string, archived: boolean) {
     .update(formTemplates)
     .set({ status: archived ? "archived" : data.template.publishedVersion ? "active" : "draft" })
     .where(eq(formTemplates.id, templateId));
+  await syncFormPackage(templateId, { archived });
 }
 
 export async function getPdfFile(id: string | null) {
@@ -152,6 +163,10 @@ export async function deleteTemplate(templateId: string): Promise<{ requests: nu
     requestIds = docs.map((d) => d.requestId);
   }
   if (requestIds.length) await db.delete(requests).where(inArray(requests.id, requestIds));
+  // The form's own signing route and settings go with it (its requests were deleted above).
+  const ownPkg = await formPackageId(templateId);
+  const [used] = await db.select({ id: requests.id }).from(requests).where(eq(requests.packageTemplateId, ownPkg)).limit(1);
+  if (!used) await db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, ownPkg));
   await db.delete(packageTemplateItems).where(eq(packageTemplateItems.templateId, templateId));
   await db.delete(webhooks).where(eq(webhooks.templateId, templateId));
   await db.delete(formTemplates).where(eq(formTemplates.id, templateId));
@@ -166,4 +181,36 @@ export async function deleteTemplate(templateId: string): Promise<{ requests: nu
     if (orphans.length) await db.delete(pdfFiles).where(inArray(pdfFiles.id, orphans));
   }
   return { requests: requestIds.length };
+}
+
+/**
+ * "חיבור טפסים" (iForms kit): a new form made of `templateIds` in this order. Its document is their PDFs one after
+ * the other, its fields are all of theirs, and it gets its own signing route (set it on "שלבי הטופס").
+ */
+export async function combineTemplates(templateIds: string[], title: string): Promise<{ id: string } | { error: string }> {
+  const { combineForms } = await import("@/lib/forms/combine");
+  const { getFile, putFile, sha256Hex } = await import("./storage");
+  const { PDFDocument } = await import("pdf-lib");
+  if (templateIds.length < 2) return { error: "בחרו לפחות שני טפסים" };
+  const out = await PDFDocument.create();
+  const parts = [];
+  for (const id of templateIds) {
+    const data = await getEditorData(id);
+    if (!data) return { error: "אחד הטפסים לא נמצא" };
+    const pdf = await getPdfFile(data.version.pdfFileId);
+    const stored = pdf ? await getFile(pdf.blobUrl.split("/").pop()!) : null;
+    if (!pdf || !stored) return { error: `לטופס "${data.template.title}" אין מסמך PDF` };
+    const src = await PDFDocument.load(stored.bytes);
+    for (const page of await out.copyPages(src, src.getPageIndices())) out.addPage(page);
+    parts.push({ definition: data.version.definition, stamps: data.version.pdfMapping?.stamps ?? [], pages: pdf.pages });
+  }
+  const combined = combineForms(title, parts);
+  const bytes = await out.save();
+  const stored = await putFile({ name: `${title}.pdf`, mime: "application/pdf", bytes });
+  const [file] = await db
+    .insert(pdfFiles)
+    .values({ name: `${title}.pdf`, blobUrl: stored.url, sha256: sha256Hex(bytes), pageCount: combined.pages.length, pages: combined.pages })
+    .returning({ id: pdfFiles.id });
+  const id = await createTemplate(title, combined.definition, "pdf", { pdfFileId: file!.id, pdfMapping: { schemaVersion: 1, pages: combined.pages, stamps: combined.stamps } });
+  return { id };
 }

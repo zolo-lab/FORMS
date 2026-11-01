@@ -6,7 +6,7 @@ import type { FormDefinition } from "@/lib/forms/schema";
 type Settings = NonNullable<FormDefinition["settings"]>;
 
 const LAYOUTS = [
-  ["wizard", "עמוד אחרי עמוד (שלבים)"],
+  ["wizard", "עמוד אחרי עמוד"],
   ["single", "הכול בעמוד אחד"],
   ["card", "שאלה אחת בכל מסך + סיכום לפני שליחה (נוח בנייד)"],
 ] as const;

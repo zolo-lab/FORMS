@@ -14,7 +14,7 @@ export const FIXED_SOURCES = {
   subjectName: "שם העובד / הנמען",
   subjectIdNumber: 'ת"ז',
   organization: "ארגון",
-  package: "ערכה",
+  package: "טופס",
   status: "סטטוס",
   createdAt: "תאריך יצירה",
   campaign: "קמפיין",

@@ -9,8 +9,9 @@ export function parseStepForm(g: Getter): WorkflowStep {
   const role = str(g, "role") as StepRole;
   const action = str(g, "action") as StepActionKind;
   const order = Number(str(g, "order"));
-  const name = str(g, "assigneeName");
   const email = str(g, "assigneeEmail");
+  // An email typed for the step ("מייל שאני רושם") is enough: the name defaults to it.
+  const name = str(g, "assigneeName") || email;
   const phone = str(g, "assigneePhone");
   const due = str(g, "dueHours");
   const fromField = str(g, "assigneeFromFieldId");
@@ -23,6 +24,7 @@ export function parseStepForm(g: Getter): WorkflowStep {
     role: (role in ROLE_LABELS ? role : "employee") as StepRole,
     action: (STEP_ACTIONS as readonly string[]).includes(action) ? action : "fill",
     ...(g.get("otpRequired") === "on" || g.get("otpRequired") === "1" ? { otpRequired: true } : {}),
+    ...(g.get("formOnly") === "on" || g.get("formOnly") === "1" ? { formOnly: true } : {}),
     ...(kind ? { assigneeKind: kind } : {}),
     ...(kind === "contact" && contactId ? { contactId } : {}),
     ...(kind === "group_all" && groupId ? { groupId } : {}),

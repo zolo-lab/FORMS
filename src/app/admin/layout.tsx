@@ -29,18 +29,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav
           items={tracker ? [{ href: "/admin/track", label: "מעקב חתימות" }] : [
             { href: "/admin/inbox", label: "לטיפולי", badge: pending },
-            { href: "/admin/requests", label: "בקשות" },
+            { href: "/admin/requests", label: "היסטוריית טפסים" },
             ...(tracks ? [{ href: "/admin/track", label: "מעקב" }] : []),
             { href: "/admin/employees", label: "עובדים" },
             { href: "/admin/campaigns", label: "קמפיינים" },
-            ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }, { href: "/admin/packages", label: "מסלולי חתימה" }] : []),
+            ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
+            ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },
-              { href: "/admin/settings/people", label: "אנשי קשר וקבוצות" },
-              { href: "/admin/settings/users", label: "משתמשים והרשאות" },
             ] },
             { title: "חיבורים", items: [
               { href: "/admin/settings/webhooks", label: "Webhooks" },
