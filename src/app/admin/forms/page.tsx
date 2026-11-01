@@ -3,6 +3,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { CopyLinkButton } from "@/components/ui/copy-link-button";
+import { publicFillPath } from "@/lib/forms/public-link";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { listTemplates, requestCountsByTemplate } from "@/server/forms-store";
@@ -17,7 +19,6 @@ const STATUS = { draft: ["טיוטה", "warning"], active: ["פעיל", "success
 export default async function FormsListPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string; combine?: string }> }) {
   const { error, deleted, combine } = await searchParams;
   const [templates, counts] = await Promise.all([listTemplates(), requestCountsByTemplate()]);
-  const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <PageHeader title="תבניות טפסים" description="כל טופס מתחיל מ-PDF: המערכת קוראת אותו ומציעה את השדות, ואתם מתקנים בבונה. בכל טופס מגדירים גם את שלבי הטופס: מי ממלא ומי חותם, ובאיזה סדר." />
@@ -32,11 +33,15 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
           <div key={t.id} className="flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-48 flex-1">
               <Link href={`/admin/forms/${t.id}`} className="font-medium hover:underline">{t.title}</Link>
-              <p className="text-xs text-muted-foreground" dir="ltr">{t.slug}</p>
             </div>
-            <Badge tone={STATUS[t.status][1]}>{STATUS[t.status][0]}</Badge>
-            <span className="text-sm text-muted-foreground">{t.publishedVersion ? `גרסה ${t.publishedVersion}` : "לא פורסם"}</span>
-            <span className="text-sm text-muted-foreground">{fmt.format(t.updatedAt)}</span>
+            {t.publishedVersion && t.status !== "archived" ? (
+              <span className="inline-flex items-center gap-1">
+                <CopyLinkButton path={publicFillPath(t.id)} variant="outline" size="sm" aria-label={`העתקת קישור למילוי – ${t.title}`} />
+                <a href={publicFillPath(t.id)} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm" })} aria-label={`פתיחת הקישור למילוי – ${t.title}`}>פתיחה</a>
+              </span>
+            ) : (
+              <Badge tone={STATUS[t.status][1]}>{t.status === "archived" ? STATUS.archived[0] : "טיוטה – עוד לא פורסם"}</Badge>
+            )}
             <div className="flex gap-1">
               <Link href={`/admin/forms/${t.id}/flow`} className={buttonVariants({ variant: "ghost", size: "sm" })}>שלבי הטופס</Link>
               <form action={duplicateFormAction}><input type="hidden" name="id" value={t.id} /><SubmitButton variant="ghost" size="sm">שכפול</SubmitButton></form>
