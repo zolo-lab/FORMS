@@ -9,6 +9,8 @@ import Link from "next/link";
 import { ChevronDown, Download, Redo2, Undo2, Sparkles } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
+import { CopyLinkButton } from "@/components/ui/copy-link-button";
+import { publicFillPath } from "@/lib/forms/public-link";
 import { Badge } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
@@ -296,6 +298,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         <Button variant="outline" size="sm" onClick={() => { setTab("edit"); setSelection(null); }}>הגדרות הטופס</Button>
+        {published && <CopyLinkButton path={publicFillPath(templateId)} variant="outline" size="sm" />}
         <a
           href={`/preview/form/${templateId}`}
           target="_blank"

@@ -300,8 +300,12 @@ async function persist(
   return { status, tokens: tokensToLink };
 }
 
-/** draft → in_progress: plan steps, activate the first, complete requester steps with the stored answers. */
-export async function sendRequest(requestId: string, actor: { type: "user" | "api"; id?: string } = { type: "user" }) {
+/**
+ * draft → in_progress: plan steps, activate the first, complete requester steps with the stored answers.
+ * `requesterByLink` (the form's public link): nobody filled the sender step in the system, so it stays open for the
+ * person who opened the link (the request's subject) and is filled through its own signing link like any other step.
+ */
+export async function sendRequest(requestId: string, actor: { type: "user" | "api"; id?: string } = { type: "user" }, opts: { requesterByLink?: boolean } = {}) {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) throw new Error("request not found");
   if (req.status !== "draft") throw new Error(`request is ${req.status}, not draft`);
@@ -316,6 +320,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
     const [creator] = await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy));
     if (creator) people.requester = { id: creator.id, name: creator.name, email: creator.email };
   }
+  if (opts.requesterByLink) people.requester = { name: req.subjectName, email: req.subjectEmail ?? undefined, phone: req.subjectPhone ?? undefined };
 
   // The employee step goes to the person the request is about.
   const override = (req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride;
@@ -328,6 +333,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   const evs = [...result.events];
   // Requester steps are filled by whoever created the request: complete them right away.
   for (;;) {
+    if (opts.requesterByLink) break;
     const mine = result.steps.find((s) => s.role === "requester" && s.status === "active");
     if (!mine) break;
     const done = completeStep(result.steps, mine.id, answers, people.contacts);
