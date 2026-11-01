@@ -43,7 +43,8 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
       <canvas
         ref={canvasRef}
         aria-label="אזור חתימה"
-        className="min-h-48 w-full flex-1 touch-none rounded-md border bg-card"
+        // A fixed CSS size: the bitmap size set below must never feed back into the layout (it made the box grow for seconds).
+        className="block h-44 w-full touch-none rounded-md border bg-card"
       />
       <div className="flex justify-between gap-2">
         <Button variant="outline" onClick={() => { padRef.current?.clear(); setEmpty(true); }}>נקה</Button>
@@ -212,7 +213,7 @@ export function SignatureInput({ domId, value, onChange, disabled, stamp = false
           {image && <Button variant="ghost" onClick={() => onChange(undefined)}>מחיקה</Button>}
         </div>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={noun} fullScreenOnMobile className="sm:w-[min(92vw,40rem)]">
+      <Dialog open={open} onClose={() => setOpen(false)} title={noun} className="w-[min(94vw,36rem)]">
         <SignaturePicker stamp={stamp} onCancel={() => setOpen(false)} onSave={(v) => { onChange(v); setOpen(false); }} />
       </Dialog>
     </div>

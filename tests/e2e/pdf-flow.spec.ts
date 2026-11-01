@@ -49,7 +49,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
 
   // Viewing the published form shows the PDF itself with the placed fields to fill.
   const formId = new URL(page.url()).pathname.split("/").pop()!;
-  await page.goto(`/preview/form/${formId}`);
+  await page.goto(`/preview/form/${formId}?all=1`);
   await expect(page.getByRole("button", { name: "על גבי המסמך" })).toBeVisible();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("מספר זהות", { exact: true })).toBeVisible();

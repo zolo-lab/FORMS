@@ -89,10 +89,10 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                     const comb = s.kind === "comb" ? { maxLength: s.comb?.cells, className: "tracking-[0.35em] text-center" } : { maxLength: undefined, className: "" };
                     const title = s.kind === "initials" ? `${label} (יוצג כראשי תיבות)` : label;
                     return s.multiline ? (
-                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} className={cn(ring, "resize-none p-0.5")} style={style}
+                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} dir={attrs.dir} className={cn(ring, "resize-none p-0.5 text-start")} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     ) : (
-                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5", narrow, comb.className)} style={style}
+                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5 text-start", narrow, comb.className)} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     );
                   }

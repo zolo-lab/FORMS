@@ -44,7 +44,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // Autosave, then the full-page preview: fill, step through, submit.
   await page.waitForTimeout(1500);
   await expect(page.getByText("נשמר", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.goto(`/preview/form/${id}`);
+  await page.goto(`/preview/form/${id}?all=1`);
   await expect(page.getByLabel("תפקיד")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("שכר")).toHaveCount(0); // hidden until "חודשי"
   await page.getByLabel("תפקיד").fill("מדריך");

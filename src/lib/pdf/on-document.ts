@@ -85,7 +85,7 @@ export function tabOrder<T extends { page: number; tabIndex?: number; x: number;
 }
 
 /** HTML input attributes that match the field type, so phones show a number pad and dates a picker. */
-export function inputAttrs(field: FormField): { type: string; inputMode?: "numeric" | "decimal" | "tel" | "email"; dir?: "ltr" } {
+export function inputAttrs(field: FormField): { type: string; inputMode?: "numeric" | "decimal" | "tel" | "email"; dir: "ltr" | "rtl" } {
   switch (field.type) {
     case "date": return { type: "date", dir: "ltr" };
     case "time": return { type: "time", dir: "ltr" };
@@ -93,7 +93,8 @@ export function inputAttrs(field: FormField): { type: string; inputMode?: "numer
     case "phone": return { type: "tel", inputMode: "tel", dir: "ltr" };
     case "email": return { type: "email", inputMode: "email", dir: "ltr" };
     case "number": case "currency": case "percent": return { type: "text", inputMode: "decimal", dir: "ltr" };
-    default: return field.validation?.charset === "digits" ? { type: "text", inputMode: "numeric", dir: "ltr" } : { type: "text" };
+    // Text is written right to left (the boxes sit on a page laid out left to right), so "קא'קא'" keeps its punctuation in place.
+    default: return field.validation?.charset === "digits" ? { type: "text", inputMode: "numeric", dir: "ltr" } : { type: "text", dir: "rtl" };
   }
 }
 
