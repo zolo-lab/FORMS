@@ -1,6 +1,6 @@
 "use client";
 import type { FilledItem } from "@/lib/forms/role-view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SignaturePicker } from "@/components/forms/fields/signature";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -34,6 +34,8 @@ interface Props {
   onErrors: (e: FieldErrors) => void;
   /** What earlier steps filled: shown in its own place on the document, locked (everyone sees the same document). */
   filled?: FilledItem[];
+  /** More buttons of this step (e.g. "דחייה"), on the same line as "שליחה", next to it. */
+  actions?: ReactNode;
 }
 
 function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "role" | "onSubmit" | "onErrors">) {
@@ -153,7 +155,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 }
 
 /** Fill the form directly on the PDF pages. Shows how many required fields remain and jumps to the next one. */
-export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled }: Props) {
+export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled, actions }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Default values show on the document; setField keeps them in the answers it passes up.
   const answers = useMemo(() => withDefaults(definition, rawAnswers, today), [definition, rawAnswers, today]);
@@ -190,6 +192,7 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
       {/* Sending comes after the document, at the start of the line (the right side in Hebrew), and stays in reach. */}
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t bg-background/95 py-3 backdrop-blur">
         <Button className="min-w-32" disabled={busy} aria-busy={busy || undefined} onClick={submit}>{busy ? "שולח…" : "שליחה"}</Button>
+        {actions}
         {remaining > 0 && <span className="text-sm text-muted-foreground">נותרו {remaining} שדות – &quot;שליחה&quot; תעביר לראשון שחסר</span>}
       </div>
     </div>

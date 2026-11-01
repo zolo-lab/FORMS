@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
@@ -31,10 +32,12 @@ export interface FormRendererProps {
   pipeDefinition?: FormDefinition;
   /** Injectable for tests. */
   today?: string;
+  /** More buttons of this step (e.g. "דחייה"), on the same line as "שליחה", next to it. */
+  actions?: ReactNode;
 }
 
 export function FormRenderer({
-  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition,
+  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition, actions,
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
@@ -163,7 +166,10 @@ export function FormRenderer({
         <div className="flex justify-between gap-2 border-t pt-4">
           {/* The step forward ("הבא" / "שליחה") at the start of the line – the right side in Hebrew; "הקודם" at the end. */}
           {lastStep ? (
-            onSubmit ? <Button className="min-w-32" disabled={submitting} onClick={handleSubmit}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button> : <span />
+            <span className="flex flex-wrap items-center gap-2">
+              {onSubmit && <Button className="min-w-32" disabled={submitting} onClick={handleSubmit}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button>}
+              {actions}
+            </span>
           ) : (
             <Button className="min-w-32" onClick={handleNext}>הבא</Button>
           )}
