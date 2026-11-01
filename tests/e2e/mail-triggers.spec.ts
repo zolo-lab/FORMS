@@ -12,21 +12,27 @@ test("the triggers list: one row per e-mail, switched off and on from the row", 
   for (const name of ["הזמנה למילוי וחתימה", "תזכורת", "התהליך הושלם", "קוד אימות", DIGEST]) {
     await expect(page.locator("tbody tr").filter({ hasText: name }).first()).toBeVisible();
   }
-  const row = page.locator('tr[data-trigger="weekly_digest"]');
-  const toggle = row.getByRole("switch", { name: `${DIGEST}: פעיל` });
-  await toggle.click();
-  await expect(row.getByRole("switch", { name: `${DIGEST}: כבוי` })).toBeVisible();
+  const row = () => page.locator('tr[data-trigger="weekly_digest"]');
+  // Start from the default (an earlier failed run may have left a setting behind).
+  await page.goto("/admin/mail/triggers?edit=weekly_digest");
+  const reset = page.getByRole("dialog", { name: DIGEST }).getByRole("button", { name: "חזרה לברירת המחדל" });
+  if (await reset.isVisible()) {
+    await reset.click();
+    await expect(row().getByText("הגדרה לכל העמותות")).toHaveCount(0);
+  }
+  await page.goto("/admin/mail/triggers");
+
+  await row().getByRole("switch", { name: `${DIGEST}: פעיל` }).click();
+  await expect(row().getByRole("switch", { name: `${DIGEST}: כבוי` })).toBeVisible();
   await page.waitForURL(/saved=weekly_digest/);
   // (The source badge sits in a column hidden on phones, so only its presence is checked.)
-  await expect(row.getByText("הגדרה לכל העמותות")).toHaveCount(1);
+  await expect(row().getByText("הגדרה לכל העמותות")).toHaveCount(1);
 
   // Back to the default from the edit panel.
-  await row.getByRole("link", { name: `עריכה – ${DIGEST}` }).click();
-  const panel = page.getByRole("dialog", { name: DIGEST });
-  await panel.getByRole("button", { name: "חזרה לברירת המחדל" }).click();
-  await page.waitForURL((u) => !u.searchParams.has("edit") || u.searchParams.get("saved") === "weekly_digest");
-  await expect(page.locator('tr[data-trigger="weekly_digest"]').getByRole("switch", { name: `${DIGEST}: פעיל` })).toBeVisible();
-  await expect(page.locator('tr[data-trigger="weekly_digest"]').getByText("הגדרה לכל העמותות")).toHaveCount(0);
+  await row().getByRole("link", { name: `עריכה – ${DIGEST}` }).click();
+  await page.getByRole("dialog", { name: DIGEST }).getByRole("button", { name: "חזרה לברירת המחדל" }).click();
+  await expect(row().getByText("הגדרה לכל העמותות")).toHaveCount(0);
+  await expect(row().getByRole("switch", { name: `${DIGEST}: פעיל` })).toBeVisible();
 });
 
 test("switched on with no one to send to is refused", async ({ page }) => {
@@ -77,5 +83,5 @@ test("a sample of the e-mail is sent as it is in the editor and shows in the mai
   const msg = page.getByRole("listitem").filter({ hasText: "[דוגמה]" }).first();
   await expect(msg).toContainText("קליטת עובד");
   await msg.locator("summary").click();
-  await expect(msg.frameLocator("iframe").getByText("למילוי וחתימה")).toBeVisible();
+  await expect(msg.frameLocator("iframe").getByRole("link", { name: "למילוי וחתימה" })).toBeVisible();
 });
