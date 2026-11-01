@@ -26,7 +26,8 @@ async function pdfWith(labels: string[]): Promise<Buffer> {
 
 test("a dropped proposal comes back unticked and a renamed one with its new name", async ({ page }) => {
   await login(page, "/admin/forms");
-  const n = String(Date.now() % 1_000_000);
+  // Six digits always (padded): the cleanup after the run recognises test forms by a number of 5+ digits.
+  const n = String(Date.now() % 1_000_000).padStart(6, "0");
   const keep = `מספר עובד ${n}`;
   const drop = `הערה פנימית ${n}`;
   const pdf = await pdfWith([keep, drop]);
