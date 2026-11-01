@@ -7,10 +7,13 @@ import { emailFieldsOf, namedStep, stepViews } from "@/lib/workflow/step-fields"
 
 export const dynamic = "force-dynamic";
 
-/** Full-screen view of a form's latest saved version (admin only: /preview is behind the session guard). */
-export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ all?: string }> }) {
+/**
+ * Full-screen view of a form as its first step fills it, like the real link (admin only: /preview is behind the session
+ * guard). Nothing is saved. `?steps=1` adds the switch to see any other step.
+ */
+export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ all?: string; steps?: string }> }) {
   const { id } = await params;
-  const { all } = await searchParams;
+  const { all, steps: bySteps } = await searchParams;
   const version = /^[0-9a-f-]{36}$/i.test(id) ? await getPublishedVersion(id) : null;
   if (!version) notFound();
   const file = version.pdfMapping ? await getPdfFile(version.pdfFileId) : null;
@@ -24,13 +27,11 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   });
   return (
     <main className={pdf ? "mx-auto max-w-5xl px-4 py-8" : "mx-auto max-w-3xl px-4 py-8"}>
-      <p className="mb-4 rounded-md bg-muted p-2 text-xs text-muted-foreground">
-        תצוגה של {version.publishedAt ? `גרסה ${version.version} (פורסמה)` : `גרסה ${version.version} (טיוטה)`}. המילוי כאן לא נשמר.
-      </p>
       <FormPreview
         definition={version.definition}
         pdf={pdf}
         steps={steps}
+        showSteps={bySteps === "1" || all === "1"}
         startWithAll={all === "1"}
       />
     </main>
