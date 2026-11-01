@@ -13,6 +13,7 @@ import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
+import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
 import { pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
@@ -581,7 +582,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
           <>
             <p className="text-sm font-medium">{fieldOf(selectedStamp)?.label || labelOf(selectedStamp)}</p>
             <p className="text-xs text-muted-foreground">
-              {labelOf(selectedStamp)} · <bdi dir="ltr">{selectedStamp.fieldId}{selectedStamp.part ? `.${selectedStamp.part}` : ""}</bdi>
+              {fieldOf(selectedStamp) ? FIELD_TYPE_META[fieldOf(selectedStamp)!.type].label : labelOf(selectedStamp)}
+              {fieldOf(selectedStamp) && (selectedStamp.part || selectedStamp.whenValue) ? ` · ${labelOf(selectedStamp)}` : ""} · <bdi dir="ltr">{selectedStamp.fieldId}{selectedStamp.part ? `.${selectedStamp.part}` : ""}</bdi>
             </p>
             {onFieldPatch && fieldOf(selectedStamp) && (
               <StampFieldControls
@@ -694,9 +696,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             >
               מופע נוסף של אותה תשובה
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => { setStamps(mapping.stamps.filter((s) => s.id !== selectedStamp.id)); setSelected(null); }}>
-              <Trash2 className="size-4" />הסרת החותמת
-            </Button>
+            {(() => {
+              // The field's last box on the document takes the field with it (the PDF and the form are one); a copy only goes itself.
+              const boxes = mapping.stamps.filter((x) => baseFieldId(x.fieldId) === baseFieldId(selectedStamp.fieldId)).length;
+              const last = boxes <= 1 && !!fieldOf(selectedStamp);
+              return (
+                <div className="space-y-1">
+                  <Button variant="destructive" size="sm" onClick={() => { setStamps(mapping.stamps.filter((s) => s.id !== selectedStamp.id)); setSelected(null); }}>
+                    <Trash2 className="size-4" />{last ? "מחיקת השדה" : "הסרת התיבה הזו"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {last ? "השדה יימחק מהטופס כולו (גם מהטופס הרספונסיבי). ביטול (Ctrl+Z) מחזיר אותו." : `לשדה יש עוד ${boxes - 1 === 1 ? "תיבה אחת" : `${boxes - 1} תיבות`} על המסמך; רק התיבה הזו תוסר.`}
+                  </p>
+                </div>
+              );
+            })()}
           </>
         )}
         <p className="border-t pt-2 text-xs text-muted-foreground">{mapping.stamps.length} חותמות ממופות</p>
