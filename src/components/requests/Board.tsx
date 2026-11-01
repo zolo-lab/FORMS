@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { boardColumns } from "@/lib/requests/list";
 import type { RequestRow } from "@/server/dashboard-store";
 
-/** Kanban view: a column per waiting role, a card per request. */
-export function Board({ rows }: { rows: RequestRow[] }) {
+/**
+ * Kanban view: a column per waiting role, a card per request. `onOpen` (in "ממתינים לי") adds "פתיחה וחתימה" to each
+ * card: it opens the viewer's own waiting step of that request.
+ */
+export function Board({ rows, onOpen }: { rows: RequestRow[]; onOpen?: (fd: FormData) => Promise<void> }) {
   const cols = boardColumns(rows);
   if (cols.length === 0) return <Card className="p-6 text-center text-muted-foreground">אין בקשות להצגה.</Card>;
   return (
@@ -17,7 +21,7 @@ export function Board({ rows }: { rows: RequestRow[] }) {
           </h3>
           <ul className="space-y-2">
             {c.rows.map((r) => (
-              <li key={`${c.key}-${r.id}`}>
+              <li key={`${c.key}-${r.id}`} className="space-y-1">
                 <Link href={`/admin/requests/${r.id}`} className="block rounded-md border bg-card p-2 text-sm hover:border-primary">
                   <span className="font-medium">{r.subjectName}</span>
                   <span className="block text-xs text-muted-foreground">{r.organizationName} · {r.packageName}</span>
@@ -26,6 +30,12 @@ export function Board({ rows }: { rows: RequestRow[] }) {
                     {r.daysInStep !== null && <span className={r.overdue ? "font-medium text-destructive" : "text-muted-foreground"}>{r.overdue ? "⚠ באיחור · " : ""}{r.daysInStep} ימים בשלב</span>}
                   </span>
                 </Link>
+                {onOpen && (
+                  <form action={onOpen}>
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <SubmitButton size="sm" className="w-full" aria-label={`פתיחה וחתימה – ${r.subjectName}`}>פתיחה וחתימה</SubmitButton>
+                  </form>
+                )}
               </li>
             ))}
           </ul>
