@@ -47,6 +47,10 @@ export const DEFAULT_TEMPLATES: Record<string, MessageTemplate> = {
     subject: "מסמכים חתומים: {{form}} – {{subject}}",
     body: "שלום {{name}},\nכל השלבים ב\"{{form}}\" של {{subject}} הושלמו. המסמכים החתומים מצורפים.\nלצפייה בבקשה: {{link}}\n{{org}}",
   },
+  open_summary: {
+    subject: "{{count}} בקשות פתוחות – {{org}}",
+    body: "שלום,\nאלה הבקשות של {{org}} שעוד לא הסתיימו:\n{{items}}\nלמסך המעקב: {{link}}",
+  },
   weekly_digest: {
     subject: "{{count}} בקשות ממתינות – {{org}}",
     body: "שלום,\nאלה הבקשות של {{org}} שממתינות יותר מ-3 ימים:\n{{items}}\nלמסך המעקב: {{link}}",

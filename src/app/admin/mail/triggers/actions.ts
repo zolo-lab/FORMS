@@ -5,6 +5,8 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { parseEmailList, parseTemplateForm, parseTriggerForm } from "@/lib/notifications/triggers";
 import { resetTemplate, resetTriggerSetting, saveOrgAddresses, saveTemplate, saveTriggerSetting } from "@/server/mail-triggers";
 import { currentUser } from "@/server/users-store";
+import { runOpenSummary } from "@/server/open-summary";
+import { OPEN_SUMMARY_KEY } from "@/lib/notifications/open-summary";
 
 const PATH = "/admin/mail/triggers";
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -71,4 +73,14 @@ export async function resetTemplateAction(formData: FormData) {
   await resetTemplate(org, key);
   revalidatePath(PATH);
   redirect(back(org, `saved=text-${encodeURIComponent(key)}`));
+}
+
+/** "שליחה עכשיו": the open-requests summary of one organization, right now (to check the recipients and the text). */
+export async function sendSummaryNowAction(formData: FormData) {
+  await requireAdmin();
+  const org = scopeOf(formData);
+  if (!org) redirect(`${PATH}?error=org`);
+  const n = await runOpenSummary(new Date(), { force: true, organizationId: org });
+  revalidatePath("/admin/mail");
+  redirect(back(org, n ? "saved=now" : `error=nothing&key=${OPEN_SUMMARY_KEY}`));
 }

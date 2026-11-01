@@ -5,6 +5,7 @@
  * Pure, unit tested; the DB side is `src/server/mail-triggers.ts`.
  */
 import { DEFAULT_TEMPLATES, renderTemplate, type MessageTemplate } from "./templates";
+import { DEFAULT_SUMMARY_SCHEDULE, parseSchedule, type SummarySchedule } from "./open-summary";
 
 export type RecipientKind = "signer" | "employee" | "creator" | "trackers" | "managers" | "secretariat" | "bookkeeping" | "package" | "fixed";
 
@@ -20,7 +21,7 @@ export const RECIPIENT_LABELS: Record<RecipientKind, string> = {
   fixed: "כתובות קבועות",
 };
 
-export type TriggerKey = "sent_to_creator" | "step_invite" | "returned" | "reminder" | "step_done" | "completed" | "declined" | "completion_docs" | "weekly_digest" | "otp";
+export type TriggerKey = "open_summary" | "sent_to_creator" | "step_invite" | "returned" | "reminder" | "step_done" | "completed" | "declined" | "completion_docs" | "weekly_digest" | "otp";
 
 export interface TriggerDef {
   key: TriggerKey;
@@ -33,6 +34,8 @@ export interface TriggerDef {
   locked?: boolean;
   /** Variables its text may use, in the order shown in the editor. */
   vars: string[];
+  /** Runs on a schedule set in the panel (days and hour), not on an event. */
+  periodic?: boolean;
 }
 
 /** What each variable means, for the text editor. */
@@ -80,6 +83,7 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "completed", label: "התהליך הושלם", when: "כשכל השלבים הסתיימו", defaults: ["employee", "creator"], allowed: ["employee", "creator", "secretariat", "bookkeeping", "fixed"], vars: PERSON_VARS },
   { key: "declined", label: "הבקשה נדחתה", when: "כשמישהו דוחה את הבקשה סופית", defaults: ["employee", "creator"], allowed: ["employee", "creator", "secretariat", "fixed"], vars: [...PERSON_VARS, "reason"] },
   { key: "completion_docs", label: "המסמכים החתומים (PDF מצורף)", when: "בסיום התהליך, עם הקבצים החתומים", defaults: ["package"], allowed: ["package", "secretariat", "bookkeeping", "fixed"], vars: [...PERSON_VARS, "link"] },
+  { key: "open_summary", label: "סיכום בקשות פתוחות למזכירות", when: "לפי התזמון: כל הבקשות של העמותה שעוד לא הסתיימו, עם למי הן ממתינות", defaults: ["secretariat"], allowed: ["secretariat", "managers", "fixed"], vars: ["org", "count", "items", "link"], periodic: true },
   { key: "weekly_digest", label: "סיכום שבועי של ממתינים", when: "ביום ראשון ב-08:00, בקשות שממתינות יותר מ-3 ימים", defaults: ["managers"], allowed: ["managers", "secretariat", "fixed"], vars: ["org", "count", "items", "link"] },
   { key: "otp", label: "קוד אימות", when: "כשמי שחותם מבקש קוד כניסה", defaults: ["signer"], allowed: ["signer"], locked: true, vars: [] },
 ];
@@ -97,6 +101,7 @@ export interface TriggerSetting {
   enabled: boolean;
   recipients: RecipientKind[];
   fixedRecipients: Person[];
+  schedule?: SummarySchedule | null;
 }
 
 export interface EffectiveTrigger {
@@ -104,6 +109,8 @@ export interface EffectiveTrigger {
   enabled: boolean;
   recipients: RecipientKind[];
   fixedRecipients: Person[];
+  /** Periodic triggers only: when it runs. */
+  schedule: SummarySchedule | null;
   /** Where the setting came from: the code, the all-organizations row, or this organization's row. */
   source: "default" | "all" | "org";
 }
@@ -115,13 +122,15 @@ export function effectiveTrigger(key: string, settings: TriggerSetting[], organi
   const all = settings.find((s) => s.key === key && s.organizationId === null);
   const row = own ?? all;
   const defaults = def?.defaults ?? [];
-  if (!row || def?.locked) return { key, enabled: true, recipients: defaults, fixedRecipients: [], source: "default" };
+  const schedule = def?.periodic ? (row?.schedule ?? DEFAULT_SUMMARY_SCHEDULE) : null;
+  if (!row || def?.locked) return { key, enabled: true, recipients: defaults, fixedRecipients: [], schedule, source: "default" };
   const allowed = new Set(def?.allowed ?? defaults);
   return {
     key,
     enabled: row.enabled,
     recipients: row.recipients.filter((r) => allowed.has(r)),
     fixedRecipients: row.fixedRecipients ?? [],
+    schedule,
     source: own ? "org" : "all",
   };
 }
@@ -171,8 +180,8 @@ export function parseEmailList(raw: string): string[] {
 }
 
 export type TriggerFormResult =
-  | { ok: true; value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[] } }
-  | { ok: false; error: "unknown" | "locked" | "no_recipients" | "no_fixed" };
+  | { ok: true; value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[]; schedule?: SummarySchedule | null } }
+  | { ok: false; error: "unknown" | "locked" | "no_recipients" | "no_fixed" | "schedule" };
 
 /** The panel's form for one trigger → a setting to store. Fields: enabled, recipients (repeated), fixed (text). */
 export function parseTriggerForm(key: string, get: (name: string) => string | null, getAll: (name: string) => string[]): TriggerFormResult {
@@ -184,6 +193,11 @@ export function parseTriggerForm(key: string, get: (name: string) => string | nu
   const fixed = recipients.includes("fixed") ? parseEmailList(get("fixed") ?? "").map((email) => ({ name: email, email })) : [];
   if (recipients.includes("fixed") && !fixed.length) return { ok: false, error: "no_fixed" };
   if (enabled && !recipients.length) return { ok: false, error: "no_recipients" };
+  if (def.periodic) {
+    const schedule = parseSchedule(get, getAll);
+    if (!schedule) return { ok: false, error: "schedule" };
+    return { ok: true, value: { enabled, recipients, fixedRecipients: fixed, schedule } };
+  }
   return { ok: true, value: { enabled, recipients, fixedRecipients: fixed } };
 }
 

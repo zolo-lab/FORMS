@@ -1,0 +1,1 @@
+ALTER TABLE "mail_triggers" ADD COLUMN "schedule" jsonb;

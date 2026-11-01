@@ -3,6 +3,7 @@ import { deliverQueued } from "@/server/notifications";
 import { runReminders } from "@/server/reminders";
 import { expireOverdue } from "@/server/requests-store";
 import { runWeeklyDigest } from "@/server/digest";
+import { runOpenSummary } from "@/server/open-summary";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function GET(req: Request) {
   const expired = await expireOverdue();
   const reminders = await runReminders();
   const digests = await runWeeklyDigest().catch((e) => { console.error("[digest] failed", e); return 0; });
+  const summaries = await runOpenSummary().catch((e) => { console.error("[open-summary] failed", e); return 0; });
   const delivered = await deliverQueued(50);
-  return NextResponse.json({ expired, reminders, digests, delivered });
+  return NextResponse.json({ expired, reminders, digests, summaries, delivered });
 }

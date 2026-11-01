@@ -6,6 +6,7 @@ import { and, count, eq, gte, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { effectiveTemplate, effectiveTrigger, renderMessage, type EffectiveTrigger, type Person, type RecipientKind, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
 import type { MessageTemplate } from "@/lib/notifications/templates";
+import type { SummarySchedule } from "@/lib/notifications/open-summary";
 
 const { mailTriggers, messageTemplates, organizations, notifications, packageTemplates, users } = schema;
 
@@ -34,7 +35,7 @@ export async function loadTriggerSettings(organizationId: string | null): Promis
       db.select().from(messageTemplates).where(and(eq(messageTemplates.channel, "email"), scope(messageTemplates.organizationId))),
     ]);
     return {
-      settings: settings.map((s) => ({ organizationId: s.organizationId, key: s.key, enabled: s.enabled, recipients: s.recipients, fixedRecipients: s.fixedRecipients })),
+      settings: settings.map((s) => ({ organizationId: s.organizationId, key: s.key, enabled: s.enabled, recipients: s.recipients, fixedRecipients: s.fixedRecipients, schedule: s.schedule })),
       templates: templates.map((t) => ({ organizationId: t.organizationId, key: t.key, subject: t.subject, body: t.body })),
     };
   } catch (e) {
@@ -67,7 +68,7 @@ export async function triggersFor(organizationId: string | null): Promise<Trigge
 }
 
 /** Stores the setting of one trigger for all organizations (null) or one organization. */
-export async function saveTriggerSetting(organizationId: string | null, key: string, value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[] }, userId?: string) {
+export async function saveTriggerSetting(organizationId: string | null, key: string, value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[]; schedule?: SummarySchedule | null }, userId?: string) {
   const where = and(organizationId ? eq(mailTriggers.organizationId, organizationId) : isNull(mailTriggers.organizationId), eq(mailTriggers.key, key));
   const [existing] = await db.select({ id: mailTriggers.id }).from(mailTriggers).where(where);
   const set = { ...value, updatedBy: userId ?? null, updatedAt: new Date() };
