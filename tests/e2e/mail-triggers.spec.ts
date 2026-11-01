@@ -31,3 +31,21 @@ test("switched on with no one to send to is refused", async ({ page }) => {
   await expect(page.getByRole("alert").first()).toContainText("לפחות נמען אחד");
   await expect(card.getByText("ברירת מחדל")).toBeVisible();
 });
+
+test("the text of an e-mail is edited with a live preview, saved, and set back to the default", async ({ page }) => {
+  await login(page, "/admin/mail/triggers");
+  const card = page.locator("li").filter({ has: page.getByRole("heading", { name: "סיכום שבועי של ממתינים" }) });
+  await card.locator("summary", { hasText: "נוסח המייל" }).click();
+  const subject = card.getByLabel("נושא");
+  await subject.fill("סיכום לבדיקה ");
+  await card.getByRole("button", { name: "שם העמותה" }).click();
+  await expect(subject).toHaveValue("סיכום לבדיקה {{org}}");
+  await expect(card.getByLabel("תצוגה מקדימה")).toContainText("סיכום לבדיקה עמותת הדוגמה");
+  await card.getByLabel("גוף ההודעה").fill("שלום {{nope}}");
+  await expect(card.getByRole("status")).toContainText("{{nope}}");
+  await card.getByRole("button", { name: "שמירת הנוסח" }).click();
+  await expect(card.getByLabel("נושא")).toHaveValue("סיכום לבדיקה {{org}}");
+
+  await card.getByRole("button", { name: "חזרה לנוסח ברירת המחדל" }).click();
+  await expect(card.getByLabel("נושא")).toHaveValue("{{count}} בקשות ממתינות – {{org}}");
+});

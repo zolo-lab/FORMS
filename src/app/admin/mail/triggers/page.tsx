@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { isAdmin } from "@/lib/auth/permissions";
-import { RECIPIENT_LABELS, TRIGGERS, effectiveTrigger } from "@/lib/notifications/triggers";
+import { RECIPIENT_LABELS, TRIGGERS, effectiveTemplate, effectiveTrigger } from "@/lib/notifications/triggers";
 import { loadTriggerSettings, orgAddressLists, triggerCounts } from "@/server/mail-triggers";
 import { listOrgs } from "@/server/orgs-store";
 import { currentUser } from "@/server/users-store";
 import { MailTabs } from "../MailTabs";
-import { resetTriggerAction, saveOrgAddressesAction, saveTriggerAction } from "./actions";
+import { resetTemplateAction, resetTriggerAction, saveOrgAddressesAction, saveTemplateAction, saveTriggerAction } from "./actions";
+import { TemplateEditor } from "./TemplateEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ const ERRORS: Record<string, string> = {
   locked: "את הטריגר הזה אי אפשר לשנות.",
   unknown: "טריגר לא מוכר.",
   org: "עמותה לא תקינה.",
+  text_empty: "נושא וגוף ההודעה לא יכולים להיות ריקים.",
+  text_too_long: "הנוסח ארוך מדי (נושא עד 200 תווים, גוף עד 5000).",
+  text_locked: "את הנוסח הזה אי אפשר לשנות.",
+  text_unknown: "טריגר לא מוכר.",
 };
 
 const SOURCE: Record<string, string> = {
@@ -38,7 +43,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
   const orgs = (await listOrgs()).filter((o) => o.active);
   const org = orgs.find((o) => o.id === orgParam) ?? null;
   const orgId = org?.id ?? null;
-  const [{ settings }, counts, addresses] = await Promise.all([loadTriggerSettings(orgId), triggerCounts(orgId), orgId ? orgAddressLists(orgId) : Promise.resolve(null)]);
+  const [{ settings, templates }, counts, addresses] = await Promise.all([loadTriggerSettings(orgId), triggerCounts(orgId), orgId ? orgAddressLists(orgId) : Promise.resolve(null)]);
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
@@ -58,7 +63,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
         <Button type="submit" variant="outline">הצגה</Button>
       </form>
 
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
+      {error && !errorKey && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
 
       {org && addresses ? (
         <Card className="space-y-3 p-4">
@@ -86,6 +91,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
       <ul className="space-y-3">
         {TRIGGERS.map((def) => {
           const eff = effectiveTrigger(def.key, settings, orgId);
+          const text = def.locked ? null : effectiveTemplate(def.key, templates, orgId);
           const c = counts[def.key] ?? { sent: 0, failed: 0, queued: 0 };
           const failedHere = error && errorKey === def.key;
           return (
@@ -135,7 +141,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
                         </div>
                       )}
                     </fieldset>
-                    {failedHere && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
+                    {failedHere && !error.startsWith("text_") && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
                     <div className="flex flex-wrap items-center gap-2">
                       <SubmitButton name="do" value="save" saved={saved === def.key}>שמירה</SubmitButton>
                       {eff.source === (orgId ? "org" : "all") && (
@@ -145,6 +151,30 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
                       )}
                     </div>
                   </form>
+                )}
+
+                {text && (
+                  <details className="rounded-md border" open={saved === `text-${def.key}` || (!!failedHere && error?.startsWith("text_")) || undefined}>
+                    <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 px-3 text-sm font-medium">
+                      נוסח המייל
+                      <Badge tone="muted">{SOURCE[text.source]}</Badge>
+                      <span className="min-w-0 truncate font-normal text-muted-foreground">{text.subject}</span>
+                    </summary>
+                    <form action={saveTemplateAction} className="space-y-3 border-t p-3">
+                      <input type="hidden" name="org" value={orgId ?? ""} />
+                      <input type="hidden" name="key" value={def.key} />
+                      <TemplateEditor key={`${text.source}-${text.subject}-${text.body}`} id={`tx-${def.key}`} subject={text.subject} body={text.body} vars={def.vars} />
+                      {failedHere && error?.startsWith("text_") && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SubmitButton name="do" value="save" saved={saved === `text-${def.key}`}>שמירת הנוסח</SubmitButton>
+                        {text.source === (orgId ? "org" : "all") && (
+                          <SubmitButton variant="outline" formAction={resetTemplateAction} formNoValidate name="do" value="reset">
+                            {orgId ? "חזרה לנוסח הכללי" : "חזרה לנוסח ברירת המחדל"}
+                          </SubmitButton>
+                        )}
+                      </div>
+                    </form>
+                  </details>
                 )}
               </Card>
             </li>

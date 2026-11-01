@@ -66,6 +66,7 @@ export async function savePackageSettingsAction(fd: FormData) {
     completionRecipients: recipients.valid,
     followUpStatuses: parseFollowUpStatuses(String(fd.get("followUp") ?? ""), normalizeFollowUpStatuses(data!.pkg.followUpStatuses)),
     remindersEnabled: fd.get("remindersEnabled") === "on",
+    mailNote: String(fd.get("mailNote") ?? "").trim().slice(0, 500) || null,
   });
   revalidatePath(`/admin/packages/${id}`);
   revalidatePath("/admin/forms", "layout");

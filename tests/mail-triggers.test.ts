@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPeople, effectiveTemplate, effectiveTrigger, parseEmailList, parseTriggerForm, renderMessage, TRIGGERS, type TriggerSetting } from "@/lib/notifications/triggers";
+import { addPeople, effectiveTemplate, effectiveTrigger, parseEmailList, parseTemplateForm, parseTriggerForm, renderMessage, SAMPLE_VARS, TRIGGERS, unknownVars, VAR_LABELS, type TriggerSetting } from "@/lib/notifications/triggers";
 import { DEFAULT_TEMPLATES } from "@/lib/notifications/templates";
 
 const row = (o: Partial<TriggerSetting>): TriggerSetting => ({ organizationId: null, key: "completed", enabled: true, recipients: ["employee"], fixedRecipients: [], ...o });
@@ -74,5 +74,23 @@ describe("trigger form", () => {
     expect(parse("completed", { enabled: "on", recipients: ["fixed"], fixed: "לא מייל" })).toEqual({ ok: false, error: "no_fixed" });
     expect(parse("otp", { enabled: "on" })).toEqual({ ok: false, error: "locked" });
     expect(parse("nope", {})).toEqual({ ok: false, error: "unknown" });
+  });
+});
+
+describe("text editor", () => {
+  it("every variable a trigger offers has a label and an example", () => {
+    for (const t of TRIGGERS) for (const v of t.vars) {
+      expect(VAR_LABELS[v], `${t.key}.${v}`).toBeDefined();
+      expect(SAMPLE_VARS[v], `${t.key}.${v}`).toBeDefined();
+    }
+  });
+  it("trims, refuses empty / too long / locked", () => {
+    expect(parseTemplateForm("reminder", "  תזכורת  {{org}} ", "שלום {{name}}\r\nשורה\n")).toEqual({ ok: true, value: { subject: "תזכורת {{org}}", body: "שלום {{name}}\nשורה" } });
+    expect(parseTemplateForm("reminder", "", "x")).toEqual({ ok: false, error: "empty" });
+    expect(parseTemplateForm("reminder", "x", "y".repeat(5001))).toEqual({ ok: false, error: "too_long" });
+    expect(parseTemplateForm("otp", "x", "y")).toEqual({ ok: false, error: "locked" });
+  });
+  it("finds placeholders the trigger doesn't fill", () => {
+    expect(unknownVars("reminder", "{{name}} {{ link }} {{items}} {{foo}} {{foo}}")).toEqual(["items", "foo"]);
   });
 });

@@ -2,8 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth/permissions";
-import { parseEmailList, parseTriggerForm } from "@/lib/notifications/triggers";
-import { resetTriggerSetting, saveOrgAddresses, saveTriggerSetting } from "@/server/mail-triggers";
+import { parseEmailList, parseTemplateForm, parseTriggerForm } from "@/lib/notifications/triggers";
+import { resetTemplate, resetTriggerSetting, saveOrgAddresses, saveTemplate, saveTriggerSetting } from "@/server/mail-triggers";
 import { currentUser } from "@/server/users-store";
 
 const PATH = "/admin/mail/triggers";
@@ -51,4 +51,24 @@ export async function saveOrgAddressesAction(formData: FormData) {
   await saveOrgAddresses(org, parseEmailList(String(formData.get("secretariat") ?? "")), parseEmailList(String(formData.get("bookkeeping") ?? "")));
   revalidatePath(PATH);
   redirect(back(org, "saved=addresses"));
+}
+
+export async function saveTemplateAction(formData: FormData) {
+  await requireAdmin();
+  const org = scopeOf(formData);
+  const key = String(formData.get("key") ?? "");
+  const parsed = parseTemplateForm(key, String(formData.get("subject") ?? ""), String(formData.get("body") ?? ""));
+  if (!parsed.ok) redirect(back(org, `error=text_${parsed.error}&key=${encodeURIComponent(key)}`));
+  await saveTemplate(org, key, parsed.value);
+  revalidatePath(PATH);
+  redirect(back(org, `saved=text-${encodeURIComponent(key)}`));
+}
+
+export async function resetTemplateAction(formData: FormData) {
+  await requireAdmin();
+  const org = scopeOf(formData);
+  const key = String(formData.get("key") ?? "");
+  await resetTemplate(org, key);
+  revalidatePath(PATH);
+  redirect(back(org, `saved=text-${encodeURIComponent(key)}`));
 }
