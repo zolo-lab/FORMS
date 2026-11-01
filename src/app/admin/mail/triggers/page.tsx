@@ -1,19 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Badge, Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox, Radio } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Select, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { isAdmin } from "@/lib/auth/permissions";
+import { WEEKDAY_NAMES, describeSchedule } from "@/lib/notifications/open-summary";
 import { RECIPIENT_LABELS, TRIGGERS, effectiveTemplate, effectiveTrigger } from "@/lib/notifications/triggers";
 import { loadTriggerSettings, orgAddressLists, triggerCounts } from "@/server/mail-triggers";
 import { listOrgs } from "@/server/orgs-store";
 import { currentUser } from "@/server/users-store";
 import { MailTabs } from "../MailTabs";
-import { resetTemplateAction, resetTriggerAction, saveOrgAddressesAction, saveTemplateAction, saveTriggerAction } from "./actions";
+import { resetTemplateAction, resetTriggerAction, saveOrgAddressesAction, saveTemplateAction, saveTriggerAction, sendSummaryNowAction } from "./actions";
 import { TemplateEditor } from "./TemplateEditor";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ const ERRORS: Record<string, string> = {
   text_too_long: "הנוסח ארוך מדי (נושא עד 200 תווים, גוף עד 5000).",
   text_locked: "את הנוסח הזה אי אפשר לשנות.",
   text_unknown: "טריגר לא מוכר.",
+  schedule: "בחרו לפחות יום אחד ושעה.",
+  nothing: "לא נשלח: אין בקשות פתוחות, או שאין לטריגר נמענים (כתובות מזכירות למעלה).",
 };
 
 const SOURCE: Record<string, string> = {
@@ -105,6 +108,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
                   <Badge tone={eff.enabled ? "success" : "muted"}>{eff.enabled ? "פעיל" : "כבוי"}</Badge>
                   <Badge tone="muted">{SOURCE[eff.source]}</Badge>
                 </div>
+                {def.periodic && eff.schedule && <p className="text-sm">נשלח {describeSchedule(eff.schedule)}.</p>}
                 <p className="text-sm">
                   <Link href={`/admin/mail?kind=${def.key}`} className="underline-offset-4 hover:underline">
                     ב-30 הימים האחרונים: {c.sent} נשלחו
@@ -141,9 +145,44 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
                         </div>
                       )}
                     </fieldset>
+                    {def.periodic && eff.schedule && (
+                      <fieldset className="space-y-2">
+                        <legend className="text-sm font-medium">מתי לשלוח (שעון ישראל)</legend>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex min-h-11 items-center gap-2 text-sm">
+                            <Radio name="scheduleKind" value="weekdays" defaultChecked={eff.schedule.kind === "weekdays"} /> בימים בשבוע:
+                          </label>
+                          {WEEKDAY_NAMES.map((d, i) => (
+                            <label key={d} className="flex min-h-11 items-center gap-1 text-sm">
+                              <Checkbox name="weekday" value={i} defaultChecked={eff.schedule!.kind === "weekdays" && eff.schedule!.days.includes(i)} aria-label={`יום ${d}`} />
+                              {d}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex min-h-11 items-center gap-2 text-sm">
+                            <Radio name="scheduleKind" value="monthDays" defaultChecked={eff.schedule.kind === "monthDays"} /> בימים בחודש:
+                          </label>
+                          <Input name="monthDays" aria-label="ימים בחודש" placeholder="2, 11, 14, 19" dir="ltr" className="max-w-48" defaultValue={eff.schedule.kind === "monthDays" ? eff.schedule.days.join(", ") : ""} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`hour-${def.key}`}>בשעה</Label>
+                          <Select id={`hour-${def.key}`} name="hour" defaultValue={String(eff.schedule.hour)} className="max-w-28" dir="ltr">
+                            {Array.from({ length: 24 }, (_, h) => (
+                              <option key={h} value={h}>{`${String(h).padStart(2, "0")}:00`}</option>
+                            ))}
+                          </Select>
+                        </div>
+                      </fieldset>
+                    )}
                     {failedHere && !error.startsWith("text_") && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
                     <div className="flex flex-wrap items-center gap-2">
                       <SubmitButton name="do" value="save" saved={saved === def.key}>שמירה</SubmitButton>
+                      {def.periodic && orgId && (
+                        <SubmitButton variant="outline" formAction={sendSummaryNowAction} formNoValidate name="do" value="now" saved={saved === "now"} savedText="נשלח">
+                          שליחה עכשיו
+                        </SubmitButton>
+                      )}
                       {eff.source === (orgId ? "org" : "all") && (
                         <SubmitButton variant="outline" formAction={resetTriggerAction} name="do" value="reset">
                           {orgId ? "חזרה להגדרה הכללית" : "חזרה לברירת המחדל"}

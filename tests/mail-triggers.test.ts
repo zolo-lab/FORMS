@@ -13,7 +13,7 @@ describe("e-mail triggers", () => {
   });
 
   it("without a stored setting the defaults apply", () => {
-    expect(effectiveTrigger("completed", [], "org1")).toEqual({ key: "completed", enabled: true, recipients: ["employee", "creator"], fixedRecipients: [], source: "default" });
+    expect(effectiveTrigger("completed", [], "org1")).toEqual({ key: "completed", enabled: true, recipients: ["employee", "creator"], fixedRecipients: [], schedule: null, source: "default" });
   });
 
   it("an organization's own setting wins over the all-organizations one", () => {
@@ -92,5 +92,18 @@ describe("text editor", () => {
   });
   it("finds placeholders the trigger doesn't fill", () => {
     expect(unknownVars("reminder", "{{name}} {{ link }} {{items}} {{foo}} {{foo}}")).toEqual(["items", "foo"]);
+  });
+});
+
+describe("periodic trigger", () => {
+  it("has a default schedule and takes the one saved in the panel", () => {
+    expect(effectiveTrigger("open_summary", [], "o").schedule).toEqual({ kind: "weekdays", days: [0, 2, 4], hour: 7 });
+    const saved = { kind: "monthDays" as const, days: [2, 11], hour: 7 };
+    expect(effectiveTrigger("open_summary", [row({ key: "open_summary", recipients: ["secretariat"], schedule: saved })], "o").schedule).toEqual(saved);
+  });
+  it("its form needs a valid schedule", () => {
+    const get = (o: Record<string, string>) => (n: string) => o[n] ?? null;
+    expect(parseTriggerForm("open_summary", get({ enabled: "on", scheduleKind: "weekdays", hour: "7" }), (n) => (n === "recipients" ? ["secretariat"] : []))).toEqual({ ok: false, error: "schedule" });
+    expect(parseTriggerForm("open_summary", get({ enabled: "on", scheduleKind: "weekdays", hour: "7" }), (n) => (n === "recipients" ? ["secretariat"] : n === "weekday" ? ["0"] : []))).toMatchObject({ ok: true, value: { schedule: { kind: "weekdays", days: [0], hour: 7 } } });
   });
 });

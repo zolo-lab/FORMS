@@ -107,6 +107,7 @@ function orderFor(f: RequestFilters) {
 export interface RequestRow {
   id: string;
   subjectName: string;
+  subjectEmail?: string | null;
   status: (typeof requests.$inferSelect)["status"];
   createdAt: Date;
   expiresAt: Date | null;
@@ -130,6 +131,7 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
     .select({
       id: requests.id,
       subjectName: requests.subjectName,
+      subjectEmail: requests.subjectEmail,
       status: requests.status,
       createdAt: requests.createdAt,
       expiresAt: requests.expiresAt,

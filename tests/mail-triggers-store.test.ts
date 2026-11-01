@@ -59,5 +59,16 @@ describe.skipIf(!hasDb)("mail triggers (dev DB)", () => {
     expect(mails).toEqual([]);
     const settings = await db.select().from(schema.mailTriggers).where(and(eq(schema.mailTriggers.organizationId, org!.id), eq(schema.mailTriggers.key, "step_invite")));
     expect(settings).toHaveLength(1);
+
+    // The open-requests summary goes to the secretariat with every request still open.
+    const summary = await import("@/server/open-summary");
+    cleanup.push(() => db.delete(schema.notifications).where(eq(schema.notifications.organizationId, org!.id)));
+    expect(await summary.runOpenSummary(new Date(), { force: true, organizationId: org!.id })).toBe(0); // no secretariat yet
+    await triggers.saveOrgAddresses(org!.id, [`office-${stamp}@example.test`], []);
+    expect(await summary.runOpenSummary(new Date(), { force: true, organizationId: org!.id })).toBe(1);
+    const [sum] = await db.select().from(schema.notifications).where(and(eq(schema.notifications.organizationId, org!.id), eq(schema.notifications.templateKey, "open_summary")));
+    expect(sum!.to).toBe(`office-${stamp}@example.test`);
+    expect(sum!.subject).toBe(`3 בקשות פתוחות – ארגון טריגרים ${stamp}`);
+    for (const name of ["דנה", "יוסי", "מיכל"]) expect(sum!.body).toContain(name);
   });
 });

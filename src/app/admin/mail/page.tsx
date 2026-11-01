@@ -28,6 +28,7 @@ const KIND: Record<string, string> = {
   completion_docs: "מסמכים חתומים",
   otp: "קוד אימות",
   weekly_digest: "סיכום שבועי",
+  open_summary: "סיכום בקשות פתוחות",
 };
 
 const when = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", dateStyle: "short", timeStyle: "short" });

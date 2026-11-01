@@ -29,6 +29,7 @@ import type { UserGrants } from "@/lib/auth/permissions";
 import type { ExpiryRule } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { RecipientKind } from "@/lib/notifications/triggers";
+import type { SummarySchedule } from "@/lib/notifications/open-summary";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -563,6 +564,8 @@ export const mailTriggers = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     recipients: jsonb("recipients").$type<RecipientKind[]>().notNull().default([]),
     fixedRecipients: jsonb("fixed_recipients").$type<{ name: string; email: string }[]>().notNull().default([]),
+    /** When a periodic trigger runs (open requests summary); null = its default. */
+    schedule: jsonb("schedule").$type<SummarySchedule>(),
     updatedBy: uuid("updated_by"),
     ...timestamps,
   },
