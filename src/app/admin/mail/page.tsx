@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Badge, Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
+import { MailTabs } from "./MailTabs";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -25,7 +26,7 @@ const KIND: Record<string, string> = {
   returned: "הוחזר לשלב קודם",
   completion_docs: "מסמכים חתומים",
   otp: "קוד אימות",
-  digest: "סיכום שבועי",
+  weekly_digest: "סיכום שבועי",
 };
 
 const when = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", dateStyle: "short", timeStyle: "short" });
@@ -34,15 +35,20 @@ const when = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", date
 const linksIn = (body: string) => [...new Set(body.match(/https?:\/\/[^\s"'<>)]+/g) ?? [])];
 
 /** "מרכז מיילים": every message the system sent or is about to send, newest first, with its text and links. Admins only. */
-export default async function MailCenterPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function MailCenterPage({ searchParams }: { searchParams: Promise<{ q?: string; kind?: string }> }) {
   if (!isAdmin(await currentUser())) redirect("/admin/inbox");
-  const { q = "" } = await searchParams;
+  const { q = "", kind = "" } = await searchParams;
   const term = q.trim();
   const rows = await db
     .select({ n: schema.notifications, subject: schema.requests.subjectName })
     .from(schema.notifications)
     .leftJoin(schema.requests, eq(schema.requests.id, schema.notifications.requestId))
-    .where(term ? or(ilike(schema.notifications.to, `%${term}%`), ilike(schema.notifications.subject, `%${term}%`), ilike(schema.requests.subjectName, `%${term}%`)) : undefined)
+    .where(
+      and(
+        term ? or(ilike(schema.notifications.to, `%${term}%`), ilike(schema.notifications.subject, `%${term}%`), ilike(schema.requests.subjectName, `%${term}%`)) : undefined,
+        kind ? eq(schema.notifications.templateKey, kind) : undefined,
+      ),
+    )
     .orderBy(desc(schema.notifications.createdAt))
     .limit(100);
   return (
@@ -51,8 +57,15 @@ export default async function MailCenterPage({ searchParams }: { searchParams: P
         title="מרכז מיילים"
         description="כל ההודעות שהמערכת שלחה, מהחדשה לישנה: למי, מה, ומתי. הקישור שבהודעה נפתח בחלון חדש – כך אפשר לעבור על שרשרת החתימות בלי לגשת לתיבות הדואר. הקישורים כאן אמיתיים: לא לשתף את הדף."
       />
+      <MailTabs current="messages" />
       <form className="flex flex-wrap items-end gap-2" role="search">
         <Input name="q" defaultValue={term} placeholder="חיפוש לפי נמען, נושא או שם עובד" aria-label="חיפוש הודעות" className="max-w-sm" />
+        <Select name="kind" defaultValue={kind} aria-label="סוג הודעה" className="max-w-48">
+          <option value="">כל הסוגים</option>
+          {Object.entries(KIND).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </Select>
         <Button type="submit" variant="outline">חיפוש</Button>
       </form>
       <p className="text-sm text-muted-foreground">{rows.length === 100 ? "100 ההודעות האחרונות" : `${rows.length} הודעות`}</p>

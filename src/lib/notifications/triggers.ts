@@ -134,3 +134,20 @@ export function parseEmailList(raw: string): string[] {
   }
   return out;
 }
+
+export type TriggerFormResult =
+  | { ok: true; value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[] } }
+  | { ok: false; error: "unknown" | "locked" | "no_recipients" | "no_fixed" };
+
+/** The panel's form for one trigger → a setting to store. Fields: enabled, recipients (repeated), fixed (text). */
+export function parseTriggerForm(key: string, get: (name: string) => string | null, getAll: (name: string) => string[]): TriggerFormResult {
+  const def = triggerDef(key);
+  if (!def) return { ok: false, error: "unknown" };
+  if (def.locked) return { ok: false, error: "locked" };
+  const enabled = get("enabled") === "on";
+  const recipients = def.allowed.filter((r) => getAll("recipients").includes(r));
+  const fixed = recipients.includes("fixed") ? parseEmailList(get("fixed") ?? "").map((email) => ({ name: email, email })) : [];
+  if (recipients.includes("fixed") && !fixed.length) return { ok: false, error: "no_fixed" };
+  if (enabled && !recipients.length) return { ok: false, error: "no_recipients" };
+  return { ok: true, value: { enabled, recipients, fixedRecipients: fixed } };
+}
