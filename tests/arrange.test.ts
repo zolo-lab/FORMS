@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignBoxes, distributeBoxes, nextFreePosition, snapPosition } from "@/lib/pdf/arrange";
+import { alignBoxes, distributeBoxes, nextFreePosition, snapPosition, snapToText } from "@/lib/pdf/arrange";
 
 const b = (x: number, y: number, width = 20, height = 10) => ({ x, y, width, height });
 
@@ -59,5 +59,33 @@ describe("arrange", () => {
     const p = nextFreePosition(dims, page, [last]);
     expect(p).not.toEqual({ x: 40, y: 16 });
     expect(p.y).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe("snap to printed text", () => {
+  // "שם העובד" printed at x 370–420, baseline 760, 11pt high: visual middle at 763.85.
+  const name = { x: 370, y: 760, width: 50, height: 11 };
+  it("lines a field up with the name on its row and flush against its left side", () => {
+    const r = snapToText({ x: 240, y: 752, width: 120, height: 16 }, [name]);
+    expect(r.text).toBe(name);
+    expect(r.y + 8).toBeCloseTo(763.85, 5);
+    expect(r.x + 120).toBeCloseTo(366, 5);
+    expect(r.guides).toEqual([{ axis: "y", at: 763.85 }, { axis: "x", at: 366 }]);
+  });
+  it("only the row when the box is far from the name's side", () => {
+    const r = snapToText({ x: 100, y: 757, width: 120, height: 16 }, [name]);
+    expect(r.x).toBe(100);
+    expect(r.y + 8).toBeCloseTo(763.85, 5);
+    expect(r.guides).toHaveLength(1);
+  });
+  it("flush to the right of a text too, and nothing when no text is on the row", () => {
+    const en = { x: 50, y: 500, width: 40, height: 10 };
+    const r = snapToText({ x: 100, y: 495, width: 80, height: 16 }, [en]);
+    expect(r.x).toBe(94);
+    expect(snapToText({ x: 100, y: 600, width: 80, height: 16 }, [en])).toEqual({ x: 100, y: 600, guides: [], text: null });
+  });
+  it("picks the closest text when two rows are near", () => {
+    const below = { x: 370, y: 742, width: 50, height: 11 };
+    expect(snapToText({ x: 240, y: 754, width: 120, height: 16 }, [below, name]).text).toBe(name);
   });
 });

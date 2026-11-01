@@ -104,3 +104,43 @@ export function nextFreePosition(
   }
   return { x: last.x + 12, y: Math.max(margin, last.y - 12) };
 }
+
+export interface TextAnchor { x: number; y: number; width: number; height: number }
+
+/** A printed text's visual middle: `y` is its baseline, the letters sit mostly above it. */
+export const textMiddle = (t: TextAnchor) => t.y + t.height * 0.35;
+
+/** Space between a field and the name printed next to it. */
+export const LABEL_GAP = 4;
+
+/**
+ * Snap a box to the printed text next to it: its middle on the text's middle (same row), and its side right against
+ * the text – the end of a Hebrew name is on its left, so a field just left of a name sits flush to it (a field just
+ * right of a text, as in English, too). Returns the snapped position, the guide lines, and the text it lines up with.
+ */
+export function snapToText(
+  box: Box,
+  texts: TextAnchor[],
+  opts: { tolerance?: number; sideTolerance?: number } = {},
+): { x: number; y: number; guides: { axis: "x" | "y"; at: number }[]; text: TextAnchor | null } {
+  const tol = opts.tolerance ?? 6;
+  const sideTol = opts.sideTolerance ?? 12;
+  const mid = box.y + box.height / 2;
+  let best: { t: TextAnchor; dy: number; dx: number | null } | null = null;
+  for (const t of texts) {
+    const dy = textMiddle(t) - mid;
+    if (Math.abs(dy) > tol) continue;
+    // Horizontal: flush against the text's left side (Hebrew) or right side, if the box is close to it.
+    const toLeft = t.x - LABEL_GAP - (box.x + box.width);
+    const toRight = t.x + t.width + LABEL_GAP - box.x;
+    const dx = Math.abs(toLeft) <= sideTol ? toLeft : Math.abs(toRight) <= sideTol ? toRight : null;
+    // The closest text on the row wins; one the box sits against beats one it doesn't.
+    const score = Math.abs(dy) + (dx === null ? 100 + Math.min(Math.abs(toLeft), Math.abs(toRight)) : Math.abs(dx));
+    const bestScore = best ? Math.abs(best.dy) + (best.dx === null ? 100 : Math.abs(best.dx)) : Infinity;
+    if (score < bestScore) best = { t, dy, dx };
+  }
+  if (!best) return { x: box.x, y: box.y, guides: [], text: null };
+  const guides: { axis: "x" | "y"; at: number }[] = [{ axis: "y", at: textMiddle(best.t) }];
+  if (best.dx !== null) guides.push({ axis: "x", at: best.dx === best.t.x - LABEL_GAP - (box.x + box.width) ? best.t.x - LABEL_GAP : best.t.x + best.t.width + LABEL_GAP });
+  return { x: box.x + (best.dx ?? 0), y: box.y + best.dy, guides, text: best.t };
+}

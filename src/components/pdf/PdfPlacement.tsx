@@ -6,7 +6,8 @@ import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { alignBoxes, distributeBoxes, snapPosition, type AlignMode, nextFreePosition } from "@/lib/pdf/arrange";
+import { alignBoxes, distributeBoxes, snapPosition, snapToText, type AlignMode, type TextAnchor, nextFreePosition } from "@/lib/pdf/arrange";
+import { extractPageTexts } from "./extract-page-data";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
 import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
@@ -57,12 +58,28 @@ export interface PdfPlacementProps {
 
 export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
+
   const [scale, setScale] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
   /** Additional stamps selected with Shift/Ctrl-click (the primary one is `selected`). */
   const [extra, setExtra] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
   const [guides, setGuides] = useState<{ page: number; axis: "x" | "y"; at: number }[]>([]);
+  /** The printed name a box being dragged lines up with (highlighted on the page). */
+  const [snapText, setSnapText] = useState<{ page: number; text: TextAnchor } | null>(null);
+  /** Printed text of each page, to line fields up with the names next to them. */
+  const [texts, setTexts] = useState<TextAnchor[][]>([]);
+  useEffect(() => {
+    if (!doc) return;
+    let live = true;
+    extractPageTexts(doc).then((t) => { if (live) setTexts(t); }).catch(() => {});
+    return () => { live = false; };
+  }, [doc]);
+  /** A box dropped or added near a printed name lands on its row, flush against it. */
+  const besideText = (page: number, box: { x: number; y: number; width: number; height: number }) => {
+    const r = snapToText(box, texts[page] ?? [], { tolerance: 10, sideTolerance: 40 });
+    return { ...box, x: r.x, y: r.y };
+  };
   const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -169,7 +186,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const dims = item.multiline ? { width: 200, height: 50 } : size;
     const pg = pages[page]!;
     const pos = at ?? { x: (pg.width - dims.width) / 2, y: pg.height / 2 };
-    const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
+    const box = clampBox(at ? besideText(page, { ...pos, ...dims }) : { ...pos, ...dims }, pg.width, pg.height);
     if (existing) {
       patchStamp(existing.id, { page, ...box });
       select(existing.id);
@@ -213,7 +230,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const onPage = latest.current.stamps.filter((o) => o.page === page && o.id !== selected);
     const anchor = latest.current.stamps.find((o) => o.id === selected && o.page === page);
     const pos = at ?? nextFreePosition(dims, pg, anchor ? [...onPage, anchor] : onPage);
-    const box = clampBox({ ...pos, ...dims }, pg.width, pg.height);
+    const box = clampBox(at ? besideText(page, { ...pos, ...dims }) : { ...pos, ...dims }, pg.width, pg.height);
     pushHistory();
     const id = onDrawElement(entry, page, { x: round1(box.x), y: round1(box.y) });
     select(id);
@@ -256,27 +273,35 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       const dy = -(ev.clientY - startY) / scale; // screen down = PDF down
       const patches = new Map<string, Partial<PdfStamp>>();
       const hit: { page: number; axis: "x" | "y"; at: number }[] = [];
+      let textHit: { page: number; text: TextAnchor } | null = null;
       for (const [id, origin] of origins) {
         const pg = pages[origin.page]!;
         let box = mode === "move"
           ? { ...origin, x: origin.x + dx, y: origin.y + dy }
           // Resize from the bottom-end corner: width grows with dx, the top edge stays put.
           : { x: origin.x, width: origin.width + dx, height: origin.height - dy, y: origin.y + dy };
-        if (mode === "move" && origins.size === 1) {
+        // Alt drags freely, without lining up with anything.
+        if (mode === "move" && origins.size === 1 && !ev.altKey) {
           const others = latest.current.stamps.filter((o) => o.id !== id && o.page === origin.page);
           const snapped = snapPosition(box, others);
-          box = { ...box, x: snapped.x, y: snapped.y };
-          hit.push(...snapped.guides.map((g) => ({ ...g, page: origin.page })));
+          // A printed name on the box's row wins: same height as the name, flush against it.
+          const byText = snapToText(box, textsRef.current[origin.page] ?? []);
+          const xFromText = byText.guides.some((g) => g.axis === "x");
+          box = { ...box, x: xFromText ? byText.x : snapped.x, y: byText.text ? byText.y : snapped.y };
+          hit.push(...[...byText.guides, ...snapped.guides.filter((g) => (g.axis === "x" ? !xFromText : !byText.text))].map((g) => ({ ...g, page: origin.page })));
+          textHit = byText.text ? { page: origin.page, text: byText.text } : null;
         }
         const c = clampBox(box, pg.width, pg.height);
         // Touching a suggested placement confirms it.
         patches.set(id, { x: round1(c.x), y: round1(c.y), width: round1(c.width), height: round1(c.height), guessed: undefined });
       }
       setGuides(hit);
+      setSnapText(textHit);
       onMappingChange({ ...latest.current, stamps: latest.current.stamps.map((s) => (patches.has(s.id) ? { ...s, ...patches.get(s.id) } : s)) });
     };
     const up = () => {
       setGuides([]);
+      setSnapText(null);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       // A click (no drag) on one box of a multi-selection selects just that box, so its own position can be edited.
@@ -288,6 +313,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   // During a drag the closure's `mapping` is stale, so always patch from the latest ref.
   const latest = useRef(mapping);
   useEffect(() => { latest.current = mapping; });
+  const textsRef = useRef(texts);
+  useEffect(() => { textsRef.current = texts; });
 
   const selectedBoxes = () => group.map((id) => mapping.stamps.find((s) => s.id === id)!).filter(Boolean);
   function arrange(kind: AlignMode | "dist-x" | "dist-y") {
@@ -568,6 +595,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                     : { left: 0, top: (pg.height - g.at) * scale, width: "100%", height: 1 };
                   return <div key={gi} aria-hidden className="pointer-events-none absolute bg-primary" style={line} />;
                 })}
+                {snapText?.page === pi && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute rounded-sm bg-primary/15 ring-1 ring-primary"
+                    style={{ left: (snapText.text.x - 2) * scale, top: (pg.height - snapText.text.y - snapText.text.height * 0.85) * scale, width: (snapText.text.width + 4) * scale, height: snapText.text.height * 1.15 * scale }}
+                  />
+                )}
               </div>
             ))}
           </div>
