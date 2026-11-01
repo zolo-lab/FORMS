@@ -1,5 +1,7 @@
 "use client";
+import { cn } from "@/lib/utils";
 import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components/packages/StepsEditor";
+import { OrgRoutes } from "@/components/packages/OrgRoutes";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
 import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
@@ -54,8 +56,11 @@ export interface FormEditorProps {
     packageId: string;
     drafts: StepDraft[];
     contacts: { id: string; label: string }[];
-    /** Active organizations (steps "לפי העמותה" / "רק לעמותות"). */
+    /** Active organizations: each can have a route of its own. */
     orgs?: { id: string; label: string }[];
+    /** Saved routes of organizations (organization id → steps). */
+    orgRoutes?: Record<string, StepDraft[]>;
+    saveOrgRoute?: (packageId: string, organizationId: string, drafts: StepDraft[] | null) => Promise<SaveStepsResult>;
     groups: { id: string; label: string }[];
     save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
@@ -75,6 +80,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [stepWork, setStepWork] = useState<EditorDraft[]>(() => (flow?.drafts ?? []).map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role })));
   const [stepSaved, setStepSaved] = useState(stepWork);
   const [stepState, setStepState] = useState<StepsSaveState>({ kind: "idle" });
+  /** "שלבי הטופס" shows the general route ("") or one organization's. */
+  const [routeOrg, setRouteOrg] = useState("");
+  const [orgRoutes, setOrgRoutes] = useState<Record<string, StepDraft[]>>(flow?.orgRoutes ?? {});
   const stepsDirty = JSON.stringify(stepWork.map(stripDraft)) !== JSON.stringify(stepSaved.map(stripDraft));
   const ctx = { contacts: flow?.contacts, groups: flow?.groups, fields: emailFieldsOf(def) };
   const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
@@ -482,6 +490,43 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 <h2 id="steps-h" className="text-lg font-semibold">שלבי הטופס</h2>
                 <p className="text-sm text-muted-foreground">הטופס עובר בין השלבים לפי הסדר. אילו שדות ממלאים בכל שלב בוחרים ב&quot;סימון שדות לשלב&quot; בלשוניות העריכה וה-PDF, או בהגדרות השדה.</p>
               </div>
+              {(flow.orgs?.length ?? 0) > 1 && (
+                <div role="tablist" aria-label="מסלול" className="flex flex-wrap gap-1.5">
+                  {[{ id: "", label: "מסלול כללי" }, ...flow.orgs!].map((o) => {
+                    const own = !!o.id && !!orgRoutes[o.id];
+                    return (
+                      <button
+                        key={o.id || "general"}
+                        type="button"
+                        role="tab"
+                        aria-selected={routeOrg === o.id}
+                        onClick={() => setRouteOrg(o.id)}
+                        className={cn(
+                          "inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
+                          routeOrg === o.id ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-accent",
+                        )}
+                      >
+                        {o.label}
+                        {o.id && <span className={cn("rounded-full px-1.5 text-[11px]", routeOrg === o.id ? "bg-primary-foreground/20" : own ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{own ? "מסלול משלה" : "כללי"}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {routeOrg && flow.saveOrgRoute ? (
+                <OrgRoutes
+                  org={flow.orgs!.find((o) => o.id === routeOrg)!}
+                  orgs={flow.orgs!}
+                  routes={orgRoutes}
+                  general={stepWork.map(stripDraft)}
+                  contacts={flow.contacts}
+                  groups={flow.groups}
+                  emailFields={emailFieldsOf(def)}
+                  heldRoles={[...new Set([...answerFields(def).map(fieldRole), ...stepWork.map((d) => d.role)])]}
+                  save={(org, drafts) => flow.saveOrgRoute!(flow.packageId, org, drafts)}
+                  onRoutesChange={setOrgRoutes}
+                />
+              ) : (
               <StepsEditor
                 drafts={stepWork}
                 onChange={changeSteps}
@@ -493,6 +538,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 onSave={() => void saveSteps()}
                 waitingForForm={save !== "saved"}
               />
+              )}
             </section>
             {flow.sendSettings && (
               <details className="rounded-lg border bg-card p-4" open={flow.sendSettingsOpen}>

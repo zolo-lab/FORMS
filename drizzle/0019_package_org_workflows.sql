@@ -1,0 +1,1 @@
+ALTER TABLE "package_templates" ADD COLUMN "org_workflows" jsonb DEFAULT '{}'::jsonb NOT NULL;

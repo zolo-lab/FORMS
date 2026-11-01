@@ -96,7 +96,9 @@ export async function publishTemplate(templateId: string): Promise<{ ok: true; v
   if (!data.version.pdfFileId && data.template.publishedVersion === null) issues.unshift(NEEDS_PDF);
   // Every field must be in a step of the form, or nobody would ever fill it.
   const pkg = await getPackage(await formPackageId(templateId, data.template.title));
-  const orphans = unassignedFields(data.version.definition, (pkg?.pkg.workflow.steps ?? []).map((s) => s.role));
+  // A field is in a step when any route (the general one or an organization's own) has that step.
+  const routes = pkg ? [pkg.pkg.workflow, ...Object.values(pkg.pkg.orgWorkflows ?? {})] : [];
+  const orphans = unassignedFields(data.version.definition, routes.flatMap((w) => w.steps.map((s) => s.role)));
   if (orphans.length) issues.push(`${orphans.length} שדות לא משויכים לאף שלב: ${orphans.slice(0, 5).map((f) => f.label || f.id).join(", ")}`);
   if (issues.length) return { ok: false, issues };
   await db.update(formTemplateVersions).set({ publishedAt: new Date() }).where(eq(formTemplateVersions.id, data.version.id));

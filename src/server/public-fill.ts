@@ -3,6 +3,7 @@
  * Nothing is created until it is sent; then a request is opened, the first step is submitted through the usual signing
  * code (same validation, signatures, PDF), and the next steps go on by themselves.
  */
+import { routeFor } from "@/lib/workflow/assignee";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Answers } from "@/lib/forms/conditions";
@@ -43,16 +44,18 @@ export async function publicForm(formId: string, orgSlug?: string | null): Promi
     .where(and(eq(schema.formTemplateVersions.templateId, formId), eq(schema.formTemplateVersions.version, form.publishedVersion)));
   if (!version) return { ok: false, title: form.title, reason: "closed" };
   const [pkg] = await db.select().from(schema.packageTemplates).where(eq(schema.packageTemplates.id, await formPackageId(formId)));
-  const start = publicStart(pkg?.workflow.steps ?? []);
   if (!pkg || pkg.archivedAt) return { ok: false, title: form.title, reason: "closed" };
-  if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
   const orgs = await db.select().from(schema.organizations);
   const which = linkOrg(allowedOrgs(pkg, orgs), orgSlug);
   if (!which.ok) return { ok: false, title: form.title, reason: which.reason };
+  // The organization's own route when it has one.
+  const route = routeFor(pkg, which.org.id);
+  const start = publicStart(route.steps);
+  if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
   const o = which.org;
   const org: PublicOrg = { id: o.id, name: o.name, slug: o.slug, registrationNumber: o.registrationNumber, primaryColor: o.primaryColor, logoFileId: o.logoFileId };
   const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
-  const role = publicRole(pkg.workflow.steps, (r) => viewFor(r).pages.length > 0);
+  const role = publicRole(route.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
   const definition = lockOrgFields(viewFor(role));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;

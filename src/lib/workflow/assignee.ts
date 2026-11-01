@@ -21,3 +21,8 @@ export const GROUP_SOURCE_PREFIX = "group:";
 export function groupIdOfSource(optionsSource: string | undefined): string | null {
   return optionsSource?.startsWith(GROUP_SOURCE_PREFIX) ? optionsSource.slice(GROUP_SOURCE_PREFIX.length) : null;
 }
+
+/** The route a request of `organizationId` follows: the organization's own route, else the form's general one. */
+export function routeFor<W>(pkg: { workflow: W; orgWorkflows?: Record<string, W> | null }, organizationId: string | null | undefined): W {
+  return (organizationId && pkg.orgWorkflows?.[organizationId]) || pkg.workflow;
+}
