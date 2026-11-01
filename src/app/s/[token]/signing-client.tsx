@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import type { UploadedFile } from "@/components/forms/fields/types";
 import { UPLOAD_ERRORS } from "@/lib/forms/upload";
@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { OnDocumentFill, type OnDocPdf } from "@/components/pdf/OnDocumentFill";
 import { coversAll } from "@/lib/pdf/on-document";
+import { ViewToggle, useFillView } from "@/components/forms/ViewToggle";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
 import type { FilledItem } from "@/lib/forms/role-view";
@@ -32,12 +33,6 @@ interface Props {
   lookups?: Lookups;
 }
 
-const DESKTOP_QUERY = "(min-width: 1024px)";
-function subscribeDesktop(cb: () => void) {
-  const mq = window.matchMedia(DESKTOP_QUERY);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-}
 
 type Panel = null | "decline" | "return" | "delegate";
 
@@ -110,10 +105,7 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
   // On-document mode only when every field of this role is placed on a PDF.
   const onDocPdfs = pdfDocs.filter((d) => coversAll(d.mapping, definition));
   const canOnDoc = !formOnly && hasForm && pdfDocs.length > 0 && onDocPdfs.length === pdfDocs.length && pdfDocs.length === 1;
-  const isDesktop = useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches, () => false);
-  const [chosen, setChosen] = useState<"form" | "document" | null>(null);
-  const mode = chosen ?? (isDesktop && canOnDoc ? "document" : "form");
-  const setMode = setChosen;
+  const [mode, setMode] = useFillView(canOnDoc);
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -171,7 +163,10 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">עבור: {subjectName}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">עבור: {subjectName}</p>
+        {canOnDoc && <ViewToggle view={mode} onChange={setMode} />}
+      </div>
       {/* On the document, earlier answers sit in their own places; the separate list is only for the question view. */}
       {filled.length > 0 && !(hasForm && canOnDoc && mode === "document") && (
         <Card className="space-y-2 p-4" aria-label="פרטים שמולאו">
@@ -185,12 +180,6 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
             ))}
           </dl>
         </Card>
-      )}
-      {canOnDoc && (
-        <div className="flex gap-2" role="group" aria-label="אופן המילוי">
-          <Button size="sm" variant={mode === "document" ? "default" : "outline"} onClick={() => setMode("document")}>על גבי המסמך</Button>
-          <Button size="sm" variant={mode === "form" ? "default" : "outline"} onClick={() => setMode("form")}>טופס</Button>
-        </div>
       )}
       {hasForm && canOnDoc && mode === "document" ? (
         <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} />

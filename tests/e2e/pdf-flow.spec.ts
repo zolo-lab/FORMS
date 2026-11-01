@@ -50,7 +50,8 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   // Viewing the published form shows the PDF itself with the placed fields to fill.
   const formId = new URL(page.url()).pathname.split("/").pop()!;
   await page.goto(`/preview/form/${formId}?all=1`);
-  await expect(page.getByRole("button", { name: "על גבי המסמך" })).toBeVisible();
+  // On a computer the document is the default; the corner switch leads to the question view.
+  await expect(page.getByRole("button", { name: "מעבר לתצוגת טופס (נוח בנייד)" })).toBeVisible();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("מספר זהות", { exact: true })).toBeVisible();
 
@@ -78,7 +79,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   const guest = await ctx.newPage();
   await guest.goto(new URL(link).pathname);
   await expect(guest.getByText(`עבור: ${employee}`)).toBeVisible({ timeout: 20_000 });
-  await guest.getByRole("button", { name: "על גבי המסמך" }).click();
+  await expect(guest.getByRole("button", { name: "מעבר לתצוגת טופס (נוח בנייד)" })).toBeVisible();
   await expect(guest.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   await guest.getByLabel("טקסט", { exact: true }).fill("דנה כהן");
   await guest.getByLabel("מספר זהות", { exact: true }).fill("000000018");
