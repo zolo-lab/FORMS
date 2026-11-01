@@ -12,7 +12,7 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
-import { allowedOrgs, linkOrg, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
+import { allowedOrgs, linkOrg, linkProject, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
@@ -26,14 +26,14 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export type PublicOrg = { id: string; name: string; slug: string | null; registrationNumber: string; primaryColor: string | null; logoFileId: string | null };
 
 export type PublicForm =
-  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; initialAnswers: Answers }
+  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; project: { id: string; name: string } | null; initialAnswers: Answers }
   | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" | "no_fields" | "choose_org" | "org_not_allowed" | "no_organization" };
 
 /**
  * The form as opened from its link. `orgSlug` is the organization in the link (/f/<form>/<slug>); without one, the
  * form must be open to a single organization.
  */
-export async function publicForm(formId: string, orgSlug?: string | null): Promise<PublicForm> {
+export async function publicForm(formId: string, orgSlug?: string | null, projectSlug?: string | null): Promise<PublicForm> {
   if (!UUID.test(formId)) return { ok: false, reason: "not_found" };
   const [form] = await db.select().from(schema.formTemplates).where(eq(schema.formTemplates.id, formId));
   if (!form) return { ok: false, reason: "not_found" };
@@ -49,7 +49,11 @@ export async function publicForm(formId: string, orgSlug?: string | null): Promi
   const which = linkOrg(allowedOrgs(pkg, orgs), orgSlug);
   if (!which.ok) return { ok: false, title: form.title, reason: which.reason };
   // The organization's own route when it has one.
-  const route = routeFor(pkg, which.org.id);
+  // A project in the link (/f/<form>/<organization>/<project>): the request is filed under it and follows its route.
+  const proj = linkProject(await db.select().from(schema.projects).where(eq(schema.projects.organizationId, which.org.id)), projectSlug);
+  if (!proj.ok) return { ok: false, title: form.title, reason: proj.reason };
+  const project = proj.project ? { id: proj.project.id, name: proj.project.name } : null;
+  const route = routeFor(pkg, which.org.id, project?.id);
   const start = publicStart(route.steps);
   if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
   const o = which.org;
@@ -60,12 +64,12 @@ export async function publicForm(formId: string, orgSlug?: string | null): Promi
   const definition = lockOrgFields(viewFor(role));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
   const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber }, {});
-  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, initialAnswers };
+  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, project, initialAnswers };
 }
 
 /** The published form's own document, for the link's on-document view. */
-export async function publicFormPdf(formId: string, orgSlug?: string | null): Promise<Uint8Array | null> {
-  const view = await publicForm(formId, orgSlug);
+export async function publicFormPdf(formId: string, orgSlug?: string | null, projectSlug?: string | null): Promise<Uint8Array | null> {
+  const view = await publicForm(formId, orgSlug, projectSlug);
   if (!view.ok || !view.pdf) return null;
   const [row] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.id, view.pdf.fileId));
   const storedId = row ? /([0-9a-f-]{36})$/.exec(row.blobUrl)?.[1] : undefined;
@@ -78,8 +82,8 @@ export type PublicSubmitResult =
   | { ok: false; errors: FieldErrors }
   | { ok: false; error: "not_found" | "closed" | "not_public" | "no_fields" | "no_organization" | "choose_org" | "org_not_allowed" | "failed" };
 
-export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: string | null): Promise<PublicSubmitResult> {
-  const view = await publicForm(formId, orgSlug);
+export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: string | null, projectSlug?: string | null): Promise<PublicSubmitResult> {
+  const view = await publicForm(formId, orgSlug, projectSlug);
   if (!view.ok) return { ok: false, error: view.reason };
   const org = view.org;
   // The organization comes from the link, never from what was sent.
@@ -90,6 +94,7 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
 
   const subject = subjectFromAnswers(view.definition, check.cleaned);
   const requestId = await createRequest({
+    ...(view.project ? { projectId: view.project.id } : {}),
     packageTemplateId: view.packageId,
     organizationId: org.id,
     subject: { ...subject, name: subject.name || view.title },
@@ -121,8 +126,10 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
 }
 
 /** The organizations each form's link opens for (its own package's ticked organizations), for the links in the admin. */
-export async function formLinkOrgs(templateIds: string[]): Promise<Map<string, { slug: string; name: string }[]>> {
-  const out = new Map<string, { slug: string; name: string }[]>();
+export type LinkTarget = { slug: string; name: string; projects: { slug: string; name: string }[] };
+
+export async function formLinkOrgs(templateIds: string[]): Promise<Map<string, LinkTarget[]>> {
+  const out = new Map<string, LinkTarget[]>();
   if (!templateIds.length) return out;
   const items = await db.select().from(schema.packageTemplateItems).where(inArray(schema.packageTemplateItems.templateId, templateIds));
   const sizes = new Map<string, number>();
@@ -132,10 +139,16 @@ export async function formLinkOrgs(templateIds: string[]): Promise<Map<string, {
   for (const i of items) if (sizes.get(i.packageTemplateId) === 1) own.set(i.templateId, i.packageTemplateId);
   const pkgs = own.size ? await db.select().from(schema.packageTemplates).where(inArray(schema.packageTemplates.id, [...own.values()])) : [];
   const orgs = await db.select().from(schema.organizations);
+  const projects = (await db.select().from(schema.projects)).filter((p) => p.active && p.slug);
   for (const [templateId, pkgId] of own) {
     const pkg = pkgs.find((p) => p.id === pkgId);
     if (!pkg) continue;
-    out.set(templateId, allowedOrgs(pkg, orgs).filter((o) => o.slug).map((o) => ({ slug: o.slug!, name: o.name })));
+    out.set(
+      templateId,
+      allowedOrgs(pkg, orgs)
+        .filter((o) => o.slug)
+        .map((o) => ({ slug: o.slug!, name: o.name, projects: projects.filter((p) => p.organizationId === o.id).map((p) => ({ slug: p.slug!, name: p.name })) })),
+    );
   }
   return out;
 }

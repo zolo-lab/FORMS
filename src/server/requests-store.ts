@@ -181,7 +181,7 @@ async function persist(
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   /** When a step that just became active is due, from the route's `dueHours`. */
   const dueFor = (s: { order: number; role: string }): Date | null => {
-    const h = pkg ? routeFor(pkg, req.organizationId).steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours : undefined;
+    const h = pkg ? routeFor(pkg, req.organizationId, req.projectId).steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours : undefined;
     return h ? new Date(now.getTime() + h * 3_600_000) : null;
   };
   const dueByStep = new Map<string, Date | null>();
@@ -328,7 +328,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
     Object.assign(answers, orgAnswers);
   }
   // The organization's own route when it has one, else the form's general route.
-  const route = routeFor(pkg!, req.organizationId);
+  const route = routeFor(pkg!, req.organizationId, req.projectId);
   const people = await peopleForWorkflow(((req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride) ?? route, versions.map((v) => v.definition));
   // Whoever opened the request (for steps that come back to them).
   if (req.createdBy) {

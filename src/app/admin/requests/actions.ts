@@ -85,7 +85,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   if (pkg && input.workflow) {
     if (!can(user, perms, pkg.id, "edit_chain")) errors["workflow"] = "אין לך הרשאה לשנות את שרשרת האישורים";
     else {
-      const chain = checkChain(routeFor(pkg, input.organizationId), input.workflow);
+      const chain = checkChain(routeFor(pkg, input.organizationId, input.projectId), input.workflow);
       if (!chain.ok) errors["workflow"] = chain.errors[0] ?? "שרשרת לא תקינה";
       else workflowOverride = chain.workflow;
     }

@@ -14,8 +14,8 @@ const REASONS: Record<string, string> = {
 };
 
 /** /f/<form> and /f/<form>/<organization>: the form, for the organization of the link. */
-export async function PublicFormView({ id, org: orgSlug }: { id: string; org?: string }) {
-  const view = await publicForm(id, orgSlug);
+export async function PublicFormView({ id, org: orgSlug, project: projectSlug }: { id: string; org?: string; project?: string }) {
+  const view = await publicForm(id, orgSlug, projectSlug);
   if (!view.ok) {
     if (view.reason === "not_found") notFound();
     return (
@@ -27,13 +27,14 @@ export async function PublicFormView({ id, org: orgSlug }: { id: string; org?: s
       </main>
     );
   }
-  const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
+  const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}${projectSlug ? `&project=${encodeURIComponent(projectSlug)}` : ""}` : "";
   return (
     <OrgTheme org={view.org}>
       <main className={view.pdf ? "mx-auto max-w-5xl px-4 py-6" : "mx-auto max-w-3xl px-4 py-6"}>
         <PublicFill
           formId={view.formId}
           org={orgSlug ?? null}
+          project={projectSlug ?? null}
           definition={view.definition}
           role={view.role}
           initialAnswers={view.initialAnswers}
