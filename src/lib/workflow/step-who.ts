@@ -10,7 +10,7 @@ export type StepWho = (typeof STEP_WHO)[number];
 
 export const STEP_WHO_LABELS: Record<StepWho, string> = {
   requester: "השולח (ממלא את הטופס ושולח)",
-  employee: "העובד (מי שהטופס נשלח אליו)",
+  employee: "העובד שהטופס עליו (פרטיו מוזנים בשליחה)",
   contact: "משתמש מוגדר",
   group_all: "קבוצה (כולם במקביל)",
   email: "מייל קבוע (למשל גורם חיצוני)",

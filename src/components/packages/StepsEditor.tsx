@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, Lock, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
@@ -20,13 +20,14 @@ export type EditorDraft = StepDraft & { key: string; origRole?: StepRole };
 export type StepsSaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; errors: string[] };
 
 const HINT: Partial<Record<StepWho, string>> = {
-  employee: "את השם, המייל או הנייד שלו ממלא השולח כששולחים את הטופס.",
+  employee: "האדם שהטופס עליו. את השם והמייל או הנייד שלו מזינים כששולחים את הטופס, והקישור נשלח אליו.",
   email: "יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח אליו.",
   from_field: "השלב נשלח למייל שמולא בשדה, ברגע שהשלב מתחיל.",
 };
 
 /**
- * "שלבי הטופס": the steps in order. Step 1 is always the sender. Each other step has one "who" choice and only the
+ * "שלבי הטופס": the steps in order. Step 1 is usually the sender (the staff member who opens the request); without it the
+ * form goes straight to the employee, who is then step 1. Each other step has one "who" choice and only the
  * detail it needs; what is missing shows on the step itself. One save button for all of them.
  */
 export function StepsEditor({
@@ -66,16 +67,16 @@ export function StepsEditor({
           const id = `s${i}`;
           const earlier = new Set(drafts.slice(0, i).map((x) => x.role));
           const missing = problems[i]!;
-          if (i === 0) {
+          if (s.who === "requester") {
             return (
               <li key={s.key} aria-label={`שלב ${n}`} className="rounded-lg border bg-card p-4">
                 <div className="flex items-center gap-3">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground" aria-hidden>1</span>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">שלב 1 · השולח</p>
-                    <p className="text-sm text-muted-foreground">ממלא את הטופס במערכת ושולח אותו. השלב הזה קבוע.</p>
+                    <p className="text-sm text-muted-foreground">מי שפותח את הבקשה במערכת: ממלא את השדות של השלב הזה ושולח. בלי השלב הזה הטופס נשלח ישר לעובד.</p>
                   </div>
-                  <Lock className="size-4 text-muted-foreground" aria-label="שלב קבוע" />
+                  <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label="מחיקת שלב השולח"><Trash2 className="size-4" aria-hidden /></Button>
                 </div>
               </li>
             );
@@ -86,9 +87,9 @@ export function StepsEditor({
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold" aria-hidden>{n}</span>
                 <p className="min-w-0 flex-1 truncate font-semibold">{stepLabel(s, i, ctx)}</p>
                 <div className="flex shrink-0 gap-1">
-                  <Button type="button" variant="ghost" size="icon" disabled={i === 1} onClick={() => move(i, -1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={i === 0 || (i === 1 && drafts[0]!.who === "requester")} onClick={() => move(i, -1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
                   <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => move(i, 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>
-                  <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={`מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
+                  <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={`מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -158,10 +159,16 @@ export function StepsEditor({
           );
         })}
       </ol>
-      <Button type="button" variant="outline" onClick={() => onChange([...drafts, { key: crypto.randomUUID(), who: "contact", role: "approver" }])}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={() => onChange([...drafts, { key: crypto.randomUUID(), who: "contact", role: "approver" }])}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
+        {drafts[0]?.who !== "requester" && (
+          <Button type="button" variant="ghost" onClick={() => onChange([{ key: crypto.randomUUID(), who: "requester", role: "requester" }, ...drafts])}><Plus className="size-4" aria-hidden />החזרת שלב השולח בהתחלה</Button>
+        )}
+      </div>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur">
         <Button type="button" onClick={onSave} disabled={state.kind === "saving" || !dirty || total > 0 || waitingForForm}>
+          {state.kind === "saving" && <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />}
           {state.kind === "saving" ? "שומר…" : "שמירת השלבים"}
         </Button>
         <span aria-live="polite" className="text-sm">
