@@ -172,7 +172,8 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">עבור: {subjectName}</p>
-      {filled.length > 0 && (
+      {/* On the document, earlier answers sit in their own places; the separate list is only for the question view. */}
+      {filled.length > 0 && !(hasForm && canOnDoc && mode === "document") && (
         <Card className="space-y-2 p-4" aria-label="פרטים שמולאו">
           <h2 className="font-semibold">פרטים שמולאו</h2>
           <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
@@ -192,7 +193,7 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
         </div>
       )}
       {hasForm && canOnDoc && mode === "document" ? (
-        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} />
+        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} />
       ) : hasForm ? (
         <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} />
       ) : (

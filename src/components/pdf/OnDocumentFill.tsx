@@ -1,4 +1,5 @@
 "use client";
+import type { FilledItem } from "@/lib/forms/role-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SignaturePicker } from "@/components/forms/fields/signature";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,8 @@ interface Props {
   errors: FieldErrors;
   onSubmit: (cleaned: Answers) => void | Promise<void>;
   onErrors: (e: FieldErrors) => void;
+  /** What earlier steps filled: shown in its own place on the document, locked (everyone sees the same document). */
+  filled?: FilledItem[];
 }
 
 function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "role" | "onSubmit" | "onErrors">) {
@@ -49,6 +52,13 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
   }, []);
 
   const stamps = useMemo(() => simpleStamps(pdf.mapping, rest.definition), [pdf.mapping, rest.definition]);
+  // Boxes of fields filled in earlier steps: their answer, read-only, where the field sits on the document.
+  const earlier = useMemo(() => {
+    const byId = new Map((rest.filled ?? []).map((f) => [f.id, f]));
+    return pdf.mapping.stamps
+      .filter((s) => !s.whenValue && !s.part && !cellRef(s.fieldId) && byId.has(s.fieldId) && !stampField(rest.definition, s))
+      .map((s) => ({ stamp: s, item: byId.get(s.fieldId)! }));
+  }, [pdf.mapping, rest.filled, rest.definition]);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Formula fields are shown computed (the server recomputes them on submit).
   const shown = useMemo(() => computeFormulas(rest.definition, rest.answers, today), [rest.definition, rest.answers, today]);
@@ -69,6 +79,24 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
           return (
             <div key={pageIdx} className="relative mx-auto w-fit overflow-hidden rounded-md border" style={{ width: pg.width * scale, height: pg.height * scale }}>
               <PageCanvas doc={doc} pageNumber={pageIdx + 1} scale={scale} />
+              {earlier
+                .filter(({ stamp }) => stamp.page === pageIdx)
+                .map(({ stamp: s, item }) => {
+                  const b = pdfBoxToScreen(s, pg.height, scale);
+                  const text = s.kind === "signature" ? "✓ נחתם" : s.kind === "check" ? "✓" : item.text;
+                  return (
+                    <div
+                      key={s.id}
+                      role="note"
+                      aria-label={`${item.label}: ${item.text}`}
+                      title={`${item.label} (מולא בשלב קודם)`}
+                      className={cn("absolute flex min-w-0 overflow-hidden rounded-sm bg-muted/60 px-0.5 text-foreground", s.multiline ? "items-start whitespace-pre-wrap" : "items-center whitespace-nowrap", s.kind === "check" || s.kind === "signature" ? "justify-center" : "")}
+                      style={{ left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(9, Math.min(b.height * 0.6, 14)) }}
+                    >
+                      <span className="truncate">{text}</span>
+                    </div>
+                  );
+                })}
               {stamps
                 .filter((s) => s.page === pageIdx)
                 .map((s) => {
@@ -125,7 +153,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 }
 
 /** Fill the form directly on the PDF pages. Shows how many required fields remain and jumps to the next one. */
-export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors }: Props) {
+export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Default values show on the document; setField keeps them in the answers it passes up.
   const answers = useMemo(() => withDefaults(definition, rawAnswers, today), [definition, rawAnswers, today]);
@@ -157,7 +185,7 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
         {remaining > 0 && <Button variant="outline" size="sm" onClick={goNext}>הבא</Button>}
       </div>
       {pdfs.map((p) => (
-        <PdfPages key={p.url} pdf={p} definition={definition} answers={answers} onChange={onChange} errors={errors} />
+        <PdfPages key={p.url} pdf={p} definition={definition} answers={answers} onChange={onChange} errors={errors} filled={filled} />
       ))}
       {/* Sending comes after the document, at the start of the line (the right side in Hebrew), and stays in reach. */}
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t bg-background/95 py-3 backdrop-blur">
