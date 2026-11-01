@@ -52,7 +52,7 @@ export function TemplateEditor({ id, subject: initialSubject, html: initialHtml,
           </div>
         </div>
       )}
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-3">
         <div className="space-y-1">
           <Label htmlFor={`${id}-body`}>עיצוב המייל (HTML)</Label>
           <Textarea
@@ -60,7 +60,7 @@ export function TemplateEditor({ id, subject: initialSubject, html: initialHtml,
             id={`${id}-body`}
             name="body"
             value={html}
-            rows={18}
+            rows={14}
             maxLength={30000}
             required
             dir="ltr"

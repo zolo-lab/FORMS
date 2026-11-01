@@ -63,7 +63,7 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
   const editing = TRIGGERS.find((t) => t.key === edit);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+    <main className="space-y-4 px-4 py-6 lg:px-8">
       <PageHeader title="מרכז מיילים" description="אילו מיילים המערכת שולחת, מתי ולמי. הגדרה לעמותה גוברת על ההגדרה לכל העמותות." />
       <MailTabs current="triggers" />
 
@@ -127,9 +127,9 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
                   <td className="px-3 py-2">
                     <TriggerToggle key={`${def.key}-${eff.enabled}`} triggerKey={def.key} org={orgId ?? ""} enabled={eff.enabled} label={def.label} locked={def.locked} />
                   </td>
-                  <td className="max-w-0 px-3 py-2">
-                    <p className="font-semibold">{def.label}</p>
-                    <p className="truncate text-muted-foreground" title={text.subject}>{text.subject}</p>
+                  <td className="px-3 py-2">
+                    <p className="min-w-40 font-semibold">{def.label}</p>
+                    <p className="line-clamp-1 max-w-md break-all text-muted-foreground" title={text.subject}>{text.subject}</p>
                   </td>
                   <td className="hidden px-3 py-2 md:table-cell">
                     <Badge tone={def.periodic ? "warning" : "default"}>{def.periodic ? "מתוזמן" : "אירוע"}</Badge>
@@ -187,7 +187,7 @@ function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error, te
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-foreground/30" role="dialog" aria-modal="true" aria-labelledby="edit-title">
       <Link href={closeHref} scroll={false} className="absolute inset-0" aria-label="סגירה" tabIndex={-1} />
-      <div className="relative h-full w-full max-w-4xl overflow-y-auto bg-background shadow-xl">
+      <div className="relative h-full w-full overflow-y-auto bg-background shadow-xl md:w-1/2 md:min-w-[36rem]">
         <div className="sticky top-0 z-10 flex items-start gap-3 border-b bg-background px-4 py-3">
           <div className="min-w-0 flex-1">
             <h2 id="edit-title" className="text-lg font-semibold">{def.label}</h2>
