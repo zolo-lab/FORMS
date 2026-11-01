@@ -361,10 +361,21 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </label>
           {focusRole && focusRole !== "unassigned" && (
             <span className="text-muted-foreground">
-              <strong className="text-foreground">{answerFields(def).filter((f) => fieldRole(f) === focusRole).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי להוסיף אותו לשלב, או בטלו סימון כדי להוציא." : "סמנו תיבות (Shift+לחיצה לכמה) ובחרו להן שלב בחלונית."}
+              <strong className="text-foreground">{answerFields(def).filter((f) => fieldRole(f) === focusRole).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי להוסיף אותו לשלב, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מכניסה אותה לשלב או מוציאה ממנו."}
             </span>
           )}
-          {focusRole === "unassigned" && <span className="text-destructive">השדות המודגשים לא שייכים לאף שלב: אף אחד לא ימלא אותם.</span>}
+          {focusRole === "unassigned" && (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-destructive">השדות המודגשים לא שייכים לאף שלב.</span>
+              <label className="flex items-center gap-2">
+                העברת כולם ל
+                <Select className="h-9 w-56" aria-label="העברת השדות שלא משויכים לשלב" value="" onChange={(e) => { const r = e.target.value as FillerRole; if (!r) return; commit(unassigned.reduce((d, f) => updateField(d, f.id, { filledBy: r }), def)); setIssues([]); setFocusRole(r); }}>
+                  <option value="">בחרו שלב…</option>
+                  {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+                </Select>
+              </label>
+            </span>
+          )}
           {focusRole && <Button variant="ghost" size="sm" onClick={() => setFocusRole("")}>סיום</Button>}
           {!focusRole && unassigned.length > 0 && (
             <span className="flex flex-wrap items-center gap-2 text-destructive">

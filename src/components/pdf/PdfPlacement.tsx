@@ -224,6 +224,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     e.stopPropagation();
     // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
     rootRef.current?.focus({ preventScroll: true });
+    // "סימון שדות לשלב": a click puts the box's field in the chosen step, or takes it out; nothing moves.
+    if (mode === "move" && focusRole && focusRole !== "unassigned" && onFieldPatch) {
+      const r = roleOf(stamp);
+      if (r !== "none") onFieldPatch(baseFieldId(stamp.fieldId), { filledBy: r === focusRole ? "unassigned" : focusRole });
+      return;
+    }
     if (mode === "move" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       // Toggle membership in the multi-selection; no drag.
       if (group.includes(stamp.id)) {
@@ -471,6 +477,22 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{roleName(r)}</li>
             ))}
           </ul>
+        )}
+        {onFieldPatch && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm" aria-label="תיבות מסומנות">
+            <span className="font-medium">{group.length === 1 ? "תיבה אחת מסומנת" : `${group.length} תיבות מסומנות`}</span>
+            <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
+            <span>· העברה לשלב:</span>
+            <StepSelect
+              className="h-9 w-64"
+              views={steps}
+              value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
+              onChange={(r) => {
+                const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
+                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r });
+              }}
+            />
+          </div>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
         <div ref={attachViewer} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
