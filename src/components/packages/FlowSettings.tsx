@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -81,7 +80,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
           {pkg.archivedAt && <Badge tone="muted">בארכיון</Badge>}
         </div>
       )}
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
+      {saved === "1" && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש להזין שם לערכה</p>}
       {stepError && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">השלב לא נשמר: {stepError}</p>}
       {!settingsOnly && (problems.length > 0 || items.length === 0 || unpublishedRequired.length > 0) && (
@@ -108,10 +107,10 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <span className="w-6 text-sm text-muted-foreground">{i + 1}</span>
               <span className="min-w-0 flex-1 font-medium">{it.title}</span>
               {it.publishedVersion ? <Badge tone="success">גרסה {it.publishedVersion}</Badge> : <Badge tone="warning">לא פורסם</Badge>}
-              <Button type="submit" name="intent" value={it.required ? "optional" : "required"} variant="outline" size="sm">{it.required ? "חובה" : "רשות"}</Button>
-              <Button type="submit" name="intent" value="up" variant="ghost" size="sm" disabled={i === 0} aria-label="העלאה">↑</Button>
-              <Button type="submit" name="intent" value="down" variant="ghost" size="sm" disabled={i === items.length - 1} aria-label="הורדה">↓</Button>
-              <Button type="submit" name="intent" value="remove" variant="ghost" size="sm">הסרה</Button>
+              <SubmitButton name="intent" value={it.required ? "optional" : "required"} variant="outline" size="sm">{it.required ? "חובה" : "רשות"}</SubmitButton>
+              <SubmitButton name="intent" value="up" variant="ghost" size="sm" disabled={i === 0} aria-label="העלאה">↑</SubmitButton>
+              <SubmitButton name="intent" value="down" variant="ghost" size="sm" disabled={i === items.length - 1} aria-label="הורדה">↓</SubmitButton>
+              <SubmitButton name="intent" value="remove" variant="ghost" size="sm">הסרה</SubmitButton>
             </form>
           ))}
           {addable.length > 0 && (
@@ -120,7 +119,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <Select name="templateId" aria-label="טופס להוספה" className="max-w-xs">
                 {addable.map((f) => <option key={f.id} value={f.id}>{f.title}{f.publishedVersion ? "" : " (לא פורסם)"}</option>)}
               </Select>
-              <Button type="submit" name="intent" value="add" variant="outline">הוספת טופס</Button>
+              <SubmitButton name="intent" value="add" variant="outline">הוספת טופס</SubmitButton>
             </form>
           )}
         </Card>
@@ -130,7 +129,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
       {!formId && <form action={archivePackageAction} className="border-t pt-4">
         <input type="hidden" name="id" value={pkg.id} />
         <input type="hidden" name="archive" value={pkg.archivedAt ? "0" : "1"} />
-        <Button type="submit" variant="ghost" className="text-destructive">{pkg.archivedAt ? "שחזור מהארכיון" : "העברה לארכיון"}</Button>
+        <SubmitButton variant="ghost" className="text-destructive">{pkg.archivedAt ? "שחזור מהארכיון" : "העברה לארכיון"}</SubmitButton>
       </form>}
       <section className="space-y-2" aria-labelledby="settings-h">
         <h2 id="settings-h" className="text-lg font-semibold">{formId ? "הגדרות שליחה" : "הגדרות התהליך"}</h2>

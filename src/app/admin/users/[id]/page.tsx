@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,7 +54,6 @@ export default async function UserPage({ params, searchParams }: { params: Promi
         <Link href="/admin/users" className="text-sm text-muted-foreground hover:text-foreground">→ כל המשתמשים</Link>
         <h1 className="text-2xl font-bold tracking-tight">{isNew ? "משתמש חדש" : user!.name}</h1>
       </div>
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? ERRORS.input}</p>}
 
       <form action={saveUserAction} className="space-y-5">
@@ -157,7 +156,7 @@ export default async function UserPage({ params, searchParams }: { params: Promi
         </RoleFields>
 
         <div className="sticky bottom-0 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur">
-          <Button type="submit">{isNew ? "יצירת המשתמש" : "שמירה"}</Button>
+          <SubmitButton saved={!!saved}>{isNew ? "יצירת המשתמש" : "שמירה"}</SubmitButton>
           <Link href="/admin/users" className="inline-flex h-10 items-center px-4 text-sm text-muted-foreground hover:text-foreground">ביטול</Link>
         </div>
       </form>
@@ -165,7 +164,7 @@ export default async function UserPage({ params, searchParams }: { params: Promi
       {user && user.active && user.id !== me?.id && (
         <form action={impersonateAction} className="border-t pt-4">
           <input type="hidden" name="id" value={user.id} />
-          <Button type="submit" variant="outline" size="sm">כניסה למערכת כמשתמש הזה</Button>
+          <SubmitButton variant="outline" size="sm">כניסה למערכת כמשתמש הזה</SubmitButton>
         </form>
       )}
     </main>

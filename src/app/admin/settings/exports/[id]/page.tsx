@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,6 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
       <nav className="text-sm"><Link href="/admin/settings/exports" className="text-muted-foreground hover:underline">תבניות ייצוא</Link></nav>
       <h1 className="text-2xl font-bold">{t.name}</h1>
       {created && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">התבנית נוצרה. עמודות שזוהו חוברו אוטומטית; בדקו את השאר.</p>}
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
 
       <form action={saveExportTemplateAction} className="space-y-4">
         <input type="hidden" name="id" value={t.id} />
@@ -111,9 +110,9 @@ export default async function ExportTemplatePage({ params, searchParams }: { par
           </table>
         </Card>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" name="intent" value="save">שמירה</Button>
-          <Button type="submit" name="intent" value="add" variant="outline">הוספת עמודה</Button>
-          <Button type="submit" name="intent" value="delete" variant="ghost">מחיקת התבנית</Button>
+          <SubmitButton name="intent" value="save" saved={!!saved}>שמירה</SubmitButton>
+          <SubmitButton name="intent" value="add" variant="outline">הוספת עמודה</SubmitButton>
+          <SubmitButton name="intent" value="delete" variant="ghost">מחיקת התבנית</SubmitButton>
         </div>
       </form>
 

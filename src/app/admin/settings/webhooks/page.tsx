@@ -1,5 +1,5 @@
 import { Badge, Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +30,6 @@ export default async function WebhooksPage({ searchParams }: { searchParams: Pro
         <code dir="ltr">x-forms-signature</code>, וקישורי ה-PDF בתוכה תקפים 24 שעות. נכשל? ננסה עד 3 פעמים.
       </p>
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
       {test && <p role="status" className={`rounded-md p-3 text-sm ${test === "ok" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{test === "ok" ? "בדיקת החיבור הצליחה" : `בדיקת החיבור נכשלה${status ? ` (סטטוס ${status})` : ""}`}</p>}
 
       <Card className="divide-y">
@@ -49,9 +48,9 @@ export default async function WebhooksPage({ searchParams }: { searchParams: Pro
               <code className="mt-1 block break-all rounded-md bg-muted p-2" dir="ltr">{h.secret}</code>
             </details>
             <div className="flex flex-wrap gap-2">
-              <form action={testWebhookAction}><input type="hidden" name="id" value={h.id} /><Button size="sm" variant="outline" type="submit">שליחת בדיקה</Button></form>
-              <form action={toggleWebhookAction}><input type="hidden" name="id" value={h.id} /><input type="hidden" name="active" value={h.active ? "0" : "1"} /><Button size="sm" variant="outline" type="submit">{h.active ? "השבתה" : "הפעלה"}</Button></form>
-              <form action={deleteWebhookAction}><input type="hidden" name="id" value={h.id} /><Button size="sm" variant="ghost" className="text-destructive" type="submit">מחיקה</Button></form>
+              <form action={testWebhookAction}><input type="hidden" name="id" value={h.id} /><SubmitButton size="sm" variant="outline">שליחת בדיקה</SubmitButton></form>
+              <form action={toggleWebhookAction}><input type="hidden" name="id" value={h.id} /><input type="hidden" name="active" value={h.active ? "0" : "1"} /><SubmitButton size="sm" variant="outline">{h.active ? "השבתה" : "הפעלה"}</SubmitButton></form>
+              <form action={deleteWebhookAction}><input type="hidden" name="id" value={h.id} /><SubmitButton size="sm" variant="ghost" className="text-destructive">מחיקה</SubmitButton></form>
             </div>
           </div>
         ))}
@@ -88,7 +87,7 @@ export default async function WebhooksPage({ searchParams }: { searchParams: Pro
               ))}
             </div>
           </fieldset>
-          <div className="sm:col-span-2"><Button type="submit">יצירה</Button></div>
+          <div className="sm:col-span-2"><SubmitButton saved={!!saved} savedText="נוצר">יצירה</SubmitButton></div>
         </form>
       </Card>
     </main>

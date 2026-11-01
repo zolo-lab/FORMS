@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,9 +39,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           </Link>
         ))}
       </nav>
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
+      {saved && !saved.startsWith("group-") && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">{saved === "deleted" ? "הקבוצה נמחקה" : "נשמר"}</p>}
       {error === "group" && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">יש לתת שם לקבוצה</p>}
-      {groupsTab ? <Groups users={all} /> : <UserList users={all} q={q} role={role} />}
+      {groupsTab ? <Groups users={all} saved={saved} /> : <UserList users={all} q={q} role={role} />}
     </main>
   );
 }
@@ -122,7 +123,7 @@ async function UserList({ users, q, role }: { users: Awaited<ReturnType<typeof l
   );
 }
 
-async function Groups({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) {
+async function Groups({ users, saved }: { users: Awaited<ReturnType<typeof listUsers>>; saved?: string }) {
   const groups = await listUserGroups(users);
   const people = users.filter((u) => u.active).sort((a, b) => a.name.localeCompare(b.name, "he"));
   const memberPicker = (prefix: string, chosen: string[]) => (
@@ -151,7 +152,7 @@ async function Groups({ users }: { users: Awaited<ReturnType<typeof listUsers>> 
             <Input id="g-new" name="name" required placeholder="למשל: מנהלי פרויקטים" />
           </div>
           {memberPicker("קבוצה חדשה", [])}
-          <Button type="submit"><Plus className="size-4" aria-hidden />יצירת קבוצה</Button>
+          <SubmitButton><Plus className="size-4" aria-hidden />יצירת קבוצה</SubmitButton>
         </form>
       </Card>
       {groups.length === 0 && <p className="text-sm text-muted-foreground">עדיין אין קבוצות.</p>}
@@ -169,8 +170,8 @@ async function Groups({ users }: { users: Awaited<ReturnType<typeof listUsers>> 
             </div>
             {memberPicker(g.name, g.userIds)}
             <div className="flex gap-2">
-              <Button type="submit" name="intent" value="save">שמירה</Button>
-              <Button type="submit" name="intent" value="delete" variant="ghost" className="text-destructive"><Trash2 className="size-4" aria-hidden />מחיקת הקבוצה</Button>
+              <SubmitButton name="intent" value="save" saved={saved === `group-${g.id}`}>שמירה</SubmitButton>
+              <SubmitButton name="intent" value="delete" variant="ghost" className="text-destructive"><Trash2 className="size-4" aria-hidden />מחיקת הקבוצה</SubmitButton>
             </div>
           </form>
         </Card>

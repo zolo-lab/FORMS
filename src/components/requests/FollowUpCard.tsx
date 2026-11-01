@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { followUpAction } from "@/app/admin/requests/actions";
 import type { FollowUpState, FollowUpStatus } from "@/lib/requests/follow-up";
 
@@ -23,9 +23,9 @@ export function FollowUpCard({ requestId, statuses, state, canMark }: { requestI
                 {done && <span className="text-xs text-muted-foreground">{fmt.format(new Date(done.at))}{done.byName ? ` · ${done.byName}` : ""}</span>}
               </span>
               {canMark && (
-                <Button type="submit" size="sm" variant={done ? "ghost" : "outline"}>
+                <SubmitButton size="sm" variant={done ? "ghost" : "outline"}>
                   {done ? "ביטול סימון" : "סימון כבוצע"}
-                </Button>
+                </SubmitButton>
               )}
             </form>
           );

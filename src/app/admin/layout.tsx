@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { logout } from "../login/actions";
 import { AdminNav } from "@/components/admin/AdminNav";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { devLoginEnabled } from "@/lib/auth/dev-login";
 import { canTrack, isAdmin, hasGrant, isTrackOnly } from "@/lib/auth/permissions";
@@ -60,7 +60,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         ) : (
           <form action={logout} className="ms-auto flex shrink-0 items-center gap-2">
             {user && <span className="hidden text-xs text-muted-foreground sm:inline">{user.name}</span>}
-            <Button variant="ghost" size="sm" type="submit">יציאה</Button>
+            <SubmitButton variant="ghost" size="sm">יציאה</SubmitButton>
           </form>
         )}
       </header>
@@ -69,7 +69,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <span>מחובר/ת כ-{user.name} ({user.email})</span>
           {devLoginEnabled() && <Link href="/dev-login" className="underline underline-offset-2">החלפת משתמש</Link>}
           <form action={stopImpersonatingAction}>
-            <Button type="submit" variant="outline" size="sm">חזרה למנהל</Button>
+            <SubmitButton variant="outline" size="sm">חזרה למנהל</SubmitButton>
           </form>
         </div>
       )}

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { listTemplates, requestCountsByTemplate } from "@/server/forms-store";
@@ -38,11 +39,11 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
             <span className="text-sm text-muted-foreground">{fmt.format(t.updatedAt)}</span>
             <div className="flex gap-1">
               <Link href={`/admin/forms/${t.id}/flow`} className={buttonVariants({ variant: "ghost", size: "sm" })}>שלבי הטופס</Link>
-              <form action={duplicateFormAction}><input type="hidden" name="id" value={t.id} /><Button variant="ghost" size="sm" type="submit">שכפול</Button></form>
+              <form action={duplicateFormAction}><input type="hidden" name="id" value={t.id} /><SubmitButton variant="ghost" size="sm">שכפול</SubmitButton></form>
               <form action={archiveFormAction}>
                 <input type="hidden" name="id" value={t.id} />
                 <input type="hidden" name="archive" value={t.status === "archived" ? "0" : "1"} />
-                <Button variant="ghost" size="sm" type="submit">{t.status === "archived" ? "שחזור" : "ארכוב"}</Button>
+                <SubmitButton variant="ghost" size="sm">{t.status === "archived" ? "שחזור" : "ארכוב"}</SubmitButton>
               </form>
               <DeleteFormButton id={t.id} title={t.title} requests={counts.get(t.id) ?? 0} />
             </div>
@@ -70,7 +71,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
               </Select>
             </div>
           ))}
-          <div className="sm:col-span-2"><Button type="submit" variant="outline">חיבור לטופס אחד</Button></div>
+          <div className="sm:col-span-2"><SubmitButton variant="outline">חיבור לטופס אחד</SubmitButton></div>
         </form>
       </details>
 
@@ -79,7 +80,7 @@ export default async function FormsListPage({ searchParams }: { searchParams: Pr
         <p className="mt-2 text-sm text-muted-foreground">הטופס נוצר בלי מסמך; אחרי הייבוא מעלים לו את ה-PDF בלשונית &quot;מסמך PDF&quot;.</p>
         <form action={importFormAction} className="mt-3 space-y-2">
           <Textarea name="json" dir="ltr" rows={6} placeholder='{"schemaVersion":1,"title":"…","pages":[…]}' required />
-          <Button type="submit" variant="outline">ייבוא</Button>
+          <SubmitButton variant="outline">ייבוא</SubmitButton>
         </form>
       </details>
     </main>

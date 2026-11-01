@@ -1,7 +1,7 @@
 import { desc } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Badge, Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { listOrgs } from "@/server/orgs-store";
 import { CreateKeyForm } from "./CreateKeyForm";
 import { revokeApiKeyAction } from "./actions";
@@ -36,7 +36,7 @@ export default async function ApiKeysPage() {
             ) : (
               <form action={revokeApiKeyAction}>
                 <input type="hidden" name="id" value={k.id} />
-                <Button size="sm" variant="ghost" className="text-destructive" type="submit">ביטול המפתח</Button>
+                <SubmitButton size="sm" variant="ghost" className="text-destructive">ביטול המפתח</SubmitButton>
               </form>
             )}
           </div>
