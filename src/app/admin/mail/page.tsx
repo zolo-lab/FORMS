@@ -18,6 +18,7 @@ const STATUS: Record<string, { label: string; tone: "success" | "warning" | "mut
 };
 
 const KIND: Record<string, string> = {
+  sent_to_creator: "אישור שליחה",
   step_invite: "הזמנה לשלב",
   reminder: "תזכורת",
   step_done: "התקדמות",

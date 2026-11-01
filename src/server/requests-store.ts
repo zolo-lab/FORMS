@@ -28,7 +28,7 @@ import {
   type EngineStep,
 } from "@/lib/workflow/engine";
 import { listContacts, peopleForWorkflow } from "./people-store";
-import { deliveryTargets } from "@/lib/notifications/channels";
+import { deliveryTargets, isPlaceholderEmail } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
 import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeCampaign } from "@/lib/requests/campaign";
@@ -344,7 +344,36 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   }
   const merged: EngineResult = { steps: result.steps, events: [{ type: "request_sent" }, ...evs] };
   const out = await persist(requestId, [], merged, actor);
+  if (out.status !== "completed" && !opts.requesterByLink) {
+    await notifySent(requestId, result.steps).catch((e) => console.error("[notifications] sent notice failed", e));
+  }
   return out;
+}
+
+/** "נשלח טופס … ל…": whoever sent the request (and whoever the trigger adds) hears what went out and who it waits for. */
+async function notifySent(requestId: string, steps: EngineStep[]) {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) return;
+  const [mail, common] = await Promise.all([triggersFor(req.organizationId), requestVars(req)]);
+  const t = mail.trigger("sent_to_creator");
+  if (!t.enabled) return;
+  const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
+  const to = addPeople([], [
+    ...(t.recipients.includes("creator") && creator ? [{ name: creator.name, email: creator.email }] : []),
+    ...(t.recipients.includes("secretariat") ? mail.secretariat : []),
+    ...(t.recipients.includes("fixed") ? t.fixedRecipients : []),
+  ]).filter((p) => !isPlaceholderEmail(p.email));
+  if (!to.length) return;
+  const waiting = steps
+    .filter((s) => s.status === "active" || s.status === "in_progress")
+    .map((s) => (s.role === "employee" ? `${ROLE_LABELS.employee} (${req.subjectName})` : (s.assigneeName ? `${ROLE_LABELS[s.role as StepRole]} (${s.assigneeName})` : ROLE_LABELS[s.role as StepRole])));
+  await db.insert(notifications).values(
+    to.map((p) => {
+      const m = mail.render("sent_to_creator", { ...common, name: p.name, stepName: waiting.join(", ") || "—", link: `${appUrl()}/admin/requests/${requestId}` });
+      return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: "sent_to_creator", subject: m.subject, body: m.body };
+    }),
+  );
+  await kickDelivery();
 }
 
 export async function getRequest(requestId: string) {
