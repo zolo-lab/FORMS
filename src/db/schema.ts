@@ -264,6 +264,8 @@ export const packageTemplates = pgTable("package_templates", {
   /** Handling steps after signing, ticked by staff (e.g. "עודכן בשכר"). */
   followUpStatuses: jsonb("follow_up_statuses").$type<FollowUpStatus[]>().notNull().default([]),
   remindersEnabled: boolean("reminders_enabled").notNull().default(true),
+  /** Free text the mail triggers can include as {{note}}, e.g. "לא ניתן להתחיל עבודה בפועל ללא חתימה". */
+  mailNote: text("mail_note"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   ...timestamps,
 });

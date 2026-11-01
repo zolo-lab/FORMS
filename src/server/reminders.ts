@@ -2,7 +2,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
-import { triggersFor, type Triggers } from "./mail-triggers";
+import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { canSendReminderNow, reminderDue } from "@/lib/workflow/reminders";
 import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
 import { deliveryTargets } from "@/lib/notifications/channels";
@@ -49,7 +49,7 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
     const { token, hash } = createToken();
     await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
     const msg = mail.render("reminder", {
-      subject: request.subjectName,
+      ...(await requestVars(request)),
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,
@@ -105,7 +105,7 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
     const { token, hash } = createToken();
     await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
     const msg = mail.render("reminder", {
-      subject: request.subjectName,
+      ...(await requestVars(request)),
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,

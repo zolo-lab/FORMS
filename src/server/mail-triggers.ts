@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { effectiveTemplate, effectiveTrigger, renderMessage, type EffectiveTrigger, type Person, type RecipientKind, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
 import type { MessageTemplate } from "@/lib/notifications/templates";
 
-const { mailTriggers, messageTemplates, organizations, notifications } = schema;
+const { mailTriggers, messageTemplates, organizations, notifications, packageTemplates, users } = schema;
 
 /** Postgres 42P01 (table missing) / 42703 (column missing) before the migration reached this database. */
 function isMissingSchema(e: unknown): boolean {
@@ -102,4 +102,27 @@ export async function triggerCounts(organizationId: string | null, days = 30, no
     c[r.status] += Number(r.n);
   }
   return out;
+}
+
+/** Variables every request-based message can use: organization, form, the person, who sent it and the form's note. */
+export async function requestVars(req: { organizationId: string; packageTemplateId: string; createdBy: string | null; subjectName: string }): Promise<Record<string, string>> {
+  const [[org], [pkg], [creator]] = await Promise.all([
+    db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.organizationId)),
+    db.select({ name: packageTemplates.name, note: packageTemplates.mailNote }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId)),
+    req.createdBy ? db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, req.createdBy)) : Promise.resolve([]),
+  ]);
+  const creatorEmail = creator && !creator.email.toLowerCase().endsWith("@users.invalid") ? creator.email : "";
+  return { org: org?.name ?? "", form: pkg?.name ?? "", subject: req.subjectName, creatorName: creator?.name ?? "", creatorEmail, note: pkg?.note ?? "" };
+}
+
+/** Stores the text of one trigger for all organizations (null) or one organization. */
+export async function saveTemplate(organizationId: string | null, key: string, value: { subject: string; body: string }) {
+  const where = and(organizationId ? eq(messageTemplates.organizationId, organizationId) : isNull(messageTemplates.organizationId), eq(messageTemplates.key, key), eq(messageTemplates.channel, "email"));
+  const [existing] = await db.select({ id: messageTemplates.id }).from(messageTemplates).where(where);
+  if (existing) await db.update(messageTemplates).set({ ...value, updatedAt: new Date() }).where(eq(messageTemplates.id, existing.id));
+  else await db.insert(messageTemplates).values({ organizationId, key, channel: "email", ...value });
+}
+
+export async function resetTemplate(organizationId: string | null, key: string) {
+  await db.delete(messageTemplates).where(and(organizationId ? eq(messageTemplates.organizationId, organizationId) : isNull(messageTemplates.organizationId), eq(messageTemplates.key, key), eq(messageTemplates.channel, "email")));
 }

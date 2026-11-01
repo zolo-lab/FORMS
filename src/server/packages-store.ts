@@ -119,6 +119,7 @@ export async function updatePackageSettings(id: string, patch: {
   completionRecipients: { name: string; email: string }[];
   followUpStatuses: FollowUpStatus[];
   remindersEnabled: boolean;
+  mailNote: string | null;
 }) {
   await db.update(packageTemplates).set(patch).where(eq(packageTemplates.id, id));
 }

@@ -34,9 +34,9 @@ import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeCampaign } from "@/lib/requests/campaign";
 import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
-import { triggersFor, type Triggers } from "./mail-triggers";
+import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { addPeople } from "@/lib/notifications/triggers";
-import { COMPLETION_DOCS_KEY, completionMessage, completionTargets } from "@/lib/notifications/completion";
+import { COMPLETION_DOCS_KEY, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole, Workflow } from "@/lib/workflow/types";
 
@@ -236,6 +236,7 @@ async function persist(
 
   // Tokens + outbox for newly activated steps that need an outside person.
   let mail: Triggers | null = null;
+  let common: Record<string, string> | null = null;
   for (const id of activatedIds) {
     const s = result.steps.find((x) => x.id === id)!;
     if (s.status !== "active" || s.role === "requester") continue;
@@ -248,13 +249,10 @@ async function persist(
     const key = returnReason ? "returned" : "step_invite";
     mail ??= await triggersFor(req.organizationId);
     if (targets.length && mail.trigger(key).enabled) {
-      const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
-      const [pkg] = await db.select({ name: packageTemplates.name }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+      common ??= await requestVars(req);
       const vars = {
+        ...common,
         name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
-        org: org?.name ?? "",
-        form: pkg?.name ?? "",
-        subject: req.subjectName,
         link: `${appUrl()}/s/${token}`,
         dueDate: req.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(req.expiresAt) : "",
         reason: returnReason ? String(returnReason) : undefined,
@@ -547,10 +545,8 @@ export async function changeAssignee(stepId: string, assignee: { name?: string; 
 async function notifyStatus(requestId: string, evs: EngineEvent[], steps: EngineStep[]) {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) return;
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
   const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
-  const [pkg] = await db.select({ name: packageTemplates.name }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
-  const mail = await triggersFor(req.organizationId);
+  const [mail, common] = await Promise.all([triggersFor(req.organizationId), requestVars(req)]);
   const notices = statusNotices(evs, {
     secretariat: mail.secretariat,
     bookkeeping: mail.bookkeeping,
@@ -562,7 +558,7 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
     watchers: evs.some((e) => e.type === "step_completed") ? await orgTrackers(req.organizationId) : [],
   });
   const rows = notices.flatMap((n) => {
-    const msg = mail.render(n.key, { ...n.vars, org: org?.name ?? "", form: pkg?.name ?? "" });
+    const msg = mail.render(n.key, { ...common, ...n.vars });
     return deliveryTargets(n.to).map((t) => ({
       organizationId: req.organizationId,
       requestId,
@@ -585,7 +581,7 @@ export async function enqueueCompletionDocs(requestId: string) {
   if (!req) return;
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   const [creator] = req.createdBy ? await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy)) : [];
-  const mail = await triggersFor(req.organizationId);
+  const [mail, common] = await Promise.all([triggersFor(req.organizationId), requestVars(req)]);
   const t = mail.trigger(COMPLETION_DOCS_KEY);
   if (!t.enabled) return;
   const chosen = addPeople([], [
@@ -598,10 +594,9 @@ export async function enqueueCompletionDocs(requestId: string) {
   if (!targets.length) return;
   const already = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.requestId, requestId), eq(notifications.templateKey, COMPLETION_DOCS_KEY)));
   if (already.length) return;
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
   await db.insert(notifications).values(
     targets.map((p) => {
-      const m = completionMessage({ name: p.name, subject: req.subjectName, packageName: pkg?.name ?? "", org: org?.name ?? "", link: `${appUrl()}/admin/requests/${requestId}` }, mail.template(COMPLETION_DOCS_KEY));
+      const m = mail.render(COMPLETION_DOCS_KEY, { ...common, name: p.name, link: `${appUrl()}/admin/requests/${requestId}` });
       return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.body };
     }),
   );

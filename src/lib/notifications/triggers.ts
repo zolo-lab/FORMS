@@ -35,7 +35,41 @@ export interface TriggerDef {
   vars: string[];
 }
 
-const PERSON_VARS = ["name", "org", "form", "subject"];
+/** What each variable means, for the text editor. */
+export const VAR_LABELS: Record<string, string> = {
+  name: "שם מי שמקבל",
+  org: "שם העמותה",
+  form: "שם הטופס",
+  subject: "שם העובד בבקשה",
+  link: "הקישור",
+  dueDate: "תאריך אחרון",
+  reason: "הסיבה",
+  stepName: "שם השלב",
+  creatorName: "שם שולח הבקשה",
+  creatorEmail: "מייל שולח הבקשה",
+  note: "הערה מהגדרות הטופס",
+  count: "מספר הבקשות",
+  items: "רשימת הבקשות",
+};
+
+/** Example values for the preview in the editor. */
+export const SAMPLE_VARS: Record<string, string> = {
+  name: "דנה כהן",
+  org: "עמותת הדוגמה",
+  form: "קליטת עובד",
+  subject: "דנה כהן",
+  link: "https://gybs-forms.vercel.app/s/…",
+  dueDate: "15.11.2026",
+  reason: "חסר צילום ת\"ז",
+  stepName: "העובד",
+  creatorName: "רות לוי",
+  creatorEmail: "ruth@example.org.il",
+  note: "לא ניתן להתחיל עבודה בפועל ללא חתימה על הטפסים.",
+  count: "2",
+  items: "• דנה כהן – קליטת עובד – ממתין לעובד – 5 ימים\n• יוסי לוי – שינוי תנאים – ממתין למאשר – 4 ימים",
+};
+
+const PERSON_VARS = ["name", "org", "form", "subject", "creatorName", "creatorEmail", "note"];
 
 export const TRIGGERS: TriggerDef[] = [
   { key: "step_invite", label: "הזמנה למילוי וחתימה", when: "כשמגיע תורו של מישהו למלא או לחתום", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "dueDate"] },
@@ -150,4 +184,26 @@ export function parseTriggerForm(key: string, get: (name: string) => string | nu
   if (recipients.includes("fixed") && !fixed.length) return { ok: false, error: "no_fixed" };
   if (enabled && !recipients.length) return { ok: false, error: "no_recipients" };
   return { ok: true, value: { enabled, recipients, fixedRecipients: fixed } };
+}
+
+export type TemplateFormResult = { ok: true; value: { subject: string; body: string } } | { ok: false; error: "unknown" | "locked" | "empty" | "too_long" };
+
+/** The panel's text editor for one trigger → subject and body to store. */
+export function parseTemplateForm(key: string, subject: string, body: string): TemplateFormResult {
+  const def = triggerDef(key);
+  if (!def) return { ok: false, error: "unknown" };
+  if (def.locked) return { ok: false, error: "locked" };
+  const s = subject.replace(/\s+/g, " ").trim();
+  const b = body.replace(/\r\n/g, "\n").trim();
+  if (!s || !b) return { ok: false, error: "empty" };
+  if (s.length > 200 || b.length > 5000) return { ok: false, error: "too_long" };
+  return { ok: true, value: { subject: s, body: b } };
+}
+
+/** Placeholders in a text that the trigger does not fill (shown as a warning; they come out empty). */
+export function unknownVars(key: string, text: string): string[] {
+  const allowed = new Set(triggerDef(key)?.vars ?? []);
+  const out: string[] = [];
+  for (const m of text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) if (!allowed.has(m[1]!) && !out.includes(m[1]!)) out.push(m[1]!);
+  return out;
 }

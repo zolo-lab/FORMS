@@ -147,6 +147,11 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
               <p className="text-xs text-muted-foreground">שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.</p>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="pk-mail-note">הערה במיילים של הטופס</Label>
+              <Textarea id="pk-mail-note" name="mailNote" rows={3} maxLength={500} defaultValue={pkg.mailNote ?? ""} placeholder="לא ניתן להתחיל עבודה בפועל ללא חתימה על הטפסים." />
+              <p className="text-xs text-muted-foreground">מופיעה במייל במקום שבו כתוב {"{{note}}"} (עריכת הנוסח במרכז המיילים ← טריגרים).</p>
+            </div>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
               לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
