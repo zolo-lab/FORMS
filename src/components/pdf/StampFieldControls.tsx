@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/checkbox";
 import { DEFAULT_TYPES, DefaultValueRow, ListTextarea } from "@/components/builder/SettingsPanel";
 import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
-import { FIELD_TYPE_META } from "@/lib/forms/field-types";
+import { FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
+import { SWITCHABLE_TYPES, canSwitchType, typeChangePatch } from "@/lib/forms/builder";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormField } from "@/lib/forms/schema";
 
@@ -46,6 +47,17 @@ export function StampFieldControls({
   const missing = options.filter((o) => !placed(o.value)).map((o) => o.value);
   return (
     <section aria-label="הגדרות השדה" className="space-y-2 rounded-md border p-2">
+      {canSwitchType(field.type) ? (
+        <div className="space-y-1">
+          <Label htmlFor={`stamp-field-type-${field.id}`} className="text-muted-foreground">סוג השדה</Label>
+          <Select id={`stamp-field-type-${field.id}`} className="h-9" value={field.type} onChange={(e) => { const p = typeChangePatch(field, e.target.value as FieldType); if (p) onFieldPatch(p); }}>
+            {SWITCHABLE_TYPES.map((t) => <option key={t} value={t}>{FIELD_TYPE_META[t].label}</option>)}
+          </Select>
+          {field.type === "id_number" && <p className="text-xs text-muted-foreground">מתקבל רק מספר זהות תקין (9 ספרות עם ספרת ביקורת).</p>}
+        </div>
+      ) : (
+        <p className="text-sm"><span className="text-muted-foreground">סוג השדה: </span>{FIELD_TYPE_META[field.type].label}</p>
+      )}
       <div className="space-y-1">
         <Label htmlFor={`stamp-field-label-${field.id}`} className="text-muted-foreground">שם השדה (מה שהממלא רואה)</Label>
         <Input id={`stamp-field-label-${field.id}`} className="h-9" value={field.label} onChange={(e) => onFieldPatch({ label: e.target.value })} />
