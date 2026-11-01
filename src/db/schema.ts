@@ -257,6 +257,8 @@ export const packageTemplates = pgTable("package_templates", {
   organizationId: uuid("organization_id").references(() => organizations.id),
   /** The organizations the form is open to (its link per organization: /f/<form>/<slug>); empty = organizationId / all. */
   organizationIds: jsonb("organization_ids").$type<string[]>().notNull().default([]),
+  /** A route of its own per organization (its steps and people); an organization without one follows `workflow`. */
+  orgWorkflows: jsonb("org_workflows").$type<Record<string, Workflow>>().notNull().default({}),
   name: text("name").notNull(),
   description: text("description"),
   workflow: jsonb("workflow").$type<Workflow>().notNull(),

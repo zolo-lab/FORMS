@@ -4,6 +4,7 @@
  * Requester answers are given at creation (the request wizard) and stored in `apiParams.requesterAnswers`;
  * on send the requester step(s) complete immediately with them.
  */
+import { routeFor } from "@/lib/workflow/assignee";
 import { withOrgFields } from "@/lib/forms/prefill";
 import { afterResponse } from "./after";
 import { kickDelivery } from "./notifications";
@@ -180,7 +181,7 @@ async function persist(
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   /** When a step that just became active is due, from the route's `dueHours`. */
   const dueFor = (s: { order: number; role: string }): Date | null => {
-    const h = pkg?.workflow.steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours;
+    const h = pkg ? routeFor(pkg, req.organizationId).steps.find((w) => w.order === s.order && w.role === s.role)?.dueHours : undefined;
     return h ? new Date(now.getTime() + h * 3_600_000) : null;
   };
   const dueByStep = new Map<string, Date | null>();
@@ -326,7 +327,9 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
     await db.update(requests).set({ apiParams: { ...params, requesterAnswers: { ...(params.requesterAnswers ?? {}), ...orgAnswers } } }).where(eq(requests.id, requestId));
     Object.assign(answers, orgAnswers);
   }
-  const people = await peopleForWorkflow(((req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride) ?? pkg!.workflow, versions.map((v) => v.definition));
+  // The organization's own route when it has one, else the form's general route.
+  const route = routeFor(pkg!, req.organizationId);
+  const people = await peopleForWorkflow(((req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride) ?? route, versions.map((v) => v.definition));
   // Whoever opened the request (for steps that come back to them).
   if (req.createdBy) {
     const [creator] = await db.select().from(schema.users).where(eq(schema.users.id, req.createdBy));
@@ -336,7 +339,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
 
   // The employee step goes to the person the request is about.
   const override = (req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride;
-  const planned = planSteps(override ?? pkg!.workflow, answers, undefined, people).map((st) =>
+  const planned = planSteps(override ?? route, answers, undefined, people).map((st) =>
     st.role === "employee" && !st.assigneeEmail && !st.assigneePhone
       ? { ...st, assigneeName: req.subjectName, assigneeEmail: req.subjectEmail ?? undefined, assigneePhone: req.subjectPhone ?? undefined }
       : st,
