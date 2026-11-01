@@ -34,6 +34,8 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
   // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
   const wizard = await getWizardPackage(id);
+  // The wizard reads the published version: before the first publish the requester's fields are not known yet.
+  const published = (wizard?.documentTitles.length ?? 0) > 0;
   const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
@@ -189,7 +191,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
                 <div className="space-y-1">
                   <Label htmlFor="ex-field">אחרי התאריך בשדה</Label>
                   <Select id="ex-field" name="expiryField" defaultValue={rule?.kind === "dayOfNextMonth" ? rule.dateFieldId : (dateFields[0]?.id ?? "")}>
-                    {dateFields.length === 0 && <option value="">אין שדה תאריך שממלא המבקש</option>}
+                    {dateFields.length === 0 && <option value="">{published ? "אין שדה תאריך שממלא המבקש" : "השדות יופיעו כאן אחרי פרסום הטופס"}</option>}
                     {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </Select>
                 </div>

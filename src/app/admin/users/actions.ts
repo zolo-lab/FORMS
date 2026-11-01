@@ -35,7 +35,13 @@ export async function saveUserAction(fd: FormData) {
   const me = await currentUser();
   // An admin cannot lock themselves out.
   if (id && me?.id === id && (role !== "admin" || !active)) edit("?error=self");
-  const orgIds = fd.getAll("orgs").map(String).filter((o) => UUID.test(o));
+  const allProjects = await listProjects();
+  const tickedProjects = new Set(fd.getAll("projects").map(String));
+  // A ticked project brings its organization along (ticking "ארצנו" alone means "שיבת ציון › ארצנו").
+  const orgIds = [...new Set([
+    ...fd.getAll("orgs").map(String).filter((o) => UUID.test(o)),
+    ...allProjects.filter((p) => tickedProjects.has(p.id)).map((p) => p.organizationId),
+  ])];
   // "Only some" with nothing ticked would silently mean "all": refuse it instead.
   if (role === "manager" && fd.get("orgScope") === "some" && orgIds.length === 0) edit("?error=orgs");
 
@@ -45,8 +51,7 @@ export async function saveUserAction(fd: FormData) {
 
   if (role === "manager") {
     const limited = fd.get("orgScope") === "some";
-    const ticked = new Set(fd.getAll("projects").map(String));
-    const chosen = (await listProjects()).filter((p) => ticked.has(p.id) && orgIds.includes(p.organizationId));
+    const chosen = allProjects.filter((p) => tickedProjects.has(p.id) && orgIds.includes(p.organizationId));
     const projectOrgs = new Set(chosen.map((p) => p.organizationId));
     await setUserOrgAccess(userId, limited ? orgIds.filter((o) => !projectOrgs.has(o)) : []);
     await setUserProjectAccess(userId, limited ? chosen.map((p) => p.id) : []);

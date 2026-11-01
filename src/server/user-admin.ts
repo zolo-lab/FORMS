@@ -56,6 +56,14 @@ export async function saveUserDetails(input: { id?: string; name: string; email:
   if (taken && taken.id !== input.id) return { ok: false, error: "exists" };
   let id = input.id;
   if (id) {
+    // A new address moves the user's contact with it (steps and groups point at that contact), unless one exists.
+    const [before] = await db.select({ email: users.email }).from(users).where(eq(users.id, id));
+    const oldEmail = before ? realEmail(before.email) : null;
+    const newEmail = realEmail(email);
+    if (oldEmail && newEmail && oldEmail !== newEmail) {
+      const [already] = await db.select({ id: contacts.id }).from(contacts).where(sql`lower(${contacts.email}) = ${newEmail}`).limit(1);
+      if (!already) await db.update(contacts).set({ email: newEmail, updatedAt: new Date() }).where(sql`lower(${contacts.email}) = ${oldEmail}`);
+    }
     await db.update(users).set({ name: input.name, email, role: input.role, active: input.active, updatedAt: new Date() }).where(eq(users.id, id));
   } else {
     const [row] = await db.insert(users).values({ name: input.name, email, role: input.role, active: input.active }).returning({ id: users.id });
