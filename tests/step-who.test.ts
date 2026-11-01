@@ -97,4 +97,11 @@ describe("step names and fields", () => {
     expect(p[4]).toEqual(["השולח יכול להיות רק שלב 1"]);
     expect(defaultEmailField([{ role: "requester" }, { role: "employee" }, { role: "approver" }], 2, emailFields)).toBe("mgr");
   });
+  it("a form can go straight to the employee: step 1 need not be the sender", () => {
+    const p = draftProblems([
+      { who: "employee", role: "employee" },
+      { who: "email", role: "approver", email: "boss@example.test" },
+    ], []);
+    expect(p).toEqual([[], []]);
+  });
 });

@@ -92,7 +92,6 @@ export function draftProblems(
   const stepOfRole = (r: StepRole) => drafts.findIndex((d) => d.role === r);
   return drafts.map((d, i) => {
     const out: string[] = [];
-    if (i === 0 && d.who !== "requester") out.push("שלב 1 הוא תמיד השולח");
     if (i > 0 && d.who === "requester") out.push("השולח יכול להיות רק שלב 1");
     if (d.who === "employee") {
       const first = drafts.findIndex((x) => x.who === "employee");
