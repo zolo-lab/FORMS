@@ -2,12 +2,12 @@
  * The DB side of the e-mail triggers: what is switched on, to whom and with which text, for one organization.
  * Every place that queues a message asks here first (see src/lib/notifications/triggers.ts for the rules).
  */
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, count, eq, gte, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { effectiveTemplate, effectiveTrigger, renderMessage, type EffectiveTrigger, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
+import { effectiveTemplate, effectiveTrigger, renderMessage, type EffectiveTrigger, type Person, type RecipientKind, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
 import type { MessageTemplate } from "@/lib/notifications/templates";
 
-const { mailTriggers, messageTemplates, organizations } = schema;
+const { mailTriggers, messageTemplates, organizations, notifications } = schema;
 
 /** Postgres 42P01 (table missing) / 42703 (column missing) before the migration reached this database. */
 function isMissingSchema(e: unknown): boolean {
@@ -64,4 +64,42 @@ export async function triggersFor(organizationId: string | null): Promise<Trigge
     secretariat: addr.secretariat.map((email) => ({ name: "מזכירות", email })),
     bookkeeping: addr.bookkeeping.map((email) => ({ name: "הנהלת חשבונות", email })),
   };
+}
+
+/** Stores the setting of one trigger for all organizations (null) or one organization. */
+export async function saveTriggerSetting(organizationId: string | null, key: string, value: { enabled: boolean; recipients: RecipientKind[]; fixedRecipients: Person[] }, userId?: string) {
+  const where = and(organizationId ? eq(mailTriggers.organizationId, organizationId) : isNull(mailTriggers.organizationId), eq(mailTriggers.key, key));
+  const [existing] = await db.select({ id: mailTriggers.id }).from(mailTriggers).where(where);
+  const set = { ...value, updatedBy: userId ?? null, updatedAt: new Date() };
+  if (existing) await db.update(mailTriggers).set(set).where(eq(mailTriggers.id, existing.id));
+  else await db.insert(mailTriggers).values({ organizationId, key, ...set });
+}
+
+/** Drops an organization's own setting, so the all-organizations one (or the default) applies again. */
+export async function resetTriggerSetting(organizationId: string | null, key: string) {
+  await db.delete(mailTriggers).where(and(organizationId ? eq(mailTriggers.organizationId, organizationId) : isNull(mailTriggers.organizationId), eq(mailTriggers.key, key)));
+}
+
+export async function saveOrgAddresses(organizationId: string, secretariat: string[], bookkeeping: string[]) {
+  await db.update(organizations).set({ secretariatEmails: secretariat, bookkeepingEmails: bookkeeping }).where(eq(organizations.id, organizationId));
+}
+
+export async function orgAddressLists(organizationId: string): Promise<{ secretariat: string[]; bookkeeping: string[] }> {
+  return orgAddresses(organizationId);
+}
+
+/** Sent / failed / waiting per trigger in the last `days` days (one organization or all). */
+export async function triggerCounts(organizationId: string | null, days = 30, now = new Date()): Promise<Record<string, { sent: number; failed: number; queued: number }>> {
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const rows = await db
+    .select({ key: notifications.templateKey, status: notifications.status, n: count() })
+    .from(notifications)
+    .where(and(gte(notifications.createdAt, since), organizationId ? eq(notifications.organizationId, organizationId) : undefined))
+    .groupBy(notifications.templateKey, notifications.status);
+  const out: Record<string, { sent: number; failed: number; queued: number }> = {};
+  for (const r of rows) {
+    const c = (out[r.key] ??= { sent: 0, failed: 0, queued: 0 });
+    c[r.status] += Number(r.n);
+  }
+  return out;
 }

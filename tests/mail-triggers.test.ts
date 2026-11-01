@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPeople, effectiveTemplate, effectiveTrigger, parseEmailList, renderMessage, TRIGGERS, type TriggerSetting } from "@/lib/notifications/triggers";
+import { addPeople, effectiveTemplate, effectiveTrigger, parseEmailList, parseTriggerForm, renderMessage, TRIGGERS, type TriggerSetting } from "@/lib/notifications/triggers";
 import { DEFAULT_TEMPLATES } from "@/lib/notifications/templates";
 
 const row = (o: Partial<TriggerSetting>): TriggerSetting => ({ organizationId: null, key: "completed", enabled: true, recipients: ["employee"], fixedRecipients: [], ...o });
@@ -48,5 +48,31 @@ describe("e-mail triggers", () => {
       { name: "b@x.co", email: "b@x.co" },
     ]);
     expect(parseEmailList("Office@a.org.il, b@b.co;\nלא מייל\nb@b.co")).toEqual(["office@a.org.il", "b@b.co"]);
+  });
+});
+
+describe("trigger form", () => {
+  const form = (o: Record<string, string | string[]>) => ({
+    get: (n: string) => (typeof o[n] === "string" ? (o[n] as string) : null),
+    getAll: (n: string) => (Array.isArray(o[n]) ? (o[n] as string[]) : typeof o[n] === "string" ? [o[n] as string] : []),
+  });
+  const parse = (key: string, o: Record<string, string | string[]>) => {
+    const f = form(o);
+    return parseTriggerForm(key, f.get, f.getAll);
+  };
+  it("keeps allowed recipients and the typed fixed addresses", () => {
+    expect(parse("completed", { enabled: "on", recipients: ["creator", "signer", "fixed"], fixed: "a@x.co, b@x.co" })).toEqual({
+      ok: true,
+      value: { enabled: true, recipients: ["creator", "fixed"], fixedRecipients: [{ name: "a@x.co", email: "a@x.co" }, { name: "b@x.co", email: "b@x.co" }] },
+    });
+  });
+  it("switched off may have no recipients; switched on must have one", () => {
+    expect(parse("completed", {})).toMatchObject({ ok: true, value: { enabled: false, recipients: [] } });
+    expect(parse("completed", { enabled: "on" })).toEqual({ ok: false, error: "no_recipients" });
+  });
+  it("fixed addresses chosen but none typed, locked and unknown triggers", () => {
+    expect(parse("completed", { enabled: "on", recipients: ["fixed"], fixed: "לא מייל" })).toEqual({ ok: false, error: "no_fixed" });
+    expect(parse("otp", { enabled: "on" })).toEqual({ ok: false, error: "locked" });
+    expect(parse("nope", {})).toEqual({ ok: false, error: "unknown" });
   });
 });
