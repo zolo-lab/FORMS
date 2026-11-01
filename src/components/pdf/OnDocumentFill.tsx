@@ -155,11 +155,15 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b bg-background/95 py-2 backdrop-blur" role="status">
         <span className="text-sm font-medium">{remaining === 0 ? "כל השדות מולאו" : `נותרו ${remaining} שדות`}</span>
         {remaining > 0 && <Button variant="outline" size="sm" onClick={goNext}>הבא</Button>}
-        <Button size="sm" className="ms-auto" disabled={busy} onClick={submit}>שליחה</Button>
       </div>
       {pdfs.map((p) => (
         <PdfPages key={p.url} pdf={p} definition={definition} answers={answers} onChange={onChange} errors={errors} />
       ))}
+      {/* Sending comes after the document, at the start of the line (the right side in Hebrew), and stays in reach. */}
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t bg-background/95 py-3 backdrop-blur">
+        <Button className="min-w-32" disabled={busy} aria-busy={busy || undefined} onClick={submit}>{busy ? "שולח…" : "שליחה"}</Button>
+        {remaining > 0 && <span className="text-sm text-muted-foreground">נותרו {remaining} שדות – &quot;שליחה&quot; תעביר לראשון שחסר</span>}
+      </div>
     </div>
   );
 }
