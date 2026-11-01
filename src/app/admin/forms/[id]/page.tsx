@@ -3,7 +3,7 @@ import { listOrgs } from "@/server/orgs-store";
 import { notFound } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
-import { saveStepsAction } from "@/app/admin/packages/actions";
+import { saveStepsAction, saveOrgRouteAction } from "@/app/admin/packages/actions";
 import { assignRoles, draftOf, stepFromDraft } from "@/lib/workflow/step-who";
 import { getEditorData, getPdfFile } from "@/server/forms-store";
 import { listContacts, listGroups } from "@/server/people-store";
@@ -43,6 +43,8 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         contacts: contacts.map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name })),
         groups: groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` })),
         orgs: orgs.filter((o) => o.active).map((o) => ({ id: o.id, label: o.name })),
+        orgRoutes: Object.fromEntries(Object.entries(pkg?.pkg.orgWorkflows ?? {}).map(([org, w]) => [org, w.steps.map(draftOf)])),
+        saveOrgRoute: saveOrgRouteAction,
         save: saveStepsAction,
         sendSettings,
         sendSettingsOpen: !!(query.saved === "settings" || query.saved === "org" || query.settingsError || query.error),

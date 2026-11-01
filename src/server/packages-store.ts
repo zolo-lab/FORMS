@@ -56,6 +56,7 @@ async function toWizardPackages(pkgs: (typeof packageTemplates.$inferSelect)[]):
       description: pkg.description,
       organizationId: pkg.organizationId,
       workflow: pkg.workflow,
+      orgWorkflows: pkg.orgWorkflows ?? {},
       requesterDefinition: { ...requesterDefinition, settings: { ...requesterDefinition.settings, layout: "single" } },
       documentTitles: docs.map((d) => d.title),
     };
@@ -126,6 +127,10 @@ export async function updatePackageSettings(id: string, patch: {
 
 export async function setArchived(id: string, archived: boolean) {
   await db.update(packageTemplates).set({ archivedAt: archived ? new Date() : null }).where(eq(packageTemplates.id, id));
+}
+
+export async function setOrgWorkflows(id: string, routes: Record<string, Workflow>) {
+  await db.update(packageTemplates).set({ orgWorkflows: Object.fromEntries(Object.entries(routes).map(([org, w]) => [org, { steps: normalizeOrders(w.steps) }])) }).where(eq(packageTemplates.id, id));
 }
 
 export async function setWorkflow(id: string, workflow: Workflow) {

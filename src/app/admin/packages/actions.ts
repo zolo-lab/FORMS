@@ -7,7 +7,7 @@ import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { draftProblems, emailFieldsOf } from "@/lib/workflow/step-fields";
 import { getEditorData } from "@/server/forms-store";
-import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
+import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setOrgWorkflows, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests/follow-up";
 import { parseRecipients } from "@/lib/requests/recipients";
@@ -152,6 +152,37 @@ export async function saveStepsAction(packageId: string, drafts: StepDraft[]): P
   const errors = validateWorkflow({ steps });
   if (errors.length) return { ok: false, errors };
   await setWorkflow(packageId, { steps });
+  revalidatePath(`/admin/packages/${packageId}`);
+  revalidatePath("/admin/forms", "layout");
+  return { ok: true };
+}
+
+/**
+ * An organization's own route (its steps and people), or `null` to drop it so the organization follows the general
+ * route again. Same checks as the general route.
+ */
+export async function saveOrgRouteAction(packageId: string, organizationId: string, drafts: StepDraft[] | null): Promise<SaveStepsResult> {
+  await requireGrant("manageForms");
+  if (!UUID.test(packageId) || !UUID.test(organizationId) || (drafts !== null && (!Array.isArray(drafts) || drafts.length > 30))) return { ok: false, errors: ["קלט לא תקין"] };
+  const data = await getPackage(packageId);
+  if (!data) return { ok: false, errors: ["הטופס לא נמצא"] };
+  const routes = { ...(data.pkg.orgWorkflows ?? {}) };
+  if (drafts === null) {
+    delete routes[organizationId];
+  } else {
+    // Steps keep the roles they had (copied from another route: the same fields); a new step gets a role of its own.
+    const general = data.pkg.workflow.steps.map((s) => s.role);
+    const clean = assignRoles(drafts.map(sanitizeDraft), general.filter((r) => !drafts.some((d) => d.role === r)));
+    const defs = await Promise.all(data.items.map((i) => getEditorData(i.templateId)));
+    const emailFields = defs.flatMap((e) => (e?.version ? emailFieldsOf(e.version.definition) : []));
+    const problems = draftProblems(clean, emailFields).flatMap((list, i) => list.map((m) => `שלב ${i + 1}: ${m}`));
+    if (problems.length) return { ok: false, errors: problems };
+    const steps = clean.map((d, i) => stepFromDraft(d, i));
+    const errors = validateWorkflow({ steps });
+    if (errors.length) return { ok: false, errors };
+    routes[organizationId] = { steps };
+  }
+  await setOrgWorkflows(packageId, routes);
   revalidatePath(`/admin/packages/${packageId}`);
   revalidatePath("/admin/forms", "layout");
   return { ok: true };
