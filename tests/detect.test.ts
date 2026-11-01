@@ -236,3 +236,40 @@ describe("ids from the section", () => {
     expect(f[0]).toMatchObject({ label: "שם פרטי", key: "spouse_firstName" });
   });
 });
+
+describe("a page with names and nothing to write on", () => {
+  // As in the attached form: four names on the right, one under the other, nothing drawn.
+  const names = [
+    label("a", "שם העובד", 370, 760, 50),
+    label("b", "אישור מזכירה", 350, 725, 70),
+    label("c", "אישור העובד", 355, 690, 65),
+    label("d", "אישור שכר", 362, 655, 58),
+  ];
+  const found = detectFields([page(names, {})]);
+  it("proposes a field to the left of each name, its type from the name", () => {
+    expect(found.map((f) => [f.label, f.type, f.labelOnly])).toEqual([
+      ["שם העובד", "short_text", true],
+      ["אישור מזכירה", "signature", true],
+      ["אישור העובד", "signature", true],
+      ["אישור שכר", "signature", true],
+    ]);
+  });
+  it("puts each place on the name's row, ending just before the name, without touching the next row", () => {
+    for (const [i, f] of found.entries()) {
+      const l = names[i]!;
+      expect(f.box.x + f.box.width).toBeCloseTo(l.x - 6, 0);
+      const center = f.box.y + f.box.height / 2;
+      expect(Math.abs(center - (l.y + l.height * 0.35))).toBeLessThan(0.2);
+      expect(f.box.height).toBeLessThan(35);
+    }
+  });
+  it("stops at text already printed to the left, and skips a name with no room", () => {
+    const withValue = detectFields([page([label("a", "שם העובד", 370, 760, 50), label("v", "דנה", 200, 760, 30)], {})]);
+    expect(withValue[0]!.box.x).toBeGreaterThanOrEqual(236);
+    expect(detectFields([page([label("a", "שם העובד", 60, 760, 50)], {})])).toEqual([]);
+  });
+  it("is not used when the page has places to write", () => {
+    expect(found.length).toBe(4);
+    expect(detectFields([sample]).some((f) => f.labelOnly)).toBe(false);
+  });
+});

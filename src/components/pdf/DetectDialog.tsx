@@ -135,6 +135,11 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
                   {f.skip ? "בוטל בעבר" : "לפי תיקון קודם"}
                 </span>
               )}
+              {f.labelOnly && !f.learned && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="אין בעמוד קו או משבצת: המקום הוצע משמאל לכיתוב, באותה שורה">
+                  לפי הכיתוב בלבד
+                </span>
+              )}
               {f.columns && f.rows && (
                 <span className="basis-full ps-7 text-xs text-muted-foreground">
                   עמודות: {f.columns.map((c) => c.label).join(" · ")} · {f.rows.length} שורות
