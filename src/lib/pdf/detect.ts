@@ -35,6 +35,8 @@ export interface DetectedField {
   /** Set from earlier corrections (learn.ts): the proposal follows a person's decision; `skip` = they dropped it. */
   learned?: boolean;
   skip?: boolean;
+  /** Found from the printed name alone (no line or box on the page): the place is a suggestion to the name's left. */
+  labelOnly?: boolean;
 }
 export interface DetectedColumn { key: string; label: string; type: FieldType; x: number; width: number }
 
@@ -329,6 +331,39 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     if (height < 10) continue;
     usedLabels.add(label.id);
     out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(x), y: round1(y), width: round1(width), height: round1(height) } });
+  }
+
+  // 5. A page with only names and nothing drawn to write on ("שם העובד", "אישור מזכירה"…): each short name gets a
+  //    place to its left, on its own row, up to the next text or the page margin.
+  if (!out.length) out.push(...labelOnlyFields(page, labels));
+  return out;
+}
+
+const MARGIN = 28;
+const LABEL_ONLY_WIDTH = 220;
+
+/** Fields read from the names alone (step 5 above). `labelOnly` tells the dialog there was no line or box. */
+function labelOnlyFields(page: GuessPage, labels: PageLabel[]): Omit<DetectedField, "id">[] {
+  const out: Omit<DetectedField, "id">[] = [];
+  const mid = (l: PageLabel) => l.y + l.height * 0.35;
+  for (const label of labels) {
+    const text = cleanLabel(label.str);
+    if (!text || text.length > 30 || text.split(" ").length > 4) continue;
+    // The row ends at the nearest text to its left (another name or a value already printed).
+    const leftEdge = page.labels
+      .filter((o) => o !== label && Math.abs(mid(o) - mid(label)) <= label.height * 0.6 && o.x + o.width <= label.x + 2)
+      .reduce((m, o) => Math.max(m, o.x + o.width + 6), MARGIN);
+    const right = label.x - 6;
+    const width = Math.min(LABEL_ONLY_WIDTH, right - leftEdge);
+    if (width < 60) continue;
+    const type: FieldType = /^אישור/.test(text) ? "signature" : typeFromLabel(text);
+    // As tall as a written answer, and never into the rows above or below.
+    const others = page.labels.filter((o) => o !== label && overlapsX(right - width, right, o) && Math.abs(mid(o) - mid(label)) > label.height * 0.6);
+    const room = others.reduce((m, o) => Math.min(m, Math.abs(mid(o) - mid(label)) * 2 - o.height - 2), Infinity);
+    const wanted = type === "signature" ? DEFAULT_SIZE.signature.height * 0.75 : Math.max(DEFAULT_SIZE.text.height, label.height * 1.4);
+    const height = Math.max(label.height + 2, Math.min(wanted, room));
+    const box = { x: right - width, y: mid(label) - height / 2, width, height };
+    out.push({ label: text, type, page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) }, labelOnly: true });
   }
   return out;
 }
