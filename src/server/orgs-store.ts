@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
 import type { OrgInput } from "@/lib/orgs/input";
 import { db, schema } from "@/db";
 import type { ReminderPolicy } from "@/lib/workflow/types";
@@ -83,4 +83,27 @@ export async function updateProject(id: string, patch: { name: string; active: b
   if (dup && dup.id !== id) return false;
   await db.update(projects).set(patch).where(eq(projects.id, id));
   return true;
+}
+
+/** How many requests and employees are filed under each project (a project in use is better switched off than deleted). */
+export async function projectUsage(): Promise<Map<string, number>> {
+  const [reqs, emps] = await Promise.all([
+    db.select({ id: schema.requests.projectId, n: count() }).from(schema.requests).where(isNotNull(schema.requests.projectId)).groupBy(schema.requests.projectId),
+    db.select({ id: schema.employeeOrganizations.projectId, n: count() }).from(schema.employeeOrganizations).where(isNotNull(schema.employeeOrganizations.projectId)).groupBy(schema.employeeOrganizations.projectId),
+  ]);
+  const out = new Map<string, number>();
+  for (const r of [...reqs, ...emps]) if (r.id) out.set(r.id, (out.get(r.id) ?? 0) + Number(r.n));
+  return out;
+}
+
+/** Deletes a project nothing is filed under. Returns how many requests/employees use it otherwise (and deletes nothing). */
+export async function deleteProject(id: string): Promise<{ ok: true } | { ok: false; inUse: number }> {
+  const used = (await projectUsage()).get(id) ?? 0;
+  if (used) return { ok: false, inUse: used };
+  await db.delete(projects).where(eq(projects.id, id));
+  return { ok: true };
+}
+
+export async function setOrgsActive(ids: string[], active: boolean) {
+  if (ids.length) await db.update(organizations).set({ active }).where(inArray(organizations.id, ids));
 }
