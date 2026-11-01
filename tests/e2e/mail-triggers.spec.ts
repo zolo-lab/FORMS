@@ -17,12 +17,14 @@ test("the triggers list: one row per e-mail, switched off and on from the row", 
   await toggle.click();
   await expect(row.getByRole("switch", { name: `${DIGEST}: כבוי` })).toBeVisible();
   await page.waitForURL(/saved=weekly_digest/);
-  await expect(row.getByText("הגדרה לכל העמותות")).toBeVisible();
+  // (The source badge sits in a column hidden on phones, so only its presence is checked.)
+  await expect(row.getByText("הגדרה לכל העמותות")).toHaveCount(1);
 
   // Back to the default from the edit panel.
   await row.getByRole("link", { name: `עריכה – ${DIGEST}` }).click();
   const panel = page.getByRole("dialog", { name: DIGEST });
   await panel.getByRole("button", { name: "חזרה לברירת המחדל" }).click();
+  await page.waitForURL((u) => !u.searchParams.has("edit") || u.searchParams.get("saved") === "weekly_digest");
   await expect(page.locator('tr[data-trigger="weekly_digest"]').getByRole("switch", { name: `${DIGEST}: פעיל` })).toBeVisible();
   await expect(page.locator('tr[data-trigger="weekly_digest"]').getByText("הגדרה לכל העמותות")).toHaveCount(0);
 });
@@ -58,4 +60,22 @@ test("the e-mail's HTML is edited with a live preview, saved, and set back to th
   await page.getByRole("dialog", { name: DIGEST }).getByRole("button", { name: "חזרה לעיצוב ברירת המחדל" }).click();
   await expect(page.getByRole("dialog", { name: DIGEST }).getByLabel("נושא")).toHaveValue("{{count}} בקשות ממתינות – {{org}}");
   await expect(page.getByRole("dialog", { name: DIGEST }).getByLabel("עיצוב המייל (HTML)")).toHaveValue(/הודעה אוטומטית/);
+});
+
+test("a sample of the e-mail is sent as it is in the editor and shows in the mail center", async ({ page }) => {
+  await login(page, "/admin/mail/triggers");
+  await page.goto("/admin/mail/triggers?edit=step_invite");
+  const panel = page.getByRole("dialog", { name: "הזמנה למילוי וחתימה" });
+  await panel.getByLabel("נושא").fill(`דוגמה ${Date.now()} {{form}}`);
+  const subject = await panel.getByLabel("נושא").inputValue();
+  // A .test address is never handed to the mail provider: it is recorded as sent.
+  await panel.getByLabel("שליחת מייל לדוגמה אל").fill("sample@e2e.test");
+  await panel.getByRole("button", { name: "שליחת מייל לדוגמה" }).click();
+  await expect(page.getByRole("dialog", { name: "הזמנה למילוי וחתימה" }).getByText("נשלח ל-sample@e2e.test")).toBeVisible();
+
+  await page.goto(`/admin/mail?kind=test&q=${encodeURIComponent(subject.replace("{{form}}", "").trim())}`);
+  const msg = page.getByRole("listitem").filter({ hasText: "[דוגמה]" }).first();
+  await expect(msg).toContainText("קליטת עובד");
+  await msg.locator("summary").click();
+  await expect(msg.frameLocator("iframe").getByText("למילוי וחתימה")).toBeVisible();
 });

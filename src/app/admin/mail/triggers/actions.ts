@@ -2,7 +2,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth/permissions";
-import { effectiveTrigger, parseEmailList, parseTemplateForm, parseTriggerForm, triggerDef } from "@/lib/notifications/triggers";
+import { effectiveTrigger, parseEmailList, parseTemplateForm, parseTriggerForm, SAMPLE_VARS, triggerDef } from "@/lib/notifications/triggers";
+import { htmlToText, looksLikeHtml, renderHtml } from "@/lib/notifications/email-design";
+import { renderTemplate } from "@/lib/notifications/templates";
+import { enqueue } from "@/server/notifications";
+import { listOrgs } from "@/server/orgs-store";
 import { loadTriggerSettings, resetTemplate, resetTriggerSetting, saveOrgAddresses, saveTemplate, saveTriggerSetting } from "@/server/mail-triggers";
 import { currentUser } from "@/server/users-store";
 import { runOpenSummary } from "@/server/open-summary";
@@ -104,4 +108,35 @@ export async function sendSummaryNowAction(formData: FormData) {
   const n = await runOpenSummary(new Date(), { force: true, organizationId: org });
   revalidatePath("/admin/mail");
   redirect(back(formData, org, n ? "saved=now" : `error=nothing&key=${OPEN_SUMMARY_KEY}`));
+}
+
+/** "שליחת מייל לדוגמה": the subject and design as they are in the editor (saved or not), with example values, to one address. */
+export async function sendTestEmailAction(formData: FormData) {
+  const me = await requireAdmin();
+  const org = scopeOf(formData);
+  const key = String(formData.get("key") ?? "");
+  const to = parseEmailList(String(formData.get("testTo") ?? ""))[0] ?? (me?.email && !me.email.endsWith("@users.invalid") ? me.email : null);
+  if (!to) redirect(back(formData, org, `error=test_to&key=${encodeURIComponent(key)}`));
+  const parsed = parseTemplateForm(key, String(formData.get("subject") ?? ""), String(formData.get("body") ?? ""));
+  if (!parsed.ok) redirect(back(formData, org, `error=text_${parsed.error}&key=${encodeURIComponent(key)}`));
+  const organization = await orgForTest(org);
+  if (!organization) redirect(back(formData, org, `error=org&key=${encodeURIComponent(key)}`));
+  const vars = { ...SAMPLE_VARS, org: organization.name };
+  const html = looksLikeHtml(parsed.value.body) ? renderHtml(parsed.value.body, vars) : null;
+  await enqueue({
+    organizationId: organization.id,
+    to: to!,
+    templateKey: "test",
+    subject: `[דוגמה] ${renderTemplate(parsed.value.subject, vars)}`,
+    body: html ? htmlToText(html) : renderTemplate(parsed.value.body, vars),
+    html,
+  });
+  revalidatePath("/admin/mail");
+  redirect(back(formData, org, `saved=test-${encodeURIComponent(key)}&testTo=${encodeURIComponent(to!)}`));
+}
+
+/** The organization a sample is sent as: the chosen one, else the first active one. */
+async function orgForTest(org: string | null) {
+  const orgs = (await listOrgs()).filter((o) => o.active);
+  return (org ? orgs.find((o) => o.id === org) : orgs[0]) ?? null;
 }

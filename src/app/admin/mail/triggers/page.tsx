@@ -16,7 +16,7 @@ import { listOrgs } from "@/server/orgs-store";
 import { currentUser } from "@/server/users-store";
 import { cn } from "@/lib/utils";
 import { MailTabs } from "../MailTabs";
-import { resetTemplateAction, resetTriggerAction, saveOrgAddressesAction, saveTemplateAction, saveTriggerAction, sendSummaryNowAction } from "./actions";
+import { resetTemplateAction, resetTriggerAction, saveOrgAddressesAction, saveTemplateAction, saveTriggerAction, sendSummaryNowAction, sendTestEmailAction } from "./actions";
 import { TemplateEditor } from "./TemplateEditor";
 import { TriggerToggle } from "./TriggerToggle";
 
@@ -33,6 +33,7 @@ const ERRORS: Record<string, string> = {
   text_locked: "את הנוסח הזה אי אפשר לשנות.",
   text_unknown: "טריגר לא מוכר.",
   schedule: "בחרו לפחות יום אחד ושעה.",
+  test_to: "כתבו כתובת מייל לשליחת הדוגמה.",
   nothing: "לא נשלח: אין בקשות פתוחות, או שאין לטריגר נמענים (כתובות מזכירות למעלה).",
 };
 
@@ -48,9 +49,11 @@ const recipientsText = (def: TriggerDef, eff: EffectiveTrigger) =>
   eff.recipients.length ? eff.recipients.map((r) => (r === "fixed" && eff.fixedRecipients.length ? `${RECIPIENT_LABELS.fixed} (${eff.fixedRecipients.length})` : RECIPIENT_LABELS[r])).join(" · ") : def.locked ? RECIPIENT_LABELS.signer : "—";
 
 /** "טריגרים": every e-mail the system sends – a compact list; "עריכה" opens a side panel with whom, when and the design. Admins only. */
-export default async function MailTriggersPage({ searchParams }: { searchParams: Promise<{ org?: string; saved?: string; error?: string; key?: string; edit?: string }> }) {
-  if (!isAdmin(await currentUser())) redirect("/admin/inbox");
-  const { org: orgParam = "", saved, error, key: errorKey, edit } = await searchParams;
+export default async function MailTriggersPage({ searchParams }: { searchParams: Promise<{ org?: string; saved?: string; error?: string; key?: string; edit?: string; testTo?: string }> }) {
+  const me = await currentUser();
+  if (!isAdmin(me)) redirect("/admin/inbox");
+  const { org: orgParam = "", saved, error, key: errorKey, edit, testTo } = await searchParams;
+  const myEmail = me?.email && !me.email.endsWith("@users.invalid") ? me.email : "";
   const orgs = (await listOrgs()).filter((o) => o.active);
   const org = orgs.find((o) => o.id === orgParam) ?? null;
   const orgId = org?.id ?? null;
@@ -157,13 +160,13 @@ export default async function MailTriggersPage({ searchParams }: { searchParams:
       <p className="text-xs text-muted-foreground">מונים: 30 הימים האחרונים. קוד אימות נשלח תמיד ואי אפשר לשנות אותו.</p>
 
       {editing && !editing.locked && (
-        <EditPanel def={editing} orgId={orgId} orgName={org?.name ?? null} eff={effectiveTrigger(editing.key, settings, orgId)} text={effectiveTemplate(editing.key, templates, orgId)} closeHref={listHref} saved={saved} error={errorKey === editing.key ? error : undefined} />
+        <EditPanel def={editing} orgId={orgId} orgName={org?.name ?? null} eff={effectiveTrigger(editing.key, settings, orgId)} text={effectiveTemplate(editing.key, templates, orgId)} closeHref={listHref} saved={saved} error={errorKey === editing.key ? error : undefined} testTo={testTo ?? myEmail} />
       )}
     </main>
   );
 }
 
-function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error }: {
+function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error, testTo }: {
   def: TriggerDef;
   orgId: string | null;
   orgName: string | null;
@@ -172,6 +175,7 @@ function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error }: 
   closeHref: string;
   saved?: string;
   error?: string;
+  testTo: string;
 }) {
   const hidden = (
     <>
@@ -273,7 +277,7 @@ function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error }: 
             <form action={saveTemplateAction} className="space-y-3">
               {hidden}
               <TemplateEditor key={`${text.source}-${text.subject}-${text.html ?? text.body}`} id={`tx-${def.key}`} subject={text.subject} html={text.html ?? text.body} vars={def.vars} />
-              {error?.startsWith("text_") && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
+              {(error?.startsWith("text_") || error === "test_to") && <p role="alert" className="text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
               <div className="flex flex-wrap items-center gap-2">
                 <SubmitButton name="do" value="save" saved={saved === `text-${def.key}`}>שמירת העיצוב</SubmitButton>
                 {text.source === (orgId ? "org" : "all") && (
@@ -281,6 +285,16 @@ function EditPanel({ def, orgId, orgName, eff, text, closeHref, saved, error }: 
                     {orgId ? "חזרה לעיצוב הכללי" : "חזרה לעיצוב ברירת המחדל"}
                   </SubmitButton>
                 )}
+              </div>
+              <div className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 p-3">
+                <div className="min-w-64 flex-1 space-y-1">
+                  <Label htmlFor={`test-${def.key}`}>שליחת מייל לדוגמה אל</Label>
+                  <Input id={`test-${def.key}`} name="testTo" type="email" dir="ltr" defaultValue={testTo} placeholder="name@example.org.il" />
+                </div>
+                <SubmitButton variant="outline" formAction={sendTestEmailAction} name="do" value="test" saved={saved === `test-${def.key}`} savedText={`נשלח ל-${testTo}`}>
+                  שליחת מייל לדוגמה
+                </SubmitButton>
+                <p className="basis-full text-xs text-muted-foreground">נשלח מה שכתוב עכשיו בעורך (גם לפני שמירה), עם ערכים לדוגמה, ומופיע במרכז המיילים.</p>
               </div>
             </form>
           </section>

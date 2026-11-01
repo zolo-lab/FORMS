@@ -38,6 +38,8 @@ export async function cleanTestData(sql: NeonQueryFunction<false, false>): Promi
     sql`update users set organization_id = null where organization_id in (select id from del_o)`,
     sql`delete from users where email like 'e2e-%@example.test'`,
     sql`delete from organizations where id in (select id from del_o) returning id`,
+    // Sample e-mails sent from the triggers panel by e2e.
+    sql`delete from notifications where template_key = 'test' and "to" like '%@e2e.test'`,
   ]);
   return { forms: (r[11] as unknown[]).length, orgs: (r[19] as unknown[]).length };
 }
