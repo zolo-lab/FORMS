@@ -23,7 +23,7 @@ export async function createOrgAction(formData: FormData) {
   const row = await createOrg(parsed.value);
   if (!row) redirect(`${PATH}?error=exists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=1`);
+  redirect(`${PATH}?saved=new`);
 }
 
 /** A new project under an organization. */
@@ -34,7 +34,7 @@ export async function createProjectAction(formData: FormData) {
   if (!UUID.test(organizationId) || !name) redirect(`${PATH}?error=project`);
   if (!(await createProject(organizationId, name))) redirect(`${PATH}?error=projectExists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=1`);
+  redirect(`${PATH}?saved=newproj-${organizationId}`);
 }
 
 export async function updateProjectAction(formData: FormData) {
@@ -44,7 +44,7 @@ export async function updateProjectAction(formData: FormData) {
   if (!UUID.test(id) || !name) redirect(`${PATH}?error=project`);
   if (!(await updateProject(id, { name, active: !!formData.get("active") }))) redirect(`${PATH}?error=projectExists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=1`);
+  redirect(`${PATH}?saved=proj-${id}`);
 }
 
 /** Inline edit of one row: name, ח"פ, active. */
@@ -57,7 +57,7 @@ export async function updateOrgBasicsAction(formData: FormData) {
   if (!(await updateOrgBasics(id, parsed.value))) redirect(`${PATH}?error=exists`);
   await setOrgActive(id, !!formData.get("active"));
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=1`);
+  redirect(`${PATH}?saved=org-${id}`);
 }
 import { putFile } from "@/server/storage";
 
@@ -97,5 +97,5 @@ export async function updateOrgAction(formData: FormData) {
     ...(logoFileId !== undefined ? { logoFileId } : {}),
   });
   revalidatePath("/admin/settings/organizations");
-  redirect("/admin/settings/organizations?saved=1");
+  redirect(`/admin/settings/organizations?saved=brand-${id}`);
 }

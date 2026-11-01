@@ -74,7 +74,7 @@ export async function createUserGroupAction(fd: FormData) {
   const g = await createGroup(name);
   await setGroupUsers(g.id, fd.getAll("members").map(String).filter((m) => UUID.test(m)), []);
   revalidatePath(PATH, "layout");
-  groupsBack("&saved=1");
+  groupsBack(`&saved=group-${g.id}`);
 }
 
 export async function updateUserGroupAction(fd: FormData) {
@@ -90,5 +90,5 @@ export async function updateUserGroupAction(fd: FormData) {
     await setGroupUsers(id, fd.getAll("members").map(String).filter((m) => UUID.test(m)), fd.getAll("keep").map(String).filter((m) => UUID.test(m)));
   }
   revalidatePath(PATH, "layout");
-  groupsBack("&saved=1");
+  groupsBack(str(fd, "intent") === "delete" ? "&saved=deleted" : `&saved=group-${id}`);
 }

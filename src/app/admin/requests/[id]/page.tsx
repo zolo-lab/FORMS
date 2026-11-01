@@ -6,7 +6,7 @@ import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { discardDraftAction, sendDraftAction } from "../actions";
 import { Badge, Card } from "@/components/ui/card";
 import { eventLabel } from "@/lib/requests/list";
@@ -96,11 +96,11 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
           <div className="flex gap-2">
             <form action={sendDraftAction}>
               <input type="hidden" name="id" value={request.id} />
-              <Button type="submit" size="sm">שליחה עכשיו</Button>
+              <SubmitButton size="sm">שליחה עכשיו</SubmitButton>
             </form>
             <form action={discardDraftAction}>
               <input type="hidden" name="id" value={request.id} />
-              <Button type="submit" size="sm" variant="destructive">מחיקת הטיוטה</Button>
+              <SubmitButton size="sm" variant="destructive">מחיקת הטיוטה</SubmitButton>
             </form>
           </div>
         </section>

@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,6 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <PageHeader title="עמותות ועסקים" description={<>לכל עמותה או עסק שם וח&quot;פ אחד, ומתחתיה הפרויקטים שלה, כל אחד בשם משלו. במסך המשתמשים אפשר להגביל מנהל לחלק מהעמותות.</>} />
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
-      {saved && <p role="status" className="rounded-md bg-success/10 p-3 text-sm text-success">נשמר</p>}
 
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">הוספת עמותה / עסק</h2>
@@ -47,7 +46,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
           <Field label='ח"פ / מספר עמותה'>
             <Input name="registrationNumber" required inputMode="numeric" dir="ltr" placeholder="580000000" />
           </Field>
-          <Button type="submit">הוספה</Button>
+          <SubmitButton saved={saved === "new"} savedText="נוסף">הוספה</SubmitButton>
         </form>
       </Card>
 
@@ -68,7 +67,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <label className="flex items-center gap-2 pb-2">
                   <Checkbox name="active" defaultChecked={o.active} aria-label={`פעיל – ${o.name}`} /> פעיל
                 </label>
-                <Button type="submit" variant="outline" size="sm">שמירה</Button>
+                <SubmitButton variant="outline" size="sm" saved={saved === `org-${o.id}`}>שמירה</SubmitButton>
               </form>
 
               <div className="space-y-2 border-s-2 ps-3">
@@ -81,13 +80,13 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                     <label className="flex items-center gap-2">
                       <Checkbox name="active" defaultChecked={p.active} aria-label={`פרויקט פעיל – ${p.name}`} /> פעיל
                     </label>
-                    <Button type="submit" variant="outline" size="sm">שמירה</Button>
+                    <SubmitButton variant="outline" size="sm" saved={saved === `proj-${p.id}`}>שמירה</SubmitButton>
                   </form>
                 ))}
                 <form action={createProjectAction} className="flex flex-wrap items-center gap-2 text-sm">
                   <input type="hidden" name="organizationId" value={o.id} />
                   <Input name="name" required maxLength={120} placeholder="שם פרויקט חדש" className="max-w-xs" aria-label={`פרויקט חדש – ${o.name}`} />
-                  <Button type="submit" size="sm">הוספת פרויקט</Button>
+                  <SubmitButton size="sm" saved={saved === `newproj-${o.id}`} savedText="נוסף">הוספת פרויקט</SubmitButton>
                 </form>
               </div>
             </Card>
@@ -100,7 +99,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       {orgs.map((o) => {
         const rp = o.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
         return (
-          <details key={o.id} className="rounded-lg border bg-card">
+          <details key={o.id} className="rounded-lg border bg-card" open={saved === `brand-${o.id}` || undefined}>
             <summary className="cursor-pointer px-4 py-3 font-medium">{o.name}</summary>
             <div className="space-y-4 p-4 pt-0">
             <OrgTheme org={o}>
@@ -153,7 +152,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                     </label>
                   </div>
                 </fieldset>
-                <Button type="submit">שמירה</Button>
+                <SubmitButton saved={saved === `brand-${o.id}`}>שמירה</SubmitButton>
               </form>
             </OrgTheme>
             </div>

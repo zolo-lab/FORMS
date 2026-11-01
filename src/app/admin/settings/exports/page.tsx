@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { listPackageSummaries } from "@/server/packages-store";
@@ -48,7 +48,7 @@ export default async function ExportTemplatesPage({ searchParams }: { searchPara
             <Label htmlFor="et-headers">או: שמות העמודות</Label>
             <Textarea id="et-headers" name="headers" rows={3} placeholder="מופרדים בפסיק או בשורות" />
           </div>
-          <div className="sm:col-span-2"><Button type="submit">יצירת תבנית</Button></div>
+          <div className="sm:col-span-2"><SubmitButton>יצירת תבנית</SubmitButton></div>
         </form>
       </Card>
 
