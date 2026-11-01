@@ -40,6 +40,8 @@ export async function cleanTestData(sql: NeonQueryFunction<false, false>): Promi
     sql`delete from organizations where id in (select id from del_o) returning id`,
     // Sample e-mails sent from the triggers panel by e2e.
     sql`delete from notifications where template_key = 'test' and "to" like '%@e2e.test'`,
+    // Projects added by the organizations e2e (deleted there unless the test failed half-way).
+    sql`delete from projects where name like 'פרויקט בדיקה %'`,
   ]);
   return { forms: (r[11] as unknown[]).length, orgs: (r[19] as unknown[]).length };
 }

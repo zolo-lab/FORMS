@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
 import { parseReminderPolicy } from "@/lib/workflow/reminder-policy";
-import { createOrg, createProject, setOrgActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createProject, deleteProject, setOrgActive, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
@@ -23,7 +23,7 @@ export async function createOrgAction(formData: FormData) {
   const row = await createOrg(parsed.value);
   if (!row) redirect(`${PATH}?error=exists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=new`);
+  redirect(`${PATH}?edit=${row!.id}&saved=new`);
 }
 
 /** A new project under an organization. */
@@ -34,7 +34,7 @@ export async function createProjectAction(formData: FormData) {
   if (!UUID.test(organizationId) || !name) redirect(`${PATH}?error=project`);
   if (!(await createProject(organizationId, name))) redirect(`${PATH}?error=projectExists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=newproj-${organizationId}`);
+  redirect(`${PATH}?edit=${organizationId}&saved=newproj-${organizationId}`);
 }
 
 export async function updateProjectAction(formData: FormData) {
@@ -44,7 +44,8 @@ export async function updateProjectAction(formData: FormData) {
   if (!UUID.test(id) || !name) redirect(`${PATH}?error=project`);
   if (!(await updateProject(id, { name, active: !!formData.get("active") }))) redirect(`${PATH}?error=projectExists`);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=proj-${id}`);
+  const org = String(formData.get("org") ?? "");
+  redirect(`${PATH}?${UUID.test(org) ? `edit=${org}&` : ""}saved=proj-${id}`);
 }
 
 /** Inline edit of one row: name, ח"פ, active. */
@@ -57,7 +58,7 @@ export async function updateOrgBasicsAction(formData: FormData) {
   if (!(await updateOrgBasics(id, parsed.value))) redirect(`${PATH}?error=exists`);
   await setOrgActive(id, !!formData.get("active"));
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=org-${id}`);
+  redirect(`${PATH}?edit=${id}&saved=org-${id}`);
 }
 import { putFile } from "@/server/storage";
 
@@ -97,5 +98,26 @@ export async function updateOrgAction(formData: FormData) {
     ...(logoFileId !== undefined ? { logoFileId } : {}),
   });
   revalidatePath("/admin/settings/organizations");
-  redirect(`/admin/settings/organizations?saved=brand-${id}`);
+  redirect(`/admin/settings/organizations?edit=${id}&saved=brand-${id}`);
+}
+
+/** A project nothing is filed under is deleted; one in use is only reported (it can be switched off instead). */
+export async function deleteProjectAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const org = String(formData.get("org") ?? "");
+  if (!UUID.test(id) || !UUID.test(org)) redirect(`${PATH}?error=project`);
+  const r = await deleteProject(id);
+  revalidatePath(PATH);
+  redirect(r.ok ? `${PATH}?edit=${org}&saved=projdel` : `${PATH}?edit=${org}&error=projectInUse&n=${r.inUse}`);
+}
+
+/** The table's bulk action: switch the ticked organizations on or off. */
+export async function bulkOrgsActiveAction(formData: FormData) {
+  await requireAdmin();
+  const ids = formData.getAll("ids").map(String).filter((v) => UUID.test(v));
+  const active = formData.get("do") === "on";
+  await setOrgsActive(ids, active);
+  revalidatePath(PATH);
+  redirect(`${PATH}?saved=bulk`);
 }
