@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 async function requireAdmin() {
   const me = await currentUser();
   if (!isAdmin(me)) redirect("/admin/inbox");
-  return me!;
+  return me;
 }
 
 /** "" = all organizations; otherwise a valid organization id (anything else is rejected). */
@@ -30,7 +30,7 @@ export async function saveTriggerAction(formData: FormData) {
   const key = String(formData.get("key") ?? "");
   const parsed = parseTriggerForm(key, (n) => (formData.get(n) as string | null) ?? null, (n) => formData.getAll(n).map(String));
   if (!parsed.ok) redirect(back(org, `error=${parsed.error}&key=${encodeURIComponent(key)}`));
-  await saveTriggerSetting(org, key, parsed.value, me.id);
+  await saveTriggerSetting(org, key, parsed.value, me?.id);
   revalidatePath(PATH);
   redirect(back(org, `saved=${encodeURIComponent(key)}`));
 }
