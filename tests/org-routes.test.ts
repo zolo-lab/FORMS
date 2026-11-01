@@ -11,6 +11,13 @@ describe("a route per organization", () => {
     expect(routeFor(pkg, null)).toBe(general);
     expect(routeFor({ workflow: general }, "p")).toBe(general);
   });
+  it("a project's own route comes first, then its organization's", () => {
+    const artzenu = { steps: [{ order: 1, role: "employee" }, { order: 2, role: "approver3" }] };
+    const pkg = { workflow: general, orgWorkflows: { p: pnima, proj: artzenu } };
+    expect(routeFor(pkg, "p", "proj")).toBe(artzenu);
+    expect(routeFor(pkg, "p", "other")).toBe(pnima);
+    expect(routeFor(pkg, "x", null)).toBe(general);
+  });
 });
 
 const hasDb = !!process.env.DATABASE_URL;

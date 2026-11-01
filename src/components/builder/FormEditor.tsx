@@ -41,7 +41,7 @@ type SaveState = "saved" | "saving" | "dirty" | "error";
 export interface FormEditorProps {
   templateId: string;
   /** The organizations the form's link opens for (a link per organization). */
-  linkOrgs?: { slug: string; name: string }[];
+  linkOrgs?: { slug: string; name: string; projects?: { slug: string; name: string }[] }[];
   initial: FormDefinition;
   initialVersion: number;
   initiallyPublished: boolean;
@@ -56,8 +56,8 @@ export interface FormEditorProps {
     packageId: string;
     drafts: StepDraft[];
     contacts: { id: string; label: string }[];
-    /** Active organizations: each can have a route of its own. */
-    orgs?: { id: string; label: string }[];
+    /** Active organizations and their active projects: each can have a route of its own. */
+    orgs?: { id: string; label: string; projects?: { id: string; label: string }[] }[];
     /** Saved routes of organizations (organization id → steps). */
     orgRoutes?: Record<string, StepDraft[]>;
     saveOrgRoute?: (packageId: string, organizationId: string, drafts: StepDraft[] | null) => Promise<SaveStepsResult>;
@@ -83,6 +83,16 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   /** "שלבי הטופס" shows the general route ("") or one organization's. */
   const [routeOrg, setRouteOrg] = useState("");
   const [orgRoutes, setOrgRoutes] = useState<Record<string, StepDraft[]>>(flow?.orgRoutes ?? {});
+  /** Route tabs: each organization, and each of its projects right after it. */
+  const routeTargets = (flow?.orgs?.length ?? 0) > 1 || flow?.orgs?.some((o) => o.projects?.length)
+    ? flow!.orgs!.flatMap((o) => [{ id: o.id, label: o.label, sub: false }, ...(o.projects ?? []).map((p) => ({ id: p.id, label: `${o.label} › ${p.label}`, sub: true }))])
+    : [];
+  /** What a target without a route of its own follows: a project its organization's route, else the general one. */
+  const fallbackOf = (id: string): { label: string; drafts: StepDraft[] } => {
+    const parent = flow?.orgs?.find((o) => o.projects?.some((p) => p.id === id));
+    if (parent && orgRoutes[parent.id]) return { label: `המסלול של ${parent.label}`, drafts: orgRoutes[parent.id]! };
+    return { label: "המסלול הכללי", drafts: stepWork.map(stripDraft) };
+  };
   const stepsDirty = JSON.stringify(stepWork.map(stripDraft)) !== JSON.stringify(stepSaved.map(stripDraft));
   const ctx = { contacts: flow?.contacts, groups: flow?.groups, fields: emailFieldsOf(def) };
   const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
@@ -490,9 +500,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 <h2 id="steps-h" className="text-lg font-semibold">שלבי הטופס</h2>
                 <p className="text-sm text-muted-foreground">הטופס עובר בין השלבים לפי הסדר. אילו שדות ממלאים בכל שלב בוחרים ב&quot;סימון שדות לשלב&quot; בלשוניות העריכה וה-PDF, או בהגדרות השדה.</p>
               </div>
-              {(flow.orgs?.length ?? 0) > 1 && (
-                <div role="tablist" aria-label="מסלול" className="flex flex-wrap gap-1.5">
-                  {[{ id: "", label: "מסלול כללי" }, ...flow.orgs!].map((o) => {
+              {routeTargets.length > 0 && (
+                <div role="tablist" aria-label="מסלול" className="flex flex-wrap items-center gap-1.5">
+                  {[{ id: "", label: "מסלול כללי", sub: false }, ...routeTargets].map((o) => {
                     const own = !!o.id && !!orgRoutes[o.id];
                     return (
                       <button
@@ -503,11 +513,12 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                         onClick={() => setRouteOrg(o.id)}
                         className={cn(
                           "inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
+                          o.sub && "border-dashed",
                           routeOrg === o.id ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-accent",
                         )}
                       >
                         {o.label}
-                        {o.id && <span className={cn("rounded-full px-1.5 text-[11px]", routeOrg === o.id ? "bg-primary-foreground/20" : own ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{own ? "מסלול משלה" : "כללי"}</span>}
+                        {o.id && <span className={cn("rounded-full px-1.5 text-[11px]", routeOrg === o.id ? "bg-primary-foreground/20" : own ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{own ? "מסלול משלה" : o.sub ? "כמו העמותה" : "כללי"}</span>}
                       </button>
                     );
                   })}
@@ -515,10 +526,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               )}
               {routeOrg && flow.saveOrgRoute ? (
                 <OrgRoutes
-                  org={flow.orgs!.find((o) => o.id === routeOrg)!}
-                  orgs={flow.orgs!}
+                  org={routeTargets.find((o) => o.id === routeOrg)!}
+                  orgs={routeTargets}
                   routes={orgRoutes}
-                  general={stepWork.map(stripDraft)}
+                  fallback={fallbackOf(routeOrg)}
                   contacts={flow.contacts}
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}

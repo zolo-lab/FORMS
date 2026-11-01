@@ -22,7 +22,10 @@ export function groupIdOfSource(optionsSource: string | undefined): string | nul
   return optionsSource?.startsWith(GROUP_SOURCE_PREFIX) ? optionsSource.slice(GROUP_SOURCE_PREFIX.length) : null;
 }
 
-/** The route a request of `organizationId` follows: the organization's own route, else the form's general one. */
-export function routeFor<W>(pkg: { workflow: W; orgWorkflows?: Record<string, W> | null }, organizationId: string | null | undefined): W {
-  return (organizationId && pkg.orgWorkflows?.[organizationId]) || pkg.workflow;
+/**
+ * The route a request follows: its project's own route, else its organization's, else the form's general one.
+ * (Routes of organizations and projects share one map: their ids never collide.)
+ */
+export function routeFor<W>(pkg: { workflow: W; orgWorkflows?: Record<string, W> | null }, organizationId: string | null | undefined, projectId?: string | null): W {
+  return (projectId && pkg.orgWorkflows?.[projectId]) || (organizationId && pkg.orgWorkflows?.[organizationId]) || pkg.workflow;
 }

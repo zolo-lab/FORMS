@@ -107,6 +107,8 @@ export const projects = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Short name in the form's link of the project: /f/<form>/<organization>/<project>. */
+    slug: text("slug"),
     active: boolean("active").notNull().default(true),
     ...timestamps,
   },
