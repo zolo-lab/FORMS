@@ -1,5 +1,5 @@
 import { formLinkOrgs } from "@/server/public-fill";
-import { listOrgs } from "@/server/orgs-store";
+import { listOrgs, listProjects } from "@/server/orgs-store";
 import { notFound } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
@@ -19,6 +19,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   if (!data) notFound();
   const pkgId = await formPackageId(id, data.template.title);
   const [pdf, groups, contacts, pkg, orgs] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups(), listContacts(), getPackage(pkgId), listOrgs()]);
+  const projects = await listProjects();
 
   // Every step that goes to a person has its own role, so every step can be picked for a field ("שלב 2", "שלב 3"…).
   // Older forms had steps sharing a role: give them their own once, here.
@@ -42,7 +43,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         drafts,
         contacts: contacts.map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name })),
         groups: groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` })),
-        orgs: orgs.filter((o) => o.active).map((o) => ({ id: o.id, label: o.name })),
+        orgs: orgs.filter((o) => o.active).map((o) => ({ id: o.id, label: o.name, projects: projects.filter((p) => p.active && p.organizationId === o.id).map((p) => ({ id: p.id, label: p.name })) })),
         orgRoutes: Object.fromEntries(Object.entries(pkg?.pkg.orgWorkflows ?? {}).map(([org, w]) => [org, w.steps.map(draftOf)])),
         saveOrgRoute: saveOrgRouteAction,
         save: saveStepsAction,

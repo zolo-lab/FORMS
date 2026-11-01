@@ -23,14 +23,14 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, general, contacts, groups, emailFields, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, heldRoles, save, onRoutesChange,
 }: {
   org: Option;
   orgs: Option[];
   /** Saved routes, per organization id. */
   routes: Record<string, StepDraft[]>;
-  /** The general route as it is now in the editor (copied when a route is made from it). */
-  general: StepDraft[];
+  /** What it follows without a route of its own (the general route, or – for a project – its organization's). */
+  fallback: { label: string; drafts: StepDraft[] };
   contacts: Option[];
   groups: Option[];
   emailFields: EmailField[];
@@ -82,16 +82,16 @@ export function OrgRoutes({
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary" aria-hidden><GitBranch className="size-5" /></span>
           <div className="min-w-0 space-y-1">
-            <h3 className="font-semibold">{org.label} עובדת לפי המסלול הכללי</h3>
+            <h3 className="font-semibold">{org.label} עובדת לפי {fallback.label}</h3>
             <p className="text-sm text-muted-foreground">כשצריך אצלה מנהלים אחרים או שלב נוסף, יוצרים לה מסלול משלה. אפשר להתחיל מהמסלול הכללי או לשכפל מסלול של עמותה אחרת ולשנות רק את השמות.</p>
           </div>
         </div>
         <ol className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
-          {general.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
+          {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
         </ol>
         <div className="flex flex-wrap items-end gap-3">
-          <Button type="button" onClick={() => setMine(fresh(general))}>
-            <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מהמסלול הכללי)
+          <Button type="button" onClick={() => setMine(fresh(fallback.drafts))}>
+            <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מ{fallback.label})
           </Button>
           {withRoute.length > 0 && (
             <div className="flex flex-wrap items-end gap-2">
@@ -118,7 +118,7 @@ export function OrgRoutes({
       <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border bg-card p-3">
         <div className="min-w-0">
           <p className="font-semibold">המסלול של {org.label}</p>
-          <p className="text-sm text-muted-foreground">בקשות של {org.label} עוברות בשלבים האלה, במקום המסלול הכללי.</p>
+          <p className="text-sm text-muted-foreground">בקשות של {org.label} עוברות בשלבים האלה, במקום {fallback.label}.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
@@ -131,8 +131,8 @@ export function OrgRoutes({
           <Button type="button" variant="outline" disabled={!copyTo || dirty} title={dirty ? "שמרו קודם את המסלול" : undefined} onClick={async () => { const to = copyTo; await persist(fresh(mine.map(strip)), to); setCopied(orgs.find((o) => o.id === to)?.label ?? null); setCopyTo(""); }}>
             <Copy className="size-4" aria-hidden />שכפול
           </Button>
-          <Button type="button" variant="ghost" className="text-destructive" onClick={() => { if (window.confirm(`למחוק את המסלול של ${org.label}? הבקשות החדשות שלה יעברו במסלול הכללי.`)) void persist(null); }}>
-            <Trash2 className="size-4" aria-hidden />חזרה למסלול הכללי
+          <Button type="button" variant="ghost" className="text-destructive" onClick={() => { if (window.confirm(`למחוק את המסלול של ${org.label}? הבקשות החדשות יעברו ב${fallback.label}.`)) void persist(null); }}>
+            <Trash2 className="size-4" aria-hidden />חזרה ל{fallback.label}
           </Button>
         </div>
       </div>

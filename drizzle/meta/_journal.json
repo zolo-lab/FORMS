@@ -141,6 +141,13 @@
       "when": 1793556923313,
       "tag": "0019_package_org_workflows",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793559219483,
+      "tag": "0020_project_slug",
+      "breakpoints": true
     }
   ]
 }

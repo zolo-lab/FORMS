@@ -97,3 +97,18 @@ describe("fixed ids of the organization's fields", () => {
     expect(fieldKey("שם העמותה", "ב. פרטי העובד")).toBe("org_name");
   });
 });
+
+describe("a project's link", () => {
+  it("is /f/<form>/<organization>/<project>, and names an active project of that organization", async () => {
+    const { linkProject, projectSlug } = await import("@/lib/forms/public-link");
+    const { labelKey } = await import("@/lib/forms/field-keys");
+    expect(publicFillPath("abc", "shivat-zion", "artznv")).toBe("/f/abc/shivat-zion/artznv");
+    const ps = [{ id: "1", slug: "artznv", active: true }, { id: "2", slug: "tt", active: false }];
+    expect(linkProject(ps, "ARTZNV")).toEqual({ ok: true, project: ps[0] });
+    expect(linkProject(ps, null)).toEqual({ ok: true, project: null });
+    expect(linkProject(ps, "tt")).toEqual({ ok: false, reason: "org_not_allowed" });
+    expect(projectSlug("ארצנו", [], labelKey)).toBe("artznv");
+    expect(projectSlug("ארצנו", ["artznv"], labelKey)).toBe("artznv-2");
+    expect(projectSlug("!!!", [], () => "")).toBe("project");
+  });
+});

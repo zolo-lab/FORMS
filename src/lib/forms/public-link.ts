@@ -8,7 +8,8 @@ import { allFields, type FormDefinition } from "./schema";
 import type { StepRole } from "@/lib/workflow/types";
 
 /** The form's link; with an organization's short name (slug), the link of that organization: /f/<form id>/pnima. */
-export const publicFillPath = (formId: string, orgSlug?: string | null) => (orgSlug ? `/f/${formId}/${orgSlug}` : `/f/${formId}`);
+export const publicFillPath = (formId: string, orgSlug?: string | null, projectSlug?: string | null) =>
+  orgSlug ? `/f/${formId}/${orgSlug}${projectSlug ? `/${projectSlug}` : ""}` : `/f/${formId}`;
 
 export interface LinkOrg {
   id: string;
@@ -83,4 +84,21 @@ export function subjectFromAnswers(def: FormDefinition, answers: Answers): { nam
     .slice(0, 2);
   const name = names.join(" ") || email || idNumber || "";
   return { name, ...(email ? { email } : {}), ...(idNumber ? { idNumber } : {}), ...(phone ? { phone } : {}) };
+}
+
+/** A project's short name for links, from its Hebrew name ("ארצנו" → "artzenu"); unique within the organization. */
+export function projectSlug(name: string, taken: string[], key: (label: string) => string): string {
+  const base = key(name).replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "project";
+  let slug = base;
+  for (let i = 2; taken.includes(slug); i++) slug = `${base}-${i}`;
+  return slug;
+}
+
+export type LinkProjectResult<T> = { ok: true; project: T | null } | { ok: false; reason: "org_not_allowed" };
+
+/** The project named in the link (an active project of the organization), or none when the link names none. */
+export function linkProject<T extends { slug: string | null; active: boolean }>(projects: T[], slug: string | null | undefined): LinkProjectResult<T> {
+  if (!slug) return { ok: true, project: null };
+  const p = projects.find((x) => x.active && x.slug === slug.toLowerCase());
+  return p ? { ok: true, project: p } : { ok: false, reason: "org_not_allowed" };
 }

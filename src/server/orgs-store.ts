@@ -1,5 +1,7 @@
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import type { OrgInput } from "@/lib/orgs/input";
+import { projectSlug } from "@/lib/forms/public-link";
+import { labelKey } from "@/lib/forms/field-keys";
 import { db, schema } from "@/db";
 import type { ReminderPolicy } from "@/lib/workflow/types";
 
@@ -65,14 +67,22 @@ async function moveLegacyProjects() {
 
 export async function listProjects(): Promise<ProjectRow[]> {
   await moveLegacyProjects();
-  return db.select().from(projects).orderBy(asc(projects.name));
+  const rows = await db.select().from(projects).orderBy(asc(projects.name));
+  // Projects made before short names existed get one, once.
+  for (const p of rows.filter((r) => !r.slug)) {
+    const taken = rows.filter((r) => r.organizationId === p.organizationId && r.slug).map((r) => r.slug!);
+    p.slug = projectSlug(p.name, taken, labelKey);
+    await db.update(projects).set({ slug: p.slug }).where(eq(projects.id, p.id));
+  }
+  return rows;
 }
 
 /** Returns false when the organization already has a project with this name. */
 export async function createProject(organizationId: string, name: string): Promise<boolean> {
   const [dup] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.organizationId, organizationId), eq(projects.name, name)));
   if (dup) return false;
-  await db.insert(projects).values({ organizationId, name });
+  const taken = (await db.select({ slug: projects.slug }).from(projects).where(eq(projects.organizationId, organizationId))).map((r) => r.slug).filter((x): x is string => !!x);
+  await db.insert(projects).values({ organizationId, name, slug: projectSlug(name, taken, labelKey) });
   return true;
 }
 

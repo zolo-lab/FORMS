@@ -47,7 +47,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
 
   function submit(send: boolean) {
     start(async () => {
-      const res: CreateResult = await createRequestAction({ packageId, organizationId, ...(projectId ? { projectId } : {}), subject, requesterAnswers: answers, send, ...(chain && chain.pkgId === packageId ? { workflow: { ...routeFor(pkg!, organizationId), steps: chain.steps } } : {}) });
+      const res: CreateResult = await createRequestAction({ packageId, organizationId, ...(projectId ? { projectId } : {}), subject, requesterAnswers: answers, send, ...(chain && chain.pkgId === packageId ? { workflow: { ...routeFor(pkg!, organizationId, projectId || null), steps: chain.steps } } : {}) });
       if (res.ok) {
         setErrors({});
         setDone({ requestId: res.requestId, sent: res.sent, links: res.links });
@@ -212,10 +212,10 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
           <div>
             <p className="mb-1 text-sm font-medium">מסלול החתימות</p>
             {chainEditable.includes(pkg.id) ? (
-              <ChainEditor key={`${pkg.id}-${organizationId}`} initial={chain?.pkgId === pkg.id ? chain.steps : routeFor(pkg, organizationId).steps} contacts={contacts} onChange={(steps) => setChain({ pkgId: pkg.id, steps })} />
+              <ChainEditor key={`${pkg.id}-${organizationId}-${projectId}`} initial={chain?.pkgId === pkg.id ? chain.steps : routeFor(pkg, organizationId, projectId || null).steps} contacts={contacts} onChange={(steps) => setChain({ pkgId: pkg.id, steps })} />
             ) : (
               <ol className="list-decimal space-y-1 ps-5 text-sm">
-                {[...routeFor(pkg, organizationId).steps]
+                {[...routeFor(pkg, organizationId, projectId || null).steps]
                   .sort((a, b) => a.order - b.order)
                   .map((s, i) => (
                     <li key={i}>

@@ -13,7 +13,7 @@ import type { Lookups } from "@/lib/forms/lookups";
 type Done = { message?: string; waitingFor: string[]; completed: boolean };
 
 /** The form from its own link: the first step's fields, on the document or as a form, and "שליחה" opens the request. */
-export function PublicFill({ formId, org, definition, role, pdf, lookups, initialAnswers = {} }: { formId: string; org: string | null; definition: FormDefinition; role: "requester" | "employee"; pdf?: { url: string; mapping: PdfMapping }; lookups?: Lookups; initialAnswers?: Answers }) {
+export function PublicFill({ formId, org, project = null, definition, role, pdf, lookups, initialAnswers = {} }: { formId: string; org: string | null; project?: string | null; definition: FormDefinition; role: "requester" | "employee"; pdf?: { url: string; mapping: PdfMapping }; lookups?: Lookups; initialAnswers?: Answers }) {
   const onDocument = !!pdf && pdf.mapping.stamps.length > 0;
   const [mode, setMode] = useFillView(onDocument);
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
@@ -23,7 +23,7 @@ export function PublicFill({ formId, org, definition, role, pdf, lookups, initia
 
   async function send(cleaned: Answers) {
     setFailed(null);
-    const res = await fetch(`/api/f/${formId}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned, ...(org ? { org } : {}) }) });
+    const res = await fetch(`/api/f/${formId}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned, ...(org ? { org } : {}), ...(project ? { project } : {}) }) });
     const body = (await res.json().catch(() => ({}))) as { errors?: FieldErrors; error?: string } & Partial<Done>;
     if (res.ok) {
       setDone({ message: body.message, waitingFor: body.waitingFor ?? [], completed: !!body.completed });
