@@ -5,20 +5,22 @@ import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
 import { queryRequests, requestKpis } from "@/server/dashboard-store";
 import { currentUser } from "@/server/users-store";
+import { openMyStepAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 /** "Waiting for me": steps addressed to the signed-in user; without a signed-in user (open mode / password) the viewer picks a role. */
-export default async function InboxPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
-  const { role: raw } = await searchParams;
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ role?: string; gone?: string }> }) {
+  const { role: raw, gone } = await searchParams;
   const me = await currentUser();
   if (me) {
     const result = await queryRequests({ assigneeEmail: me.email, page: 1 }, new Date(), 200);
     return (
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
         <h1 className="text-2xl font-bold">ממתינים לי</h1>
-        <p className="text-sm text-muted-foreground">בקשות שבהן שלב פתוח ממוען אליך ({me.email}).</p>
-        {result.rows.length === 0 ? <Card className="p-6 text-center text-muted-foreground">אין בקשות שממתינות לך.</Card> : <Board rows={result.rows} />}
+        <p className="text-sm text-muted-foreground">בקשות שבהן שלב פתוח ממוען אליך ({me.email}). &quot;פתיחה וחתימה&quot; פותח את הטופס שלך למילוי ולחתימה.</p>
+        {gone && <p role="alert" className="rounded-md bg-muted p-3 text-sm">הבקשה כבר לא ממתינה לך (נחתמה, בוטלה או פג תוקפה).</p>}
+        {result.rows.length === 0 ? <Card className="p-6 text-center text-muted-foreground">אין בקשות שממתינות לך.</Card> : <Board rows={result.rows} onOpen={openMyStepAction} />}
       </main>
     );
   }
