@@ -21,6 +21,7 @@ export interface EnqueueInput {
   templateKey: string;
   subject: string;
   body: string;
+  html?: string | null;
   scheduledAt?: Date;
 }
 
@@ -100,12 +101,12 @@ async function completionAttachments(requestId: string): Promise<{ files: Attach
   return { files: attached.map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes).toString("base64") })), skipped };
 }
 
-async function sendViaResend(apiKey: string, from: Sender, to: string, subject: string, text: string, attachments: Attachment[] = []): Promise<{ ok: boolean; id?: string; error?: string }> {
+async function sendViaResend(apiKey: string, from: Sender, to: string, subject: string, text: string, attachments: Attachment[] = [], html?: string | null): Promise<{ ok: boolean; id?: string; error?: string }> {
   const fromHeader = from.name ? `${from.name} <${from.email}>` : from.email;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: fromHeader, to: [to], subject, text, html: emailHtml(text, from.name), ...(attachments.length ? { attachments } : {}) }),
+    body: JSON.stringify({ from: fromHeader, to: [to], subject, text, html: html ?? emailHtml(text, from.name), ...(attachments.length ? { attachments } : {}) }),
   });
   const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
   if (res.ok) return { ok: true, id: json.id };
@@ -146,13 +147,18 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
       if (!from.email) result = { ok: false, error: "no sender email (set the organization sender or MAIL_FROM)" };
       else {
         let body = n.body;
+        let html = n.html;
         let attachments: Attachment[] = [];
         if (n.templateKey === COMPLETION_DOCS_KEY && n.requestId) {
           const a = await completionAttachments(n.requestId);
           attachments = a.files;
-          if (a.skipped) body += `\n(${a.skipped} מסמכים גדולים מדי לצירוף – אפשר להוריד אותם מהמערכת.)`;
+          if (a.skipped) {
+            const note = `(${a.skipped} מסמכים גדולים מדי לצירוף – אפשר להוריד אותם מהמערכת.)`;
+            body += `\n${note}`;
+            if (html) html = html.replace(/<\/body>/i, `<p dir="rtl" style="text-align:center;font-size:13px;color:#6b7280">${note}</p></body>`);
+          }
         }
-        result = await sendViaResend(apiKey!, from, n.to, n.subject ?? "", body, attachments).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+        result = await sendViaResend(apiKey!, from, n.to, n.subject ?? "", body, attachments, html).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
       }
     }
     const next = afterAttempt(n.attempts, result.ok);

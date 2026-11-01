@@ -39,7 +39,7 @@ describe("e-mail triggers", () => {
     expect(effectiveTemplate("reminder", rows, "org1")).toEqual({ subject: DEFAULT_TEMPLATES.reminder!.subject, body: "גוף שלנו {{name}}", source: "org" });
     expect(effectiveTemplate("reminder", rows, "org2").source).toBe("all");
     expect(effectiveTemplate("reminder", [], "org2").source).toBe("default");
-    expect(renderMessage({ subject: "{{org}}", body: "שלום {{name}} {{unknown}}" }, { org: "פנימה", name: "דנה" })).toEqual({ subject: "פנימה", body: "שלום דנה " });
+    expect(renderMessage({ subject: "{{org}}", body: "שלום {{name}} {{unknown}}" }, { org: "פנימה", name: "דנה" })).toEqual({ subject: "פנימה", body: "שלום דנה ", html: null, text: "שלום דנה " });
   });
 
   it("adds people once per address and parses typed address lists", () => {
@@ -87,7 +87,7 @@ describe("text editor", () => {
   it("trims, refuses empty / too long / locked", () => {
     expect(parseTemplateForm("reminder", "  תזכורת  {{org}} ", "שלום {{name}}\r\nשורה\n")).toEqual({ ok: true, value: { subject: "תזכורת {{org}}", body: "שלום {{name}}\nשורה" } });
     expect(parseTemplateForm("reminder", "", "x")).toEqual({ ok: false, error: "empty" });
-    expect(parseTemplateForm("reminder", "x", "y".repeat(5001))).toEqual({ ok: false, error: "too_long" });
+    expect(parseTemplateForm("reminder", "x", "y".repeat(30001))).toEqual({ ok: false, error: "too_long" });
     expect(parseTemplateForm("otp", "x", "y")).toEqual({ ok: false, error: "locked" });
   });
   it("finds placeholders the trigger doesn't fill", () => {

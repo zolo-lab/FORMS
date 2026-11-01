@@ -64,7 +64,8 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
         to: t.to,
         templateKey: "reminder",
         subject: t.channel === "email" ? msg.subject : "",
-        body: msg.body,
+        body: t.channel === "email" ? msg.text : msg.body,
+        html: t.channel === "email" ? msg.html : null,
       });
     }
     queued++;
@@ -112,7 +113,7 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
       dueDate: request.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(request.expiresAt) : "",
     });
     for (const t of targets) {
-      await enqueue({ organizationId: org.id, requestId, stepId: step.id, channel: t.channel, to: t.to, templateKey: "reminder", subject: t.channel === "email" ? msg.subject : "", body: msg.body });
+      await enqueue({ organizationId: org.id, requestId, stepId: step.id, channel: t.channel, to: t.to, templateKey: "reminder", subject: t.channel === "email" ? msg.subject : "", body: t.channel === "email" ? msg.text : msg.body, html: t.channel === "email" ? msg.html : null });
     }
     sent++;
   }

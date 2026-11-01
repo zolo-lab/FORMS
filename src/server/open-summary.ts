@@ -48,7 +48,7 @@ export async function runOpenSummary(now = new Date(), opts: { force?: boolean; 
       contact: r.subjectEmail ?? "",
     }));
     const msg = mail.render(OPEN_SUMMARY_KEY, { org: org.name, count: String(items.length), items: openSummaryLines(items), link: `${appUrl()}/admin/track?org=${org.id}` });
-    for (const p of people) await enqueue({ organizationId: org.id, to: p.email, templateKey: OPEN_SUMMARY_KEY, subject: msg.subject, body: msg.body });
+    for (const p of people) await enqueue({ organizationId: org.id, to: p.email, templateKey: OPEN_SUMMARY_KEY, subject: msg.subject, body: msg.text, html: msg.html });
     sent++;
   }
   return sent;

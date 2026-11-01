@@ -515,6 +515,8 @@ export const notifications = pgTable("notifications", {
   body: text("body").notNull(),
   status: notificationStatus("status").notNull().default("queued"),
   providerId: text("provider_id"),
+  /** The designed e-mail (HTML) when the trigger has one; `body` is its plain-text part. */
+  html: text("html"),
   error: text("error"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),

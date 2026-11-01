@@ -4,8 +4,7 @@
  */
 import { and, count, eq, gte, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { effectiveTemplate, effectiveTrigger, renderMessage, type EffectiveTrigger, type Person, type RecipientKind, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
-import type { MessageTemplate } from "@/lib/notifications/templates";
+import { effectiveTemplate, effectiveTrigger, renderMessage, type EmailTemplate, type RenderedMessage, type EffectiveTrigger, type Person, type RecipientKind, type TemplateRow, type TriggerSetting } from "@/lib/notifications/triggers";
 import type { SummarySchedule } from "@/lib/notifications/open-summary";
 
 const { mailTriggers, messageTemplates, organizations, notifications, packageTemplates, users } = schema;
@@ -20,8 +19,8 @@ function isMissingSchema(e: unknown): boolean {
 
 export interface Triggers {
   trigger(key: string): EffectiveTrigger;
-  template(key: string): MessageTemplate;
-  render(key: string, vars: Record<string, string | undefined>): MessageTemplate;
+  template(key: string): EmailTemplate;
+  render(key: string, vars: Record<string, string | undefined>): RenderedMessage;
   /** The organization's secretariat / bookkeeping addresses as people. */
   secretariat: { name: string; email: string }[];
   bookkeeping: { name: string; email: string }[];

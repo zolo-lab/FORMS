@@ -93,7 +93,12 @@ export default async function MailCenterPage({ searchParams }: { searchParams: P
                       {n.channel !== "email" ? ` · ${n.channel}` : ""}
                       {n.error ? ` · שגיאה: ${n.error}` : ""}
                     </p>
-                    <p className="whitespace-pre-wrap break-words rounded-md bg-muted p-3">{n.body}</p>
+                    {n.html ? (
+                      // As it looks in the inbox; sandbox="" never runs anything from the message.
+                      <iframe title={`המייל – ${n.subject ?? ""}`} sandbox="" srcDoc={n.html} loading="lazy" className="h-[28rem] w-full rounded-md border bg-card" />
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words rounded-md bg-muted p-3">{n.body}</p>
+                    )}
                     {links.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {links.map((l) => (

@@ -120,6 +120,13 @@
       "when": 1793550602958,
       "tag": "0016_mail_trigger_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793553619579,
+      "tag": "0017_notification_html",
+      "breakpoints": true
     }
   ]
 }
