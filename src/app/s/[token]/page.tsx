@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
 import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
+import { withCopies } from "@/lib/forms/copy";
 import { withPrefill } from "@/lib/forms/prefill";
 import { lookupsFor } from "@/server/people-store";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
@@ -61,7 +62,8 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           pipeDefinition={pipeDefinition(ctx.definition, ctx.fullDefinition)}
           initialAnswers={answersForClient(
             ctx.definition,
-            withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone, org: ctx.org }, ctx.answers),
+            // Copies from earlier steps' answers ("fname1" of this step ← "fname" the employee filled).
+            withCopies(ctx.fullDefinition, withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone, org: ctx.org }, ctx.answers)),
           )}
           filled={ctx.filled}
           role={ctx.role}

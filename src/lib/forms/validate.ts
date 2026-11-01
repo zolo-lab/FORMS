@@ -10,6 +10,7 @@
 import { validateGrid } from "./grid";
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
+import { withCopies } from "./copy";
 import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
@@ -297,7 +298,7 @@ export function validateAnswers(form: FormDefinition, rawAnswers: Answers, optio
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   // Formula fields are always recomputed here, whatever the client sent.
   // Defaults first (formulas may use them); read-only defaults always win over what the client sent.
-  const answers = computeFormulas(form, withDefaults(form, rawAnswers, today), today);
+  const answers = computeFormulas(form, withCopies(form, withDefaults(form, rawAnswers, today)), today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.

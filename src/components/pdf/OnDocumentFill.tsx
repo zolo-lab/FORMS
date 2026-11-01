@@ -11,6 +11,7 @@ import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
+import { withCopies } from "@/lib/forms/copy";
 import { withDefaults } from "@/lib/forms/defaults";
 import { cellRef, inputAttrs, isLockedOnDocument, readCheck, readText, setStampValue, simpleStamps, stampField, stampValue, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
   }, [pdf.mapping, rest.filled, rest.definition]);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Formula fields are shown computed (the server recomputes them on submit).
-  const shown = useMemo(() => computeFormulas(rest.definition, rest.answers, today), [rest.definition, rest.answers, today]);
+  const shown = useMemo(() => computeFormulas(rest.definition, withCopies(rest.definition, rest.answers), today), [rest.definition, rest.answers, today]);
   const errorFields = new Set(Object.keys(rest.errors).map((k) => k.split(".")[0]));
 
   function setField(stamp: { fieldId: string }, v: unknown) {
@@ -158,7 +159,7 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled, actions }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Default values show on the document; setField keeps them in the answers it passes up.
-  const answers = useMemo(() => withDefaults(definition, rawAnswers, today), [definition, rawAnswers, today]);
+  const answers = useMemo(() => withCopies(definition, withDefaults(definition, rawAnswers, today)), [definition, rawAnswers, today]);
   const result = useMemo(() => validateAnswers(definition, answers, { role }), [definition, answers, role]);
   const remaining = Object.keys(result.errors).length;
   const [busy, setBusy] = useState(false);

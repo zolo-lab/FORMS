@@ -2,6 +2,7 @@
 import { StepSelect, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { PREFILL_KEYS } from "@/lib/forms/prefill";
+import { copySourceInForm } from "@/lib/forms/copy";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/checkbox";
@@ -42,6 +43,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h4 className="text-sm font-semibold">{title}</h4>
       {children}
     </section>
+  );
+}
+
+/** iForms value copy: an id that is another field's id plus a number starts with that field's value. */
+function CopyFrom({ def, field, onPatch }: { def: FormDefinition; field: FormField; onPatch: (p: Partial<FormField>) => void }) {
+  const src = copySourceInForm(def, field);
+  if (!src) return null;
+  const off = field.settings?.noCopy === true;
+  const setOff = (c: boolean) => {
+    const settings = { ...field.settings };
+    if (c) settings.noCopy = true;
+    else delete settings.noCopy;
+    onPatch({ settings: Object.keys(settings).length ? settings : undefined });
+  };
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+      <p className="text-sm">
+        {off ? "ההעתקה כבויה." : <>מתמלא אוטומטית מהשדה <b>{src.label || src.id}</b> ({src.id}). הממלא יכול לשנות את הערך.</>}
+      </p>
+      <label className="flex items-center gap-3 text-sm">
+        <Switch checked={off} onCheckedChange={setOff} label="ללא העתקה" />
+        ללא העתקה
+      </label>
+    </div>
   );
 }
 
@@ -361,6 +386,7 @@ export function FieldSettings({
               {field.prefill && !PREFILL_KEYS.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
             </Select>
           </Row>
+          <CopyFrom def={def} field={field} onPatch={onPatch} />
         </Section>
       )}
 
