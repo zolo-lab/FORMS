@@ -160,8 +160,8 @@ export function FormRenderer({
       )}
 
       {!readonly && !cardMode && (
-        {/* The step forward ("הבא" / "שליחה") at the start of the line – the right side in Hebrew; "הקודם" at the end. */}
         <div className="flex justify-between gap-2 border-t pt-4">
+          {/* The step forward ("הבא" / "שליחה") at the start of the line – the right side in Hebrew; "הקודם" at the end. */}
           {lastStep ? (
             onSubmit ? <Button className="min-w-32" disabled={submitting} onClick={handleSubmit}>{submitting ? "שולח…" : (definition.settings?.submitLabel ?? "שליחה")}</Button> : <span />
           ) : (
