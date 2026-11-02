@@ -22,6 +22,8 @@ import {
 } from "@/lib/forms/builder";
 import { fieldsLeftWithoutStamps, pruneStamps } from "@/lib/forms/pdf-items";
 import { orderByPdf } from "@/lib/forms/pdf-draw";
+import { applyCheckboxLinks, suggestCheckboxLinks, type LinkSuggestion } from "@/lib/forms/checkbox-links";
+import { CheckboxLinksDialog } from "./CheckboxLinksDialog";
 import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/field-dictionary";
 import { buildXlsx } from "@/lib/export/xlsx";
 import type { Answers } from "@/lib/forms/conditions";
@@ -120,6 +122,13 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   /** Runs once after the next successful autosave (e.g. saving the steps that follow a renamed field). */
   const afterSave = useRef<(() => void) | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** Suggested "show only when the box is ticked" links, waiting for the admin's approval. */
+  const [links, setLinks] = useState<LinkSuggestion[] | null>(null);
+  const suggestLinks = () => {
+    const found = suggestCheckboxLinks(def, pdf?.mapping.stamps ?? []);
+    if (found.length === 0) { setNote("לא מצאנו במסמך שדות שיושבים ליד תיבת סימון ועדיין אין להם תנאי הצגה."); return; }
+    setLinks(found);
+  };
   /** Published once: answers are stored under the field ids, so ids stay and only the export keys are filled. */
   const everPublished = initiallyPublished || initialVersion > 1;
 
@@ -341,6 +350,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               {pdf && pdf.mapping.stamps.length > 0 && (
                 <Button variant="ghost" size="sm" className="justify-start" onClick={() => commit(orderByPdf(def, pdf.mapping.stamps))} title="מסדר את השדות בכל עמוד לפי המקום שלהם במסמך">סידור השדות לפי ה-PDF</Button>
               )}
+              {pdf && pdf.mapping.stamps.some((st) => st.kind === "check") && (
+                <Button variant="ghost" size="sm" className="justify-start" onClick={suggestLinks} title="שדות שיושבים ליד תיבת סימון במסמך יוצגו רק כשמסמנים אותה">שדות לפי תיבות סימון</Button>
+              )}
               <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("json"); setJsonText(exportJson); setJsonError(null); }}>JSON (גיבוי והעברה)</Button>
             </div>
           </details>
@@ -350,6 +362,15 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         </div>
       </div>
 
+      <CheckboxLinksDialog
+        suggestions={links}
+        onClose={() => setLinks(null)}
+        onApply={(chosen) => {
+          commit(applyCheckboxLinks(def, chosen));
+          setLinks(null);
+          setNote(`${chosen.length} שדות יוצגו רק כשמסמנים את התיבה שלהם. אפשר לבדוק בלשונית התצוגה המקדימה.`);
+        }}
+      />
       {note && (
         <div role="status" className="flex items-center gap-2 border-b bg-muted px-4 py-2 text-sm">
           <span>{note}</span>
@@ -460,6 +481,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   key={selectedField.id}
                   def={def}
                   field={selectedField}
+                  stamps={pdf?.mapping.stamps}
                   groups={groups}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}

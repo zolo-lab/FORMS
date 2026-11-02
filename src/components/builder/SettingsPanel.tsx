@@ -2,7 +2,7 @@
 import { StepSelect, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { PREFILL_KEYS } from "@/lib/forms/prefill";
-import { Plus, Trash2 } from "lucide-react";
+import { Link2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import { TODAY } from "@/lib/forms/defaults";
 import { STANDARD_FIELD_IDS } from "@/lib/forms/standard-ids";
 import { GROUP_SOURCE_PREFIX, groupIdOfSource } from "@/lib/workflow/assignee";
 import { ConditionEditor } from "./ConditionEditor";
+import { checkboxAbove } from "@/lib/forms/checkbox-links";
+import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import { FormulaEditor } from "./FormulaEditor";
 
 /** Types whose answer can start with a default value set by the form designer. */
@@ -130,10 +132,33 @@ function StyleControls({ style, sample, onChange }: { style: FieldStyle | undefi
   );
 }
 
+/** "קשר לתיבה שמעל": show this field only when the box it belongs to (on the document, or just before it) is ticked. */
+function LinkToBox({ def, field, stamps, onPatch }: { def: FormDefinition; field: FormField; stamps: PdfStamp[]; onPatch: (p: Partial<FormField>) => void }) {
+  const meta = FIELD_TYPE_META[field.type];
+  if (!meta.hasAnswer || ["consent", "yes_no", "radio", "checkboxes"].includes(field.type)) return null;
+  const box = checkboxAbove(def, stamps, field.id);
+  if (!box) return null;
+  const linked = JSON.stringify(field.visibleIf) === JSON.stringify(box.condition);
+  if (linked) return <p role="status" className="text-xs text-muted-foreground">מוצג רק כשמסמנים: <bdi>{box.label}</bdi></p>;
+  return (
+    <div className="space-y-1">
+      <Button variant="outline" size="sm" className="min-h-11 w-full justify-start" onClick={() => onPatch({ visibleIf: box.condition })}>
+        <Link2 className="size-4" aria-hidden />
+        קשר לתיבה שמעל
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        יוצג רק כשמסמנים: <bdi>{box.label}</bdi>{field.visibleIf ? " (במקום התנאי הנוכחי)" : ""}
+      </p>
+    </div>
+  );
+}
+
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, groups = [], steps = DEFAULT_STEPS,
+  def, field, onPatch, onRename, onMoveToPage, groups = [], steps = DEFAULT_STEPS, stamps = [],
 }: {
   def: FormDefinition;
+  /** The form's places on the PDF, to find the box a field belongs to ("קשר לתיבה שמעל"). */
+  stamps?: PdfStamp[];
   field: FormField;
   /** Saved groups (contacts) a dropdown can list; the chosen member can be the next signer. */
   groups?: { id: string; name: string }[];
@@ -374,6 +399,7 @@ export function FieldSettings({
       )}
 
       <Section title="תנאים">
+        <LinkToBox def={def} field={field} stamps={stamps} onPatch={onPatch} />
         <ConditionEditor def={def} selfId={field.id} value={field.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג שדה זה אם" />
         <ConditionEditor def={def} selfId={field.id} value={field.disabledIf} onChange={(c) => onPatch({ disabledIf: c })} lead="נעל שדה אם" />
         {meta.hasAnswer && !field.required && (
