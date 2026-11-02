@@ -36,3 +36,22 @@ export function pickAttachments<T extends { size: number }>(files: T[], max = MA
   }
   return { attached, skipped };
 }
+
+/** A file a signer attached (e.g. "צילום ת.ז."): its stored id and name, from anywhere in the answers. */
+export function uploadedFiles(answers: Record<string, unknown>): { fileId: string; name: string }[] {
+  const out: { fileId: string; name: string }[] = [];
+  const seen = new Set<string>();
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    const id = typeof o.url === "string" ? /\/files\/([0-9a-f-]{36})$/.exec(o.url)?.[1] : undefined;
+    if (id && typeof o.name === "string") {
+      if (!seen.has(id)) { seen.add(id); out.push({ fileId: id, name: o.name }); }
+      return;
+    }
+    Object.values(o).forEach(walk);
+  };
+  Object.values(answers).forEach(walk);
+  return out;
+}

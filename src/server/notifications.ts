@@ -9,7 +9,7 @@ import { emailHtml } from "@/lib/email-html";
 import { MAX_ATTEMPTS, afterAttempt } from "@/lib/notifications/templates";
 import { getSmsProvider } from "@/server/sms/provider";
 import { getFile } from "@/server/storage";
-import { COMPLETION_DOCS_KEY, pickAttachments } from "@/lib/notifications/completion";
+import { COMPLETION_DOCS_KEY, pickAttachments, uploadedFiles } from "@/lib/notifications/completion";
 
 const { notifications, organizations, packageDocuments, formTemplateVersions, formTemplates } = schema;
 
@@ -96,6 +96,12 @@ async function completionAttachments(requestId: string): Promise<{ files: Attach
     if (!d.fileId) continue;
     const f = await getFile(d.fileId);
     if (f) loaded.push({ filename: `${safeFileName(d.title)}.pdf`, bytes: f.bytes, size: f.bytes.length });
+  }
+  // The files the signers attached (ID photos, certificates…) go with the signed PDFs, after them.
+  const { collectedAnswers } = await import("./requests-store"); // (requests-store imports this module)
+  for (const u of uploadedFiles(await collectedAnswers(requestId))) {
+    const f = await getFile(u.fileId);
+    if (f) loaded.push({ filename: safeFileName(u.name), bytes: f.bytes, size: f.bytes.length });
   }
   const { attached, skipped } = pickAttachments(loaded);
   return { files: attached.map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes).toString("base64") })), skipped };
