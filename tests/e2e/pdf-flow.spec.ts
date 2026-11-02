@@ -24,6 +24,11 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await newFormFromPdf(page, title, await samplePdf());
   await expect(page.getByText(/source\.pdf · 1 עמודים/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
+  // The English lines ("name: ____") are proposed as fields; this test draws its own, so the proposals are dismissed.
+  const proposals = page.getByRole("dialog", { name: "שדות שזוהו ב-PDF" });
+  await expect(proposals).toBeVisible({ timeout: 45_000 });
+  await page.keyboard.press("Escape");
+  await expect(proposals).toBeHidden();
 
   // Five elements from the palette; each lands on its own spot.
   for (const label of ["תשובה קצרה", "תעודת זהות", "תאריך", "הצהרה / אישור", "חתימה"]) {

@@ -49,8 +49,13 @@ describe("squares in a ruled row", () => {
     expect(found.map((f) => `${f.label}:${f.options!.map((o) => o.label).join("/")}`).sort()).toEqual(["מין:זכר/נקבה", "סטטוס:רווק/נשוי/אלמן", "תושב:כן/לא"].sort());
     expect(found.find((f) => f.label === "תושב")!.type).toBe("yes_no");
   });
-  it("without walls nothing changes from before: one row is one question", () => {
-    const found = detectFields([page([])]).filter((f) => f.options && f.options.length > 2);
+  it("without walls but with a title over each column: still one question per column", () => {
+    const found = detectFields([page([])]).filter((f) => f.options);
+    expect(found.map((f) => `${f.label}:${f.options!.map((o) => o.label).join("/")}`).sort()).toEqual(["מין:זכר/נקבה", "סטטוס:רווק/נשוי/אלמן", "תושב:כן/לא"].sort());
+  });
+  it("without walls and without titles nothing changes from before: one row is one question", () => {
+    const bare: GuessPage = { ...page([]), labels: labels.filter((l) => !l.id.startsWith("h")) };
+    const found = detectFields([bare]).filter((f) => f.options && f.options.length > 2);
     expect(found.some((f) => f.options!.map((o) => o.label).includes("זכר") && f.options!.map((o) => o.label).includes("כן"))).toBe(true);
   });
 });

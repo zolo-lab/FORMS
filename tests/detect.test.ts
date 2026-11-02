@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/guess-page.json";
 import { extractShapes, type OpCodes, type Shapes } from "@/lib/pdf/geometry";
 import { groupLabels, splitGlyphs, textItems, type PageLabel } from "@/lib/pdf/labels";
-import { cleanLabel, detectFields, typeFromLabel } from "@/lib/pdf/detect";
+import { cleanLabel, detectFields, typeFromLabel, typedLines } from "@/lib/pdf/detect";
 import type { GuessPage } from "@/lib/pdf/guess";
 
 const OPS: OpCodes = { save: 10, restore: 11, transform: 12, constructPath: 91, stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24, eoFillStroke: 25, closeFillStroke: 26, closeEOFillStroke: 27 };
@@ -271,5 +271,84 @@ describe("a page with names and nothing to write on", () => {
   it("is not used when the page has places to write", () => {
     expect(found.length).toBe(4);
     expect(detectFields([sample]).some((f) => f.labelOnly)).toBe(false);
+  });
+});
+
+// Cursor review of #221/#222 (2.11.2026): Form 101 part ב style, three questions side by side over two rows of
+// squares. The gap between the last marital square (גרוש/ה) and the first yes square (כן) is under 90, so the row
+// would chain through without the walls/titles.
+describe("questions side by side in one row (101 part ב)", () => {
+  const walls = [{ x: 540, y1: 536, y2: 576 }, { x: 503, y1: 536, y2: 576 }, { x: 330, y1: 536, y2: 576 }, { x: 283, y1: 536, y2: 576 }];
+  const titles = [label("t1", "מין", 515, 566, 11), label("t2", "מצב משפחתי", 400, 566, 45), label("t3", "תושב ישראל", 288, 566, 40)];
+  const options = [
+    label("a", "זכר", 514, 554, 12), label("b", "רווק/ה", 461, 554, 25), label("c", "נשוי/אה", 398, 554, 28), label("d", "גרוש/ה", 336, 554, 25), label("e", "כן", 297, 554, 8),
+    label("f", "נקבה", 507, 541, 18), label("g", "אלמן/ה", 459, 541, 26), label("h", "פרוד/ה", 413, 541, 26), label("i", "לא", 297, 541, 8),
+  ];
+  const squares = [sq(528, 553), sq(489, 553), sq(430, 553), sq(363, 553), sq(310, 553), sq(528, 540), sq(489, 540), sq(442, 540), sq(310, 540)];
+  const build = (opts: { walls?: boolean; titles?: boolean } = {}) =>
+    page([...(opts.titles === false ? [] : titles), ...options], { checkboxes: squares, ...(opts.walls === false ? {} : { vlines: walls }) } as Partial<Shapes>);
+  const choices = (fs: ReturnType<typeof detectFields>) => fs.filter((f) => f.options).map((f) => `${f.label}:${f.options!.map((o) => o.label).join("/")}`);
+
+  it("1. one field per cell: מין, מצב משפחתי, תושב ישראל (yes/no over both squares)", () => {
+    const found = detectFields([build()]);
+    expect(choices(found).sort()).toEqual(["מין:זכר/נקבה", "מצב משפחתי:רווק/ה/נשוי/אה/גרוש/ה/אלמן/ה/פרוד/ה", "תושב ישראל:כן/לא"].sort());
+    const yn = found.find((f) => f.label === "תושב ישראל")!;
+    expect(yn.type).toBe("yes_no");
+    for (const s of [squares[4]!, squares[8]!]) expect(yn.options!.some((o) => o.box.x === s.x && o.box.y === s.y)).toBe(true);
+  });
+  it("2. no text field over the yes/no squares", () => {
+    const found = detectFields([build()]);
+    const over = (f: (typeof found)[number], s: { x: number; y: number }) => s.x + 5 > f.box.x && s.x + 5 < f.box.x + f.box.width && s.y + 5 > f.box.y && s.y + 5 < f.box.y + f.box.height;
+    expect(found.filter((f) => !f.options && (over(f, squares[4]!) || over(f, squares[8]!)))).toEqual([]);
+  });
+  it("3. without walls and titles a row stays one question, as before", () => {
+    const found = detectFields([build({ walls: false, titles: false })]);
+    expect(found.some((f) => ["זכר", "רווק/ה", "נשוי/אה", "גרוש/ה", "כן"].every((o) => f.options?.some((x) => x.label === o)))).toBe(true);
+  });
+  it("4. without walls but with the three titles: still three questions", () => {
+    const found = detectFields([build({ walls: false })]);
+    expect(choices(found).sort()).toEqual(["מין:זכר/נקבה", "מצב משפחתי:רווק/ה/נשוי/אה/גרוש/ה/אלמן/ה/פרוד/ה", "תושב ישראל:כן/לא"].sort());
+  });
+  it("6. yes / no / don't know stays a radio", () => {
+    const p = page([label("q", "האם עבדת", 500, 500, 45), label("a", "כן", 470, 500, 10), label("b", "לא", 430, 500, 10), label("c", "לא יודע", 370, 500, 30)], { checkboxes: [sq(485, 499), sq(445, 499), sq(405, 499)] });
+    expect(detectFields([p]).find((f) => f.options)).toMatchObject({ type: "radio" });
+  });
+  it("7. 'other' with a line to its left: an option, and the line a text field", () => {
+    const p = page([label("q", "סוג", 520, 500, 20), label("a", "משכורת", 470, 500, 30), label("b", "אחר", 420, 500, 16), label("c", "פרט", 330, 500, 15)], { checkboxes: [sq(505, 499), sq(440, 499)], lines: [{ x1: 250, x2: 325, y: 498 }] });
+    const found = detectFields([p]);
+    expect(found.find((f) => f.options)!.options!.map((o) => o.label)).toContain("אחר");
+    expect(found.some((f) => !f.options && f.box.x < 330)).toBe(true);
+  });
+  it("8. two questions one above the other in one walled cell, a full rule between them: two fields", () => {
+    const cellWalls = [{ x: 540, y1: 500, y2: 580 }, { x: 400, y1: 500, y2: 580 }];
+    const p = page(
+      [label("q1", "צבע", 515, 567, 18), label("a", "אדום", 495, 554, 22), label("b", "כחול", 445, 554, 22),
+        label("q2", "גודל", 515, 540, 18), label("c", "גדול", 495, 527, 22), label("d", "קטן", 445, 527, 22)],
+      { checkboxes: [sq(520, 553), sq(470, 553), sq(520, 526), sq(470, 526)], vlines: cellWalls, lines: [{ x1: 400, x2: 540, y: 548 }] } as Partial<Shapes>,
+    );
+    expect(choices(detectFields([p])).sort()).toEqual(["גודל:גדול/קטן", "צבע:אדום/כחול"]);
+  });
+  it("9. a section heading above is not the question's name", () => {
+    const p = page([label("h", "ב. פרטי העובד והצהרות שונות", 380, 520, 160), label("a", "זכר", 450, 500, 25), label("b", "נקבה", 385, 500, 30)], { checkboxes: [sq(480, 499), sq(420, 499)] });
+    expect(detectFields([p]).find((f) => f.options)!.label).not.toMatch(/פרטי העובד/);
+  });
+  it("10. a wall that does not cross the row does not cut it", () => {
+    const p = page([label("q", "מין:", 500, 500, 20), label("a", "זכר", 450, 500, 25), label("b", "נקבה", 385, 500, 30)], { checkboxes: [sq(480, 499), sq(420, 499)], vlines: [{ x: 445, y1: 600, y2: 650 }] } as Partial<Shapes>);
+    expect(detectFields([p]).find((f) => f.options)!.options).toHaveLength(2);
+  });
+  it("11. a square to the left of its word still binds to it", () => {
+    const p = page([label("q", "סוג", 520, 500, 20), label("a", "יומי", 452, 500, 20), label("b", "חודשי", 392, 500, 28)], { checkboxes: [sq(440, 499), sq(380, 499)] });
+    expect(detectFields([p]).find((f) => f.options)!.options!.map((o) => o.label)).toEqual(["יומי", "חודשי"]);
+  });
+});
+
+describe("typed blanks in one text run", () => {
+  const run = (str: string): GuessPage => ({ index: 0, width: 595, height: 842, labels: [{ id: "t", page: 0, str, x: 50, y: 700, width: str.length * 5, height: 10 }], shapes: { lines: [], boxes: [], checkboxes: [], combs: [] } as Shapes });
+  it("short names, each with its own blank, become separate names", () => {
+    expect(typedLines(run("Name: ________   ID: ________")).labels.map((l) => l.str)).toEqual(["Name:", "ID:"]);
+  });
+  it("a sentence with a blank inside stays one text", () => {
+    const str = "אני מצהיר כי עבדתי ______ ימים בשנת המס הקודמת אצל המעסיק הזה";
+    expect(typedLines(run(str)).labels.map((l) => l.str)).toEqual(["אני מצהיר כי עבדתי ימים בשנת המס הקודמת אצל המעסיק הזה"]);
   });
 });
