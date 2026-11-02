@@ -29,9 +29,13 @@ describe("wizard", () => {
   });
 
   it("keeps nested table errors under the table's page", () => {
-    const answers = { ...validAnswers, hasChildren: "yes", children: [{ name: "" }] };
+    // A started row (an empty row is just the place for the next one and is not checked).
+    const answers = { ...validAnswers, hasChildren: "yes", children: [{ name: "", birthDate: "2020-01-01" }] };
     const errors = validatePage(sampleForm, answers, 0, { today });
     expect(Object.keys(errors).some((k) => k.startsWith("children."))).toBe(true);
+    // Only empty rows: the table itself reports the missing minimum.
+    const empty = validatePage(sampleForm, { ...validAnswers, hasChildren: "yes", children: [{ name: "" }] }, 0, { today });
+    expect(empty.children).toBeDefined();
   });
 
   it("computes the required star including requiredIf", () => {
