@@ -153,7 +153,7 @@ Also done: P1-9 (other roles' formulas refreshed on submit), P1-10 (jumps with r
 
 Still open: the rest of P1-14, the P2 list, 8.4 `section`/typed `grid` (needs a decision on how a collapsible section groups following fields), 8.7 i18n, 5.6 Priority export (needs a sample), 6.10.
 
-Waiting on Israel: SMS provider, Priority export sample, `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms (attach forms to "סיום העסקה"), Google OAuth credentials or a decision on the password, `AUTO_MIGRATE=1` if he wants deploy-time migrations, removing `AUTH_DISABLED`.
+Waiting on Israel: Priority export sample, `RESEND_API_KEY` + `CRON_SECRET` + sender, production seeding of packages/forms (attach forms to "סיום העסקה"), Google OAuth credentials or a decision on the password, `AUTO_MIGRATE=1` if he wants deploy-time migrations, removing `AUTH_DISABLED`.
 
 ## 13. Auto-migrations (P1-16)
 
@@ -251,5 +251,13 @@ Plan: `docs/build-plan-v4.md`. Built in PR #156 (branch `v4`):
 - **Users without e-mail**: user name + password (`users.login`, placeholder `<login>@users.invalid`, never mailed).
 - **Later PRs:** #159 payroll Drive layout (`GOOGLE_DRIVE_LAYOUT=payroll`), `docs/smoke-v4.md`, seeded test package "שינוי תנאים (בדיקה)" (`pnpm seed`); #160 campaigns (`requests.campaign`, `/admin/campaigns`, campaign name in bulk import, `campaign` filter); #161 field `hint`.
 - **Dev DB after a schema change:** apply the SQL to dev with the Neon MCP *and* insert the generated migration name into `schema_migrations` there (the migrate script is not idempotent). Production needs nothing: the build applies it.
-- **Not done (needs Israel):** Drive service account + root folder, Priority sample file (task 17), SMS provider, Blob, the production smoke run (`docs/smoke-v4.md`), building the real packages.
+- **Not done (needs Israel):** Drive service account + root folder, Priority sample file (task 17), Blob, the production smoke run (`docs/smoke-v4.md`), building the real packages.
 - **Deferred by choice:** builder properties panel in tabs; review items 2/10/11 (detect dialog search, list-page headers, requests sorting).
+
+## SMS through SMS4Free (2.11.2026)
+`src/server/sms/sms4free.ts`, ported from the elections app (same SMS4Free account) without delivery reports.
+Chosen by `SMS_PROVIDER=sms4free`; credentials `SMS4FREE_API_KEY` / `SMS4FREE_USERNAME` / `SMS4FREE_PASSWORD`, sender
+`SMS4FREE_SENDER=FORMS` (the elections app keeps its own sender). All set in Vercel **production only**; preview and CI
+keep the console provider so tests never send. Recipients are stored as 972…; the provider converts to 05… and
+refuses non-mobile numbers. Retries a 5xx/network glitch twice, never a timeout or an answer of theirs.
+The package is shared with the elections app – its low-balance alert lives there.
