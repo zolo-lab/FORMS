@@ -610,7 +610,6 @@ function cellFields(page: GuessPage, labels: PageLabel[], bs: Border[], areas: A
   for (const l of labels) {
     const text = cleanLabel(l.str);
     if (!text || text.split(" ").length > 4) continue;
-    const cx = l.x + l.width / 2;
     const band = { lo: l.y + 0.5, hi: l.y + l.height - 0.5 };
     // The walls beside the name, and the cell they bound: from the lines above and below, or else the walls' own ends.
     let left: Border | null = null;
