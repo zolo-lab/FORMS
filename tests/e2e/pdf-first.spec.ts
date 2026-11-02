@@ -12,7 +12,7 @@ test("PDF-first: tab order and duplicate keeps the document", async ({ page }) =
   await newFormFromPdf(page, title);
   await expect(page.getByText(/source\.pdf/)).toBeVisible({ timeout: 30_000 });
   const tabs = await page.getByRole("tab").allTextContents();
-  expect(tabs[0]).toContain("מסמך PDF");
+  expect(tabs[0]).toContain("PDF");
   expect(tabs[1]).toContain("עריכה");
   await expect(page.getByRole("button", { name: "הסרת ה-PDF מהטופס" })).toHaveCount(0);
 
@@ -20,6 +20,6 @@ test("PDF-first: tab order and duplicate keeps the document", async ({ page }) =
   const row = page.locator("li, tr, div").filter({ hasText: title }).filter({ has: page.getByRole("button", { name: "שכפול" }) }).last();
   await row.getByRole("button", { name: "שכפול" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}/, { timeout: 30_000 });
-  await page.getByRole("tab", { name: "מסמך PDF" }).click();
+  await page.getByRole("tab", { name: "PDF", exact: true }).click();
   await expect(page.getByText(/source\.pdf/)).toBeVisible({ timeout: 30_000 });
 });
