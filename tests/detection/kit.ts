@@ -362,6 +362,19 @@ export class FormDraw {
     }
   }
 
+  /** One typed English line holding several fields: "Name: ________   ID: ________". */
+  typedRowLtr(items: { label: string; type: FieldType; chars: number }[], left: number, y: number) {
+    let str = "";
+    for (const it of items) {
+      const before = `${str}${it.label}: `;
+      const x1 = left + this.font.widthOfTextAtSize(before, 10);
+      const run = "_".repeat(it.chars);
+      this.expected.push({ label: it.label, type: it.type, page: this.pageIndex, area: { x: x1, y: y - 2, width: this.font.widthOfTextAtSize(run, 10), height: 14 } });
+      str = `${before}${run}   `;
+    }
+    this.page.drawText(str.trimEnd(), { x: left, y, size: 10, font: this.font, color: BLACK });
+  }
+
   async build(name: string, pattern: string): Promise<TestForm> {
     return { name, pattern, bytes: await this.doc.save(), expected: this.expected, notFields: this.notFields };
   }

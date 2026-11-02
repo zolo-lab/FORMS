@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/guess-page.json";
 import { extractShapes, type OpCodes, type Shapes } from "@/lib/pdf/geometry";
 import { groupLabels, splitGlyphs, textItems, type PageLabel } from "@/lib/pdf/labels";
-import { cleanLabel, detectFields, typeFromLabel } from "@/lib/pdf/detect";
+import { cleanLabel, detectFields, typeFromLabel, typedLines } from "@/lib/pdf/detect";
 import type { GuessPage } from "@/lib/pdf/guess";
 
 const OPS: OpCodes = { save: 10, restore: 11, transform: 12, constructPath: 91, stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24, eoFillStroke: 25, closeFillStroke: 26, closeEOFillStroke: 27 };
@@ -339,5 +339,16 @@ describe("questions side by side in one row (101 part ב)", () => {
   it("11. a square to the left of its word still binds to it", () => {
     const p = page([label("q", "סוג", 520, 500, 20), label("a", "יומי", 452, 500, 20), label("b", "חודשי", 392, 500, 28)], { checkboxes: [sq(440, 499), sq(380, 499)] });
     expect(detectFields([p]).find((f) => f.options)!.options!.map((o) => o.label)).toEqual(["יומי", "חודשי"]);
+  });
+});
+
+describe("typed blanks in one text run", () => {
+  const run = (str: string): GuessPage => ({ index: 0, width: 595, height: 842, labels: [{ id: "t", page: 0, str, x: 50, y: 700, width: str.length * 5, height: 10 }], shapes: { lines: [], boxes: [], checkboxes: [], combs: [] } as Shapes });
+  it("short names, each with its own blank, become separate names", () => {
+    expect(typedLines(run("Name: ________   ID: ________")).labels.map((l) => l.str)).toEqual(["Name:", "ID:"]);
+  });
+  it("a sentence with a blank inside stays one text", () => {
+    const str = "אני מצהיר כי עבדתי ______ ימים בשנת המס הקודמת אצל המעסיק הזה";
+    expect(typedLines(run(str)).labels.map((l) => l.str)).toEqual(["אני מצהיר כי עבדתי ימים בשנת המס הקודמת אצל המעסיק הזה"]);
   });
 });

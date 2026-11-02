@@ -234,6 +234,13 @@ export const CASES: Record<string, Case> = {
     return f.build("englishLtr", "טופס באנגלית: תווית משמאל, קו מימין");
   },
 
+  async englishTypedRow() {
+    const f = await FormDraw.create();
+    f.typedRowLtr([{ label: "Name", type: "short_text", chars: 12 }, { label: "ID", type: "id_number", chars: 12 }], 50, 760);
+    f.typedRowLtr([{ label: "Date", type: "date", chars: 10 }, { label: "Signature", type: "signature", chars: 14 }], 50, 720);
+    return f.build("englishTypedRow", "שורה מוקלדת באנגלית עם שני שדות");
+  },
+
   async twoLineTitles() {
     const f = await FormDraw.create();
     f.gridTwoLineTitles(

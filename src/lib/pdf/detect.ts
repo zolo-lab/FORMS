@@ -77,7 +77,7 @@ const has = (n: string, words: string[]) => words.some((w) => n.includes(normali
 export function typeFromLabel(label: string): FieldType {
   const n = normalizeText(label);
   if (has(n, ["דרכון", "passport"])) return "short_text";
-  if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"])) return "id_number";
+  if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"]) || n.split(" ").includes("id")) return "id_number";
   if (has(n, ["חתימה", "חתימת", "חתום", "signature"])) return "signature";
   if (has(n, ["תאריך", "מתאריך", "עד תאריך", "date"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
@@ -181,7 +181,7 @@ function costOf(area: Area, label: PageLabel): number | null {
     return null;
   }
   // line
-  if (Math.abs(e.y - label.y) <= Math.max(8, label.height) && right <= label.x + 3) return label.x - right + Math.abs(e.y - label.y) * 2;
+  if (Math.abs(e.y - label.y) <= Math.max(8, label.height) && right <= label.x + 3) return label.x - right + Math.abs(e.y - label.y) * 2 + (isLtr(label.str) ? 15 : 0);
   // Text written left to right (English) reads label first, then the line on its right.
   if (isLtr(label.str) && Math.abs(e.y - label.y) <= Math.max(8, label.height) && e.x >= label.x + label.width - 3) return e.x - (label.x + label.width) + Math.abs(e.y - label.y) * 2;
   if (e.y < label.y - 2 && label.y - e.y <= 28 && overlapsX(e.x, right, label)) return 60 + (label.y - e.y) * 2;
@@ -812,9 +812,24 @@ export function typedLines(page: GuessPage): GuessPage {
       const x1 = rtl ? l.x + l.width - end * per : l.x + start * per;
       lines.push({ x1: round1(x1), x2: round1(x1 + m[0].length * per), y: round1(l.y - 1) } as HLine);
     }
-    const rest = l.str.replace(RUN, " ").replace(/\s+/g, " ").trim();
-    if (/[A-Za-z֐-׿]/.test(rest)) {
-      // The name keeps its own side: the right end in Hebrew, the left end otherwise.
+    // The text between the runs. When every piece is a short name ("name: ____  ID: ____"), each is its own name at
+    // its own place; otherwise it is one sentence with blanks in it, and the text stays whole on its own side.
+    const pieces: { str: string; s0: number; e0: number }[] = [];
+    let from = 0;
+    for (const m of [...matches, null]) {
+      const to = m ? m.index! : l.str.length;
+      const raw = l.str.slice(from, to);
+      from = m ? m.index! + m[0].length : from;
+      const str = raw.replace(/\s+/g, " ").trim();
+      if (/[A-Za-z֐-׿]/.test(str)) pieces.push({ str, s0: to - raw.trimStart().length, e0: to - (raw.length - raw.trimEnd().length) });
+    }
+    if (pieces.length > 1 && pieces.every((p) => p.str.split(" ").length <= 4)) {
+      pieces.forEach((p, k) => {
+        const x = rtl ? l.x + l.width - p.e0 * per : l.x + p.s0 * per;
+        labels.push({ ...l, id: k ? `${l.id}_${k}` : l.id, str: p.str, x: round1(x), width: round1(Math.max(4, (p.e0 - p.s0) * per)) });
+      });
+    } else if (pieces.length) {
+      const rest = pieces.map((p) => p.str).join(" ");
       const width = Math.max(4, l.width - matches.reduce((n, m) => n + m[0].length, 0) * per);
       labels.push({ ...l, str: rest, x: rtl ? l.x + l.width - width : l.x, width });
     }
