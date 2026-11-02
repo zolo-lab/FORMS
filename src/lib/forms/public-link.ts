@@ -1,3 +1,4 @@
+import { isOrgField } from "./prefill";
 /**
  * The form's own link (/f/<form id>, like iForms): it opens the form itself on its first step's fields. Sending creates
  * a request that goes on through the rest of the steps. Only a first step that the person opening the link can be
@@ -78,7 +79,8 @@ export function subjectFromAnswers(def: FormDefinition, answers: Answers): { nam
   const idNumber = first("id_number");
   const phone = first("phone");
   const names = fields
-    .filter((f) => f.type === "short_text" && /שם/.test(f.label) && !/(עמותה|ארגון|חברה|מעסיק|פרויקט|הורה|אב|אם)/.test(f.label))
+    // Not the organization's own field, nor a name that is someone else's (the employer, the manager…).
+    .filter((f) => f.type === "short_text" && /שם/.test(f.label) && !isOrgField(f) && !/(עמותה|ארגון|חברה|מעסיק|מעביד|פרויקט|הורה|אב|אם|ממונה|מנהל|רכז|בן זוג|בת זוג)/.test(f.label))
     .map((f) => text(answers[f.id]))
     .filter(Boolean)
     .slice(0, 2);
