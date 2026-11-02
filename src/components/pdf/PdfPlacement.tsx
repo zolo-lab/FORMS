@@ -60,9 +60,11 @@ export interface PdfPlacementProps {
   pick?: PickMode;
   /** Detection fixes that change the form and its boxes together (see detect-fixes.ts). */
   onTransform?: (fix: (def: FormDefinition, stamps: PdfStamp[]) => FixResult) => string | undefined;
+  /** The fields of the selected boxes, for the editor's single step picker. When given, the in-viewer "העברה לשלב" bar is not shown. */
+  onSelectionChange?: (fieldIds: string[]) => void;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, onTransform, onSelectionChange, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -138,6 +140,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const f = allFields(definition).find((x) => x.id === baseFieldId(s.fieldId));
     return f ? (f.filledBy ?? "employee") : "none";
   };
+  const selectionKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const g of group) {
+      const st = mapping.stamps.find((x) => x.id === g);
+      if (st && roleOf(st) !== "none") ids.add(baseFieldId(st.fieldId));
+    }
+    return [...ids].join("\n");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, mapping.stamps, definition]);
+  useEffect(() => {
+    onSelectionChange?.(selectionKey ? selectionKey.split("\n") : []);
+  }, [selectionKey, onSelectionChange]);
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
@@ -516,7 +530,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             ))}
           </ul>
         )}
-        {onFieldPatch && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
+        {onFieldPatch && !onSelectionChange && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm" aria-label="תיבות מסומנות">
             <span className="font-medium">{group.length === 1 ? "תיבה אחת מסומנת" : `${group.length} תיבות מסומנות`}</span>
             <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>

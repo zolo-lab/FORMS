@@ -7,7 +7,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   const id = await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
 
   await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
@@ -40,7 +40,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 test("form settings: layout, description and thank-you message", async ({ page }) => {
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   await page.getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");

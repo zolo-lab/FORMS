@@ -104,6 +104,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const unassigned = flow ? unassignedFields(def, stepRoles) : [];
   // "סימון שדות לשלב": the fields of one step are marked, in the responsive form and on the PDF.
   const [focusRole, setFocusRole] = useState<FillerRole | "">("");
+  // Fields of the boxes selected on the PDF: the step picker above then moves them instead of marking a step.
+  const [pdfSelection, setPdfSelection] = useState<string[]>([]);
   // "סימון בטופס": the fields a source field opens, marked by clicking them in the form or on the PDF, then saved.
   const [picking, setPicking] = useState<{ sourceId: string; ids: Set<string> } | null>(null);
   const pick: PickMode | undefined = picking
@@ -134,6 +136,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [future, setFuture] = useState<HistoryEntry[]>([]);
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
   const [tab, setTab] = useState<TabId>(initialTab);
+  // The one step picker above the PDF: with boxes selected (and no step being marked) it shows and changes their step.
+  const moveMode = tab === "pdf" && !focusRole && pdfSelection.length > 0;
+  const selectionRoles = new Set(answerFields(def).filter((f) => pdfSelection.includes(f.id)).map(fieldRole));
+  const selectionRole = selectionRoles.size === 1 ? [...selectionRoles][0] : undefined;
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
@@ -425,8 +431,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
           tabs={[
-            { id: "pdf", label: "מסמך PDF" },
-            { id: "edit", label: "עריכה (רספונסיבי)" },
+            { id: "pdf", label: "PDF" },
+            { id: "edit", label: "רספונסיבי" },
             ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
@@ -445,14 +451,34 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       )}
       {!picking && views && (tab === "edit" || tab === "pdf") && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-muted/40 px-4 py-2 text-sm">
-          <label className="flex items-center gap-2">
-            <span className="font-medium">סימון שדות לשלב</span>
-            <Select className="h-9 w-64" aria-label="סימון שדות לשלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
-              <option value="">— בחרו שלב —</option>
-              {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
-              {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
-            </Select>
-          </label>
+          {moveMode ? (
+            <label className="flex items-center gap-2">
+              <span className="font-medium">{pdfSelection.length === 1 ? "השלב של התיבה המסומנת" : `השלב של ${pdfSelection.length} התיבות המסומנות`}</span>
+              <Select
+                className="h-9 w-64"
+                aria-label="העברת התיבות המסומנות לשלב"
+                value={selectionRole ?? ""}
+                onChange={(e) => {
+                  const r = e.target.value as FillerRole;
+                  if (!r) return;
+                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, { filledBy: r }), def));
+                }}
+              >
+                {!selectionRole && <option value="">כמה שלבים</option>}
+                {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+              </Select>
+              <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
+            </label>
+          ) : (
+            <label className="flex items-center gap-2">
+              <span className="font-medium">סימון שדות לשלב</span>
+              <Select className="h-9 w-64" aria-label="סימון שדות לשלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
+                <option value="">— בחרו שלב —</option>
+                {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+                {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
+              </Select>
+            </label>
+          )}
           {focusRole && focusRole !== "unassigned" && (
             <span className="text-muted-foreground">
               <strong className="text-foreground">{answerFields(def).filter((f) => fieldRole(f) === focusRole).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי להוסיף אותו לשלב, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מכניסה אותה לשלב או מוציאה ממנו."}
@@ -624,7 +650,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             )}
           </div>
         )}
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} onSelectionChange={setPdfSelection} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">
