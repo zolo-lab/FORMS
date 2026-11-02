@@ -268,3 +268,55 @@ export async function campaignCounts(scope: Scope = null): Promise<{ campaign: s
     .groupBy(requests.campaign, organizations.name, requests.status);
   return rows.map((r) => ({ campaign: r.campaign!, organization: r.organization, status: r.status, count: r.count }));
 }
+
+/** The chain steps (status fields only) of many requests in one query, for timelines on list screens. */
+export async function stepsForRequests(requestIds: string[]) {
+  if (!requestIds.length) return [];
+  return db
+    .select({
+      requestId: signingSteps.requestId,
+      id: signingSteps.id,
+      order: signingSteps.order,
+      role: signingSteps.role,
+      status: signingSteps.status,
+      assigneeName: signingSteps.assigneeName,
+      assigneeEmail: signingSteps.assigneeEmail,
+      activatedAt: signingSteps.activatedAt,
+      firstViewedAt: signingSteps.firstViewedAt,
+      completedAt: signingSteps.completedAt,
+      declineReason: signingSteps.declineReason,
+      returnReason: signingSteps.returnReason,
+    })
+    .from(signingSteps)
+    .where(inArray(signingSteps.requestId, requestIds))
+    .orderBy(asc(signingSteps.order), asc(signingSteps.createdAt));
+}
+
+/**
+ * Open requests the viewer is part of but that are not waiting for them right now: their turn is still ahead, or they
+ * already did their part and want to see where it went. (What waits for them is the "waiting for me" board.)
+ */
+export async function requestsInMyChain(email: string, limit = 100) {
+  const mine = sql`lower(${signingSteps.assigneeEmail}) = ${email.trim().toLowerCase()}`;
+  return db
+    .select({
+      id: requests.id,
+      status: requests.status,
+      subjectName: requests.subjectName,
+      createdAt: requests.createdAt,
+      packageName: packageTemplates.name,
+      organizationName: organizations.name,
+    })
+    .from(requests)
+    .leftJoin(packageTemplates, eq(packageTemplates.id, requests.packageTemplateId))
+    .leftJoin(organizations, eq(organizations.id, requests.organizationId))
+    .where(
+      and(
+        inArray(requests.status, [...IN_PROGRESS]),
+        exists(db.select({ one: sql`1` }).from(signingSteps).where(and(eq(signingSteps.requestId, requests.id), mine))),
+        sql`not ${exists(db.select({ one: sql`1` }).from(signingSteps).where(and(eq(signingSteps.requestId, requests.id), mine, inArray(signingSteps.status, [...OPEN_STEP]))))}`,
+      ),
+    )
+    .orderBy(desc(requests.createdAt))
+    .limit(limit);
+}

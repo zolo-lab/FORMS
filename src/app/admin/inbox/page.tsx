@@ -3,7 +3,9 @@ import { Board } from "@/components/requests/Board";
 import { Card } from "@/components/ui/card";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
-import { queryRequests, requestKpis } from "@/server/dashboard-store";
+import { queryRequests, requestKpis, requestsInMyChain, stepsForRequests } from "@/server/dashboard-store";
+import { RequestTimeline } from "@/components/requests/RequestTimeline";
+import { buildTimeline, groupStepsByRequest } from "@/lib/requests/timeline";
 import { currentUser } from "@/server/users-store";
 import { openMyStepAction } from "./actions";
 
@@ -14,13 +16,38 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const { role: raw, gone } = await searchParams;
   const me = await currentUser();
   if (me) {
-    const result = await queryRequests({ assigneeEmail: me.email, page: 1 }, new Date(), 200);
+    const now = new Date();
+    const [result, chain] = await Promise.all([queryRequests({ assigneeEmail: me.email, page: 1 }, now, 200), requestsInMyChain(me.email)]);
+    const chainSteps = groupStepsByRequest(await stepsForRequests(chain.map((r) => r.id)));
     return (
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
         <h1 className="text-2xl font-bold">ממתינים לי</h1>
         <p className="text-sm text-muted-foreground">בקשות שבהן שלב פתוח ממוען אליך ({me.email}). &quot;פתיחה וחתימה&quot; פותח את הטופס שלך למילוי ולחתימה.</p>
         {gone && <p role="alert" className="rounded-md bg-muted p-3 text-sm">הבקשה כבר לא ממתינה לך (נחתמה, בוטלה או פג תוקפה).</p>}
         {result.rows.length === 0 ? <Card className="p-6 text-center text-muted-foreground">אין בקשות שממתינות לך.</Card> : <Board rows={result.rows} onOpen={openMyStepAction} />}
+        <section className="space-y-3" aria-labelledby="my-chain">
+          <div>
+            <h2 id="my-chain" className="text-lg font-semibold">בשרשרת שלי</h2>
+            <p className="text-sm text-muted-foreground">בקשות פתוחות שאת/ה חלק מהן: התור שלך עוד לא הגיע, או שכבר סיימת. כך רואים איפה הבקשה נמצאת.</p>
+          </div>
+          {chain.length === 0 ? (
+            <Card className="p-6 text-center text-muted-foreground">אין בקשות פתוחות נוספות בשרשרת שלך.</Card>
+          ) : (
+            <ul className="grid gap-3 lg:grid-cols-2">
+              {chain.map((r) => (
+                <li key={r.id}>
+                  <Card className="space-y-3 p-4">
+                    <div>
+                      <Link href={`/admin/requests/${r.id}`} className="font-semibold text-primary hover:underline">{r.subjectName}</Link>
+                      <p className="text-xs text-muted-foreground">{[r.packageName, r.organizationName].filter(Boolean).join(" · ")}</p>
+                    </div>
+                    <RequestTimeline timeline={buildTimeline(chainSteps.get(r.id) ?? [], r.status, { now, viewerEmail: me.email })} compact title="" />
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
     );
   }

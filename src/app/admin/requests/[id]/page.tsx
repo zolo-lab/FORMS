@@ -10,7 +10,9 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { discardDraftAction, sendDraftAction } from "../actions";
 import { Badge, Card } from "@/components/ui/card";
 import { eventLabel } from "@/lib/requests/list";
-import { REQUEST_STATUS_LABEL, STEP_STATUS_LABEL, runStepLabel } from "@/lib/workflow/labels";
+import { buildTimeline } from "@/lib/requests/timeline";
+import { RequestTimeline } from "@/components/requests/RequestTimeline";
+import { REQUEST_STATUS_LABEL, runStepLabel } from "@/lib/workflow/labels";
 import { requestAnswerItems, uploadedFiles } from "@/server/dashboard-store";
 import { getRequest } from "@/server/requests-store";
 import { FollowUpCard } from "@/components/requests/FollowUpCard";
@@ -22,7 +24,6 @@ import { eq } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 const ACTOR: Record<string, string> = { user: "מנהל", signer: "חותם", system: "מערכת", api: "API" };
-const stepTone = (s: string) => (s === "completed" ? "success" : s === "active" || s === "in_progress" ? "warning" : "muted");
 
 export default async function RequestPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params;
@@ -40,6 +41,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const live = request.status === "in_progress" || request.status === "returned";
   const [pkg] = await db.select({ followUpStatuses: schema.packageTemplates.followUpStatuses }).from(schema.packageTemplates).where(eq(schema.packageTemplates.id, request.packageTemplateId));
   const followUps = normalizeFollowUpStatuses(pkg?.followUpStatuses);
+  const timeline = buildTimeline(steps, request.status, { viewerEmail: me?.email });
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
@@ -56,25 +58,8 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
         {request.cancelReason && ` · סיבת ביטול: ${request.cancelReason}`}
       </p>
 
-      <section className="space-y-2" aria-label="מסלול">
-        <h2 className="font-semibold">מסלול החתימות</h2>
-        {steps.length === 0 ? (
-          <p className="text-sm text-muted-foreground">הבקשה עדיין טיוטה ולא נשלחה.</p>
-        ) : (
-          <ol className="flex flex-wrap items-stretch gap-2">
-            {steps.map((s, i) => (
-              <li key={s.id} className="flex items-center gap-2">
-                <Card className={`min-w-36 space-y-1 p-3 text-sm ${s.status === "active" || s.status === "in_progress" ? "border-primary" : ""}`}>
-                  <p className="font-medium">{runStepLabel(s)}</p>
-                  <p className="truncate text-xs text-muted-foreground">{s.assigneeName ?? s.assigneeEmail ?? "—"}</p>
-                  <Badge tone={stepTone(s.status)}>{STEP_STATUS_LABEL[s.status] ?? s.status}</Badge>
-                  {s.completedAt && <p className="text-xs text-muted-foreground">{fmt.format(s.completedAt)}</p>}
-                </Card>
-                {i < steps.length - 1 && <span aria-hidden className="text-muted-foreground">←</span>}
-              </li>
-            ))}
-          </ol>
-        )}
+      <section aria-label="מסלול">
+        <RequestTimeline timeline={timeline} />
       </section>
 
       {live && openSteps.length > 0 && (

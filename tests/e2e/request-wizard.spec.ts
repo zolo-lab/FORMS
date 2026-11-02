@@ -52,4 +52,21 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
   await done.getByRole("link", { name: "לעמוד הבקשה" }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
   await expect(page.getByText("בתהליך")).toBeVisible();
+
+  // The chain as a tracking timeline: the requester's step is done, the employee's is waiting since today.
+  const chain = page.getByRole("list", { name: "שלבי הבקשה" });
+  await expect(chain).toBeVisible();
+  const current = chain.locator('[aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText("ממתין עכשיו · מהיום");
+  await expect(current).toContainText("עוד לא נפתח");
+  await expect(page.getByText(/^אצל .+ · מהיום · שלב \d+ מתוך \d+$/)).toBeVisible();
+
+  // The tracking screen shows the same route, status only, behind a toggle.
+  await page.goto(`/admin/track?q=${encodeURIComponent(name)}`);
+  const row = page.getByRole("row").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  await row.locator("summary").click();
+  await expect(row.getByRole("list", { name: "שלבי הבקשה" })).toBeVisible();
+  await expect(row.locator('[aria-current="step"]')).toContainText("ממתין עכשיו");
 });

@@ -10,13 +10,14 @@ import { canTrack, usableOrgIds } from "@/lib/auth/permissions";
 import { parseFilters } from "@/lib/requests/list";
 import { REQUEST_STATUS_LABEL, ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole } from "@/lib/workflow/types";
-import { listPackages, queryRequests } from "@/server/dashboard-store";
+import { listPackages, queryRequests, stepsForRequests } from "@/server/dashboard-store";
+import { RequestTimeline } from "@/components/requests/RequestTimeline";
+import { DEFAULT_STUCK_DAYS, buildTimeline, groupStepsByRequest } from "@/lib/requests/timeline";
 import { listOrganizations } from "@/server/requests-store";
 import { currentUser, viewerScope } from "@/server/users-store";
 
 export const dynamic = "force-dynamic";
 
-const STUCK_DAYS = 7;
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
 /**
@@ -35,7 +36,23 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
   const allowed = usableOrgIds(scope?.access ?? null);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeZone: "Asia/Jerusalem" });
   const rows = [...result.rows].sort((a, b) => (b.daysInStep ?? -1) - (a.daysInStep ?? -1));
-  const stuck = rows.filter((r) => (r.daysInStep ?? 0) > STUCK_DAYS).length;
+  const now = new Date();
+  const stepsBy = groupStepsByRequest(await stepsForRequests(rows.map((r) => r.id)));
+  const timelines = new Map(rows.map((r) => [r.id, buildTimeline(stepsBy.get(r.id) ?? [], r.status, { now })]));
+  const isStuck = (r: (typeof rows)[number]) => timelines.get(r.id)?.stuck ?? false;
+  const stuck = rows.filter(isStuck).length;
+  const route = (r: (typeof rows)[number]) => (
+    <details className="group">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-primary hover:underline [&::-webkit-details-marker]:hidden">
+        <span>{waiting(r)}</span>
+        <span aria-hidden className="text-xs text-muted-foreground group-open:rotate-180">▾</span>
+        <span className="sr-only">הצגת המסלול</span>
+      </summary>
+      <div className="mt-2 min-w-64">
+        <RequestTimeline timeline={timelines.get(r.id)!} compact title={null} />
+      </div>
+    </details>
+  );
   const waiting = (r: (typeof rows)[number]) => r.waitingFor.map((w) => `${ROLE_LABELS[w.role as StepRole] ?? w.role}${w.name ? ` – ${w.name}` : ""}`).join(", ") || "—";
 
   return (
@@ -48,7 +65,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
           <p className="text-2xl font-bold">{result.total}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-muted-foreground">תקועות יותר מ-{STUCK_DAYS} ימים</p>
+          <p className="text-xs text-muted-foreground">תקועות {DEFAULT_STUCK_DAYS} ימים ומעלה</p>
           <p className={`text-2xl font-bold ${stuck ? "text-destructive" : ""}`}>{stuck}</p>
         </Card>
       </section>
@@ -104,14 +121,14 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
               <tbody className="divide-y">
                 {rows.map((r) => {
                   const [label, tone] = REQUEST_STATUS_LABEL[r.status];
-                  const late = (r.daysInStep ?? 0) > STUCK_DAYS;
+                  const late = isStuck(r);
                   const open = r.status === "in_progress" || r.status === "returned";
                   return (
                     <tr key={r.id}>
                       <td className="px-3 py-2 font-medium">{r.subjectName}</td>
                       <td className="px-3 py-2">{r.packageName}</td>
                       <td className="px-3 py-2">{r.organizationName}</td>
-                      <td className="px-3 py-2">{waiting(r)}</td>
+                      <td className="px-3 py-2 align-top">{route(r)}</td>
                       <td className={`px-3 py-2 ${late ? "font-semibold text-destructive" : ""}`}>
                         {r.daysInStep ?? "—"}
                         {late && <span className="ms-1 text-xs">(תקוע)</span>}
@@ -130,7 +147,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
           <ul className="space-y-3 md:hidden" aria-label="בקשות">
             {rows.map((r) => {
               const [label, tone] = REQUEST_STATUS_LABEL[r.status];
-              const late = (r.daysInStep ?? 0) > STUCK_DAYS;
+              const late = isStuck(r);
               const open = r.status === "in_progress" || r.status === "returned";
               return (
                 <li key={r.id}>
@@ -144,7 +161,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
                     </div>
                     <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                       <dt className="text-muted-foreground">ממתין ל</dt>
-                      <dd>{waiting(r)}</dd>
+                      <dd>{route(r)}</dd>
                       <dt className="text-muted-foreground">ימים בשלב</dt>
                       <dd className={late ? "font-semibold text-destructive" : ""}>{r.daysInStep ?? "—"}{late && " (תקוע)"}</dd>
                       <dt className="text-muted-foreground">בתוקף עד</dt>
