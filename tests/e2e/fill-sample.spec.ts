@@ -33,14 +33,18 @@ test("fills the sample form end to end on mobile", async ({ page }) => {
   await page.getByLabel("רווק/ה").check();
   await expect(page.getByLabel("שם בן/בת הזוג")).toHaveCount(0);
 
-  // Repeating table appears for "yes", seeded with the minimum row.
+  // Repeating table appears for "yes" with its required row; typing in it opens the next (optional) row
+  // and clearing it closes that row again. No "add row" button with auto rows.
   const yesNo = page.getByRole("radiogroup").filter({ hasText: "כן" }).filter({ hasText: "לא" });
   await yesNo.getByLabel("כן", { exact: true }).check();
-  await expect(page.getByText("ילדים 1")).toBeVisible();
-  await page.getByRole("button", { name: "הוספת שורה" }).click();
-  await expect(page.getByText("ילדים 2")).toBeVisible();
-  await page.getByRole("button", { name: "מחיקת שורה 2" }).click();
-  await expect(page.getByText("ילדים 2")).toHaveCount(0);
+  await expect(page.getByText("שורה 1")).toBeVisible();
+  await expect(page.getByText("שורה 2")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "הוספת שורה" })).toHaveCount(0);
+  const childName = page.getByRole("textbox", { name: "שם", exact: true }).first();
+  await childName.fill("נועה");
+  await expect(page.getByText("שורה 2 · אפשר להשאיר ריק")).toBeVisible();
+  await childName.fill("");
+  await expect(page.getByText("שורה 2")).toHaveCount(0);
   await yesNo.getByLabel("לא", { exact: true }).check();
 
   await page.getByRole("button", { name: "הבא" }).click();

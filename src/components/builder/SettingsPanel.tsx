@@ -308,7 +308,16 @@ export function FieldSettings({
             <Row label="מינימום שורות"><NumberInput value={s.minRows} min={0} onChange={(n) => setS({ minRows: n ?? 0 })} /></Row>
             <Row label="מקסימום שורות"><NumberInput value={s.maxRows} min={1} onChange={(n) => setS({ maxRows: n })} /></Row>
           </div>
-          <Row label="טקסט כפתור ההוספה"><Input value={String(s.addLabel ?? "")} onChange={(e) => setS({ addLabel: e.target.value })} /></Row>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={s.autoRows !== false} onCheckedChange={(c) => setS({ autoRows: c ? undefined : false })} label="שורה חדשה נפתחת כשמתחילים למלא" />
+            שורה חדשה נפתחת כשמתחילים למלא (שורה ריקה בסוף לא נשמרת)
+          </label>
+          <Row label="שם לשורה" hint='בנייד כל שורה היא כרטיס: "ילד 1", "ילד 2"'>
+            <Input value={String(s.rowLabel ?? "")} placeholder="שורה" onChange={(e) => setS({ rowLabel: e.target.value || undefined })} />
+          </Row>
+          {s.autoRows === false && (
+            <Row label="טקסט כפתור ההוספה"><Input value={String(s.addLabel ?? "")} onChange={(e) => setS({ addLabel: e.target.value })} /></Row>
+          )}
           <TableColumns columns={field.fields ?? []} onChange={(fields) => onPatch({ fields })} />
         </Section>
       )}
