@@ -352,3 +352,15 @@ describe("typed blanks in one text run", () => {
     expect(typedLines(run(str)).labels.map((l) => l.str)).toEqual(["אני מצהיר כי עבדתי ימים בשנת המס הקודמת אצל המעסיק הזה"]);
   });
 });
+
+describe("typed blanks as their own text items", () => {
+  const it_ = (str: string, x: number, width: number) => ({ str, x, y: 678, width, height: 12 });
+  it("a blank is its own label, at its exact place, and the line still reads right to left", () => {
+    const labels = groupLabels(0, [it_("1", 500, 7), it_(".", 496, 4), it_("זהות המעביד:", 422, 71), it_("_________________", 295, 123), it_(".", 291, 4)]);
+    expect(labels.map((l) => [l.str, Math.round(l.x)])).toEqual([["1 . זהות המעביד:", 422], ["_________________", 295], [".", 291]]);
+  });
+  it("blanks next to each other are one", () => {
+    const labels = groupLabels(0, [it_("שם:", 420, 20), it_("________", 330, 80), it_("___", 300, 28)]);
+    expect(labels.map((l) => l.str)).toEqual(["שם:", "___________"]);
+  });
+});

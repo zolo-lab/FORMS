@@ -46,9 +46,9 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 /** Drop numbering, trailing colons, asterisks and underscores: "3. שם פרטי:*" → "שם פרטי". */
 export function cleanLabel(s: string, keepLong = false): string {
   const t = s
-    .replace(/^\s*(?:\d{1,2}|[א-ת])\s*[.)]\s+/, "")
+    .replace(/^\s*(?:(?:\d{1,2}|[א-ת])\s*[.)]\s+)+/, "")
     .replace(/[\s:：*_.\-–]+$/g, "")
-    .replace(/^[\s:：*_)(\]\[}{]+/g, "")
+    .replace(/^[\s:：*_.\-–)(\]\[}{]+/g, "")
     .replace(/[\s/]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -77,13 +77,15 @@ const has = (n: string, words: string[]) => words.some((w) => n.includes(normali
 export function typeFromLabel(label: string): FieldType {
   const n = normalizeText(label);
   if (has(n, ["דרכון", "passport"])) return "short_text";
-  if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"]) || n.split(" ").includes("id")) return "id_number";
+  // "זהות" alone is an identity ("זהות המעביד" = who the employer is); the ID number is "מספר/תעודת זהות", "ת.ז.".
+  const words = n.split(" ");
+  if (has(n, ["מספר זהות", "תעודת זהות", "מס זהות", "idnumber", "zehut", "teudat"]) || words.includes("תז") || words.includes("id") || n === normalizeText("זהות")) return "id_number";
   if (has(n, ["חתימה", "חתימת", "חתום", "signature"])) return "signature";
   if (has(n, ["תאריך", "מתאריך", "עד תאריך", "date"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
   if (has(n, ["טלפון", "נייד", "סלולרי", "פקס", "phone", "mobile", "tel"])) return "phone";
   if (has(n, ["סכום", "שכר"]) || n.split(" ").includes("שח") || label.includes("₪")) return "currency";
-  if (has(n, ["כמות", "גיל", "מספר", "מיקוד"])) return "number";
+  if (has(n, ["כמות", "גיל", "מספר", "מיקוד", "סניף", "מס חשבון"])) return "number";
   return "short_text";
 }
 
@@ -147,6 +149,15 @@ function evenCells(b: Rect, vlines: Border[]): number | null {
   return edges.every((x, i) => Math.abs(x - (b.x + i * step)) <= 1.5) ? edges.length - 1 : null;
 }
 
+/** A line right under the baseline of a text and no wider than it: that text is underlined (emphasis). */
+function isUnderline(l: HLine, labels: PageLabel[]): boolean {
+  return labels.some((t) => {
+    const below = t.y - l.y;
+    if (below < -1 || below > 4 || l.x1 < t.x - 4 || l.x2 > t.x + t.width + 4) return false;
+    return /[A-Za-z֐-׿]/.test(t.str) && l.x2 - l.x1 >= 8;
+  });
+}
+
 function textAreas(page: GuessPage, skip: Set<HLine>): Area[] {
   const out: Area[] = [];
   const { combs } = page.shapes;
@@ -161,6 +172,7 @@ function textAreas(page: GuessPage, skip: Set<HLine>): Area[] {
   for (const l of lines) {
     const width = l.x2 - l.x1;
     if (width > page.width * 0.8) continue; // a page rule, not a place to write
+    if (isUnderline(l, page.labels)) continue; // underlined text, not a place to write
     out.push({ kind: "line", box: { x: l.x1, y: l.y + 1.5, width, height: DEFAULT_SIZE.text.height }, edge: { x: l.x1, y: l.y, width, height: 0 } });
   }
   return out;
@@ -495,7 +507,9 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     return choiceCells.some((c) => cx > c.x && cx < c.x + c.width && cy > c.y && cy < c.y + c.height);
   };
   const areas = textAreas(page, ruled).filter((a) => !inChoiceCell(a.box));
-  const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
+  // A numbered name with a blank right after it ("ב. תנאים נוספים: ______") is a field, not a section heading.
+  const blankBeside = (l: PageLabel) => areas.some((a) => a.kind === "line" && Math.abs(a.edge.y - l.y) <= 4 && a.edge.x + a.edge.width <= l.x + 3 && l.x - (a.edge.x + a.edge.width) <= 12);
+  const labels = page.labels.filter((l) => !claimed.has(l.id) && (!isHeading(l) || blankBeside(l)) && !isProse(l.str));
   // 3a. A name alone in a ruled cell with room beside it (a grid of small titles, Form 101 part ב "רחוב/שכונה |
   // מספר | עיר/ישוב | מיקוד"): the answer goes in that room, inside the cell, never across its lines.
   const cells = cellFields(page, labels, bs, areas);
@@ -596,6 +610,29 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   // 5. A page with only names and nothing drawn to write on ("שם העובד", "אישור מזכירה"…): each short name gets a
   //    place to its left, on its own row, up to the next text or the page margin.
   if (!out.length) out.push(...labelOnlyFields(page, labels.filter((l) => !claimed.has(l.id))));
+  // 5b. "חתימת העובד/ת" alone with nothing drawn: the signature goes in the free room above the caption.
+  if (out.length) for (const l of labels) {
+    if (usedLabels.has(l.id) || claimed.has(l.id)) continue;
+    const text = cleanLabel(l.str);
+    if (!text || text.split(" ").length > 3 || typeFromLabel(text) !== "signature") continue;
+    const w = Math.min(130, l.width + 30); // as wide as its caption, so captions side by side keep apart
+    const box = { x: l.x + l.width / 2 - w / 2, y: l.y + l.height + 2, width: w, height: DEFAULT_SIZE.signature.height };
+    const crowded = page.labels.some((o) => o !== l && o.x < box.x + box.width && o.x + o.width > box.x && o.y < box.y + box.height + 4 && o.y + o.height > box.y);
+    if (crowded || out.some((f) => f.page === page.index && f.box.x < box.x + box.width && f.box.x + f.box.width > box.x && f.box.y < box.y + box.height && f.box.y + f.box.height > box.y)) continue;
+    usedLabels.add(l.id);
+    out.push({ label: text, type: "signature", page: page.index, box: { x: round1(box.x), y: round1(box.y), width: box.width, height: box.height } });
+  }
+  // 6. A page whose words cannot be read (drawn as shapes, or scanned) but that has lines to write on: each line is
+  //    a field with no name yet, for the admin to name.
+  const readable = page.labels.filter((l) => /[A-Za-z֐-׿]{2,}/.test(l.str) && !/powered by/i.test(l.str)).length;
+  if (readable === 0) {
+    let n = 0;
+    for (const a of inReadingOrder(areas.filter((a) => a.kind !== "box" || a.box.height < 60).map((a) => ({ a, page: page.index, box: a.box })))) {
+      if (usedAreas.has(a.a)) continue;
+      n++;
+      out.push({ label: `שדה ${n}`, type: "short_text", page: page.index, box: { x: round1(a.box.x), y: round1(a.box.y), width: round1(Math.min(a.box.width, 260)), height: round1(a.box.height) }, ...(a.a.kind === "comb" ? { comb: a.a.cells } : {}) });
+    }
+  }
   return out;
 }
 

@@ -10,6 +10,8 @@ export interface TextItem {
 export interface PageLabel extends TextItem { id: string; page: number }
 
 const HEBREW = /[֐-׿]/;
+/** A text item that is only a typed blank to write on: underscores, a row of dots or ellipses. */
+const isBlank = (i: { str: string }) => /^\s*(?:[_]{3,}|[.]{6,}|[…]{3,})\s*$/.test(i.str);
 
 /** pdf.js text items → boxes. Whitespace-only items are dropped. */
 export function textItems(items: { str?: string; transform?: number[]; width?: number; height?: number }[]): TextItem[] {
@@ -32,7 +34,9 @@ export function groupLabels(page: number, items: TextItem[]): PageLabel[] {
   }
   const labels: PageLabel[] = [];
   for (const line of lines) {
-    const rtl = line.filter((i) => HEBREW.test(i.str)).length * 2 >= line.length;
+    // The line's direction comes from its words: blanks, dots and numbers carry none ("1. שם: ______ .").
+    const worded = line.filter((i) => /[A-Za-z֐-׿]/.test(i.str));
+    const rtl = worded.filter((i) => HEBREW.test(i.str)).length * 2 >= Math.max(1, worded.length);
     const sorted = [...line].sort((a, b) => (rtl ? b.x - a.x : a.x - b.x));
     let cur: TextItem[] = [];
     const flush = () => {
@@ -42,7 +46,7 @@ export function groupLabels(page: number, items: TextItem[]): PageLabel[] {
       labels.push({
         id: `p${page}_l${labels.length}`,
         page,
-        str: cur.map((i) => i.str.trim()).join(" "),
+        str: cur.map((i) => i.str.trim()).join(isBlank(cur[0]!) ? "" : " "),
         x,
         y: Math.min(...cur.map((i) => i.y)),
         width: right - x,
@@ -54,7 +58,9 @@ export function groupLabels(page: number, items: TextItem[]): PageLabel[] {
       const prev = cur[cur.length - 1];
       if (prev) {
         const gap = rtl ? prev.x - (it.x + it.width) : it.x - (prev.x + prev.width);
-        if (it.solo || prev.solo || gap > Math.max(prev.height, it.height) * 0.9) flush();
+        // A typed blank ("______") is its own piece, so its place is exact rather than guessed from its characters;
+        // blanks next to each other stay one.
+        if (it.solo || prev.solo || isBlank(it) !== isBlank(prev) || gap > Math.max(prev.height, it.height) * 0.9) flush();
       }
       cur.push(it);
     }
