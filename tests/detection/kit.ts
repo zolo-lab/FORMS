@@ -296,6 +296,72 @@ export class FormDraw {
     this.line(x - 60, x + 14, y - 2);
   }
 
+  /** Questions side by side with no rules at all: a title over each column, options in up to two rows under it. */
+  alignedQuestions(cells: { title: string; options: string[][] }[], right: number, y: number, widths: number[]) {
+    let x = right;
+    cells.forEach((c, i) => {
+      this.text(c.title, x - 2, y + 4);
+      c.options.forEach((row, r) => {
+        let ox = x - 2;
+        const yy = y - 10 - r * 13;
+        for (const o of row) {
+          this.square(ox - SQ, yy - 1);
+          ox = this.text(o, ox - SQ - 3, yy) - 10;
+        }
+      });
+      x -= widths[i]!;
+      const flat = c.options.flat();
+      const yesNo = flat.length === 2 && flat.includes("כן") && flat.includes("לא");
+      this.expected.push({ label: c.title, type: yesNo ? "yes_no" : "radio", page: this.pageIndex, options: flat });
+    });
+  }
+  /** An English (left to right) label with its line to the right: "Email ________". */
+  underlineLtr(label: string, type: FieldType, left: number, y: number, lineWidth = 160): number {
+    const w = measureHebrew(label, this.font, 10) + 1;
+    drawHebrew(this.page, label, { x: left, y, width: w + 2, size: 10, font: this.font, align: "left" });
+    const x1 = left + w + 4;
+    this.line(x1, x1 + lineWidth, y - 2);
+    this.expected.push({ label, type, page: this.pageIndex, area: { x: x1, y: y - 2, width: lineWidth, height: 14 } });
+    return x1 + lineWidth;
+  }
+  /** A ruled grid whose cell titles run over two lines ("מספר תיק / ניכויים"). */
+  gridTwoLineTitles(cells: { title: [string, string]; label: string; type: FieldType }[], right: number, y: number, widths: number[], height = 40) {
+    const total = widths.reduce((a, b) => a + b, 0);
+    this.rect(right - total, y, total, height);
+    let x = right;
+    cells.forEach((c, i) => {
+      this.text(c.title[0], x - 4, y + height - 10, 8);
+      this.text(c.title[1], x - 4, y + height - 19, 8);
+      const w = widths[i]!;
+      x -= w;
+      if (i < cells.length - 1) this.vline(x, y, y + height);
+      this.expected.push({ label: c.label, type: c.type, page: this.pageIndex, area: { x, y, width: w, height: height - 22 } });
+    });
+  }
+  /** The question on its own line, its options on the line under it (indented). */
+  optionsBelow(question: string, options: string[], right: number, y: number, type: FieldType = "radio") {
+    this.text(question, right, y);
+    let x = right - 14;
+    for (const o of options) {
+      this.square(x - SQ, y - 17);
+      x = this.text(o, x - SQ - 4, y - 16) - 18;
+    }
+    this.expected.push({ label: question, type, page: this.pageIndex, options });
+  }
+  /** Several digit-cell runs on one row: "מספר בנק [][]  מספר סניף [][][]  מספר חשבון [][][][][][]". */
+  combsRow(items: { label: string; cells: number; type: FieldType }[], right: number, y: number, cell = 13) {
+    let r = right;
+    for (const it of items) {
+      const left = this.text(it.label, r, y + 4);
+      const x2 = left - 5;
+      const x1 = x2 - it.cells * cell;
+      this.rect(x1, y, it.cells * cell, 16);
+      for (let i = 1; i < it.cells; i++) this.vline(x1 + i * cell, y, y + 16);
+      this.expected.push({ label: it.label, type: it.type, page: this.pageIndex, area: { x: x1, y, width: it.cells * cell, height: 16 } });
+      r = x1 - 16;
+    }
+  }
+
   async build(name: string, pattern: string): Promise<TestForm> {
     return { name, pattern, bytes: await this.doc.save(), expected: this.expected, notFields: this.notFields };
   }

@@ -213,6 +213,73 @@ export const CASES: Record<string, Case> = {
     return f.build("dateCells", "תאריך בתאים");
   },
 
+  async alignedNoWalls() {
+    const f = await FormDraw.create();
+    f.alignedQuestions(
+      [
+        { title: "מין", options: [["זכר"], ["נקבה"]] },
+        { title: "מצב משפחתי", options: [["רווק/ה", "נשוי/אה", "גרוש/ה"], ["אלמן/ה", "פרוד/ה"]] },
+        { title: "תושב ישראל", options: [["כן"], ["לא"]] },
+      ],
+      R, 760, [60, 210, 80],
+    );
+    return f.build("alignedNoWalls", "שאלות זו לצד זו בלי קווים (101 חלק ב' בלי טבלה)");
+  },
+
+  async englishLtr() {
+    const f = await FormDraw.create();
+    f.underlineLtr("Full name", "short_text", 50, 760);
+    f.underlineLtr("Email", "email", 50, 735);
+    f.underlineLtr("Phone", "phone", 50, 710);
+    return f.build("englishLtr", "טופס באנגלית: תווית משמאל, קו מימין");
+  },
+
+  async twoLineTitles() {
+    const f = await FormDraw.create();
+    f.gridTwoLineTitles(
+      [
+        { title: ["מספר תיק", "ניכויים"], label: "מספר תיק", type: "number" },
+        { title: ["שם", "המעסיק"], label: "שם", type: "short_text" },
+        { title: ["טלפון", "המעסיק"], label: "טלפון", type: "phone" },
+      ],
+      R, 730, [120, 160, 110],
+    );
+    return f.build("twoLineTitles", "כותרת תא בשתי שורות");
+  },
+
+  async optionsBelow() {
+    const f = await FormDraw.create();
+    f.optionsBelow("האם יש לך הכנסה נוספת", ["כן", "לא"], R, 760, "yes_no");
+    f.optionsBelow("סוג ההכנסה הנוספת", ["משכורת", "קצבה", "מלגה"], R, 715);
+    return f.build("optionsBelow", "שאלה בשורה, אפשרויות בשורה מתחת");
+  },
+
+  async bankCombs() {
+    const f = await FormDraw.create();
+    f.combsRow(
+      [
+        { label: "בנק", cells: 2, type: "number" },
+        { label: "סניף", cells: 3, type: "number" },
+        { label: "מספר חשבון", cells: 9, type: "number" },
+      ],
+      R, 760,
+    );
+    return f.build("bankCombs", "כמה שורות תאים באותה שורה (פרטי בנק)");
+  },
+
+  async residency() {
+    const f = await FormDraw.create();
+    f.heading("הצהרת תושבות", R, 805);
+    f.note("יש לצרף אישור תושבות מהרשות המקומית", R, 785);
+    f.gridCells([{ title: "שם משפחה", type: "short_text" }, { title: "שם פרטי", type: "short_text" }, { title: "מספר זהות", type: "id_number" }], R, 735, [140, 140, 120]);
+    f.alignedQuestions([{ title: "מין", options: [["זכר"], ["נקבה"]] }, { title: "תושב ישראל", options: [["כן"], ["לא"]] }], R, 690, [70, 90]);
+    f.underline("שם הישוב", "short_text", R, 640);
+    f.typedLine("תאריך תחילת מגורים", "date", R, 615, 16);
+    f.consent("אני מצהיר/ה כי מרכז חיי בישוב זה", R, 590);
+    f.signature("חתימת המצהיר/ה", R, 555);
+    return f.build("residency", "טופס משולב: הצהרת תושבות");
+  },
+
   async employment() {
     const f = await FormDraw.create();
     f.heading("טופס פרטי עובד", R, 805);

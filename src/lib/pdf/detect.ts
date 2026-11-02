@@ -69,6 +69,8 @@ export function cleanLabel(s: string, keepLong = false): string {
 const isHeading = (l: { str: string; height: number }) => /^\s*[א-ת]\s*[.)]\s/.test(l.str) && (l.str.length > 22 || (l.str.length > 12 && l.height >= 11.5));
 const isProse = (str: string) => str.trim().split(/\s+/).length > 12 || /סמן/.test(str);
 
+/** Latin text with no Hebrew letters: it reads left to right, so its place to write is on its right. */
+const isLtr = (str: string) => /[A-Za-z]/.test(str) && !/[\u0590-\u05FF]/.test(str);
 const has = (n: string, words: string[]) => words.some((w) => n.includes(normalizeText(w)));
 
 /** The type for text typed in a box/line, from its label. */
@@ -76,10 +78,10 @@ export function typeFromLabel(label: string): FieldType {
   const n = normalizeText(label);
   if (has(n, ["דרכון", "passport"])) return "short_text";
   if (has(n, ["זהות", "תז", "idnumber", "zehut", "teudat"])) return "id_number";
-  if (has(n, ["חתימה", "חתימת", "חתום"])) return "signature";
-  if (has(n, ["תאריך", "מתאריך", "עד תאריך"])) return "date";
+  if (has(n, ["חתימה", "חתימת", "חתום", "signature"])) return "signature";
+  if (has(n, ["תאריך", "מתאריך", "עד תאריך", "date"])) return "date";
   if (has(n, ["מייל", "דואל", "אימייל", "אלקטרוני", "email"])) return "email";
-  if (has(n, ["טלפון", "נייד", "סלולרי", "פקס"])) return "phone";
+  if (has(n, ["טלפון", "נייד", "סלולרי", "פקס", "phone", "mobile", "tel"])) return "phone";
   if (has(n, ["סכום", "שכר"]) || n.split(" ").includes("שח") || label.includes("₪")) return "currency";
   if (has(n, ["כמות", "גיל", "מספר", "מיקוד"])) return "number";
   return "short_text";
@@ -128,13 +130,34 @@ interface Pair { area: Area; label: PageLabel; cost: number }
 const labelsInside = (b: Rect, labels: PageLabel[]) =>
   labels.filter((l) => l.x + l.width / 2 >= b.x && l.x + l.width / 2 <= b.x + b.width && l.y + l.height / 2 >= b.y && l.y + l.height / 2 <= b.y + b.height);
 
+/**
+ * A rectangle cut by full-height dividers into equal cells is a row of digit cells (drawn as one frame plus
+ * dividers rather than as touching boxes): the number of cells, or null when it is not one.
+ */
+function evenCells(b: Rect, vlines: Border[]): number | null {
+  if (b.height < 8 || b.height > 30) return null;
+  const xs = vlines
+    .filter((v) => v.x > b.x + 2 && v.x < b.x + b.width - 2 && v.y1 <= b.y + 2 && v.y2 >= b.y + b.height - 2)
+    .map((v) => v.x)
+    .sort((a, c) => a - c);
+  if (!xs.length) return null;
+  const edges = [b.x, ...xs, b.x + b.width];
+  const step = b.width / (edges.length - 1);
+  if (step > b.height * 1.5) return null;
+  return edges.every((x, i) => Math.abs(x - (b.x + i * step)) <= 1.5) ? edges.length - 1 : null;
+}
+
 function textAreas(page: GuessPage, skip: Set<HLine>): Area[] {
   const out: Area[] = [];
   const { combs } = page.shapes;
   const lines = page.shapes.lines.filter((l) => !skip.has(l));
   const boxes = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length < 2);
   for (const c of combs) out.push({ kind: "comb", box: c, cells: c.cells, edge: c });
-  for (const b of boxes) out.push({ kind: "box", box: { x: b.x + 1, y: b.y + 1, width: Math.max(2, b.width - 2), height: Math.max(2, b.height - 2) }, edge: b });
+  for (const b of boxes) {
+    const cells = evenCells(b, page.shapes.vlines ?? []);
+    if (cells) out.push({ kind: "comb", box: b, cells, edge: b });
+    else out.push({ kind: "box", box: { x: b.x + 1, y: b.y + 1, width: Math.max(2, b.width - 2), height: Math.max(2, b.height - 2) }, edge: b });
+  }
   for (const l of lines) {
     const width = l.x2 - l.x1;
     if (width > page.width * 0.8) continue; // a page rule, not a place to write
@@ -159,6 +182,8 @@ function costOf(area: Area, label: PageLabel): number | null {
   }
   // line
   if (Math.abs(e.y - label.y) <= Math.max(8, label.height) && right <= label.x + 3) return label.x - right + Math.abs(e.y - label.y) * 2;
+  // Text written left to right (English) reads label first, then the line on its right.
+  if (isLtr(label.str) && Math.abs(e.y - label.y) <= Math.max(8, label.height) && e.x >= label.x + label.width - 3) return e.x - (label.x + label.width) + Math.abs(e.y - label.y) * 2;
   if (e.y < label.y - 2 && label.y - e.y <= 28 && overlapsX(e.x, right, label)) return 60 + (label.y - e.y) * 2;
   // The name printed under the line ("חתימת המבקש/ת" under a signature line).
   if (e.y >= label.y && e.y - label.y <= 14 && overlapsX(e.x, right, label)) return 40 + (e.y - label.y);
@@ -170,15 +195,16 @@ interface Box { cb: Rect; label?: PageLabel }
 /** The text beside a checkbox: on its left (Hebrew puts the square first), else on its right. */
 function optionLabel(cb: Rect, labels: PageLabel[], taken: Set<string>): PageLabel | undefined {
   const cy = cb.y + cb.height / 2;
+  // The nearest text on either side; Hebrew puts the square first (text on its left), so the left wins near-ties.
   let best: { l: PageLabel; gap: number } | undefined;
   for (const side of ["left", "right"] as const) {
     for (const l of labels) {
       if (taken.has(l.id) || Math.abs(l.y + l.height * 0.35 - cy) > 8) continue;
-      const gap = side === "left" ? cb.x - (l.x + l.width) : l.x - (cb.x + cb.width);
-      if (gap < -3 || gap > 40) continue;
+      const raw = side === "left" ? cb.x - (l.x + l.width) : l.x - (cb.x + cb.width);
+      if (raw < -3 || raw > 40) continue;
+      const gap = side === "left" ? raw : raw + 4;
       if (!best || gap < best.gap) best = { l, gap };
     }
-    if (best) break;
   }
   return best?.l;
 }
@@ -205,7 +231,7 @@ function cellKey(bs: Border[], cb: Rect): string {
  * In a ruled table a row of squares is cut at every wall, and squares in one cell on consecutive rows are one
  * question (Form 101 part ב: "מין" זכר/נקבה, "מצב משפחתי" in two rows, "תושב ישראל" כן/לא side by side).
  */
-function checkGroups(boxes: Box[], bs: Border[] = []): Box[][] {
+function checkGroups(boxes: Box[], bs: Border[] = [], rules: HLine[] = []): Box[][] {
   const used = new Set<Box>();
   const groups: Box[][] = [];
   const byRow = [...boxes].sort((a, b) => b.cb.y - a.cb.y || b.cb.x - a.cb.x);
@@ -233,11 +259,11 @@ function checkGroups(boxes: Box[], bs: Border[] = []): Box[][] {
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
   }
   for (const b of boxes) if (!used.has(b)) groups.push([b]);
-  return bs.length ? mergeCells(groups, bs) : groups;
+  return bs.length ? mergeCells(groups, bs, rules) : groups;
 }
 
 /** Groups (single squares included) that sit in the same walled cell, one under the other, are one question. */
-function mergeCells(groups: Box[][], bs: Border[]): Box[][] {
+function mergeCells(groups: Box[][], bs: Border[], rules: HLine[] = []): Box[][] {
   const keyOf = (g: Box[]) => {
     const keys = new Set(g.map((b) => cellKey(bs, b.cb)));
     const k = keys.size === 1 ? [...keys][0]! : "";
@@ -256,8 +282,10 @@ function mergeCells(groups: Box[][], bs: Border[]): Box[][] {
     if (k) {
       for (const o of sorted) {
         if (taken.has(o) || keyOf(o) !== k) continue;
-        // The next row down in the same cell, close under the last one.
+        // The next row down in the same cell, close under the last one, with no rule across the cell between them.
         if (bottom(merged) - top(o) > 20 || top(o) > bottom(merged) + 1) continue;
+        const [lo, hi] = k.split("|").map(Number) as [number, number];
+        if (rules.some((r) => r.x1 <= lo + 2 && r.x2 >= hi - 2 && r.y < bottom(merged) && r.y > top(o))) continue;
         taken.add(o);
         merged = [...merged, ...o];
       }
@@ -317,6 +345,62 @@ function joinLongOptions(groups: Box[][], bs: Border[], isOption: (b: Box) => bo
   return replaced.size ? [...groups.filter((g) => !replaced.has(g)), ...added] : groups;
 }
 
+/**
+ * Questions side by side with no walls between them (Form 101 part ב printed without its vertical rules): two rows
+ * of squares under one row of titles, where each question starts both its rows at the same x. Those shared starts
+ * cut the rows into columns; when there are as many titles above as columns, each column is one question named by
+ * its title, right to left. Anything less certain is left as it was.
+ */
+function splitAlignedColumns(groups: Box[][], bs: Border[], labels: PageLabel[], claimed: Set<string>): { groups: Box[][]; titles: Map<Box[], PageLabel> } {
+  const titles = new Map<Box[], PageLabel>();
+  // A row is every unwalled one-line group of squares at one height (the row chain may have cut it in pieces).
+  const flat = (g: Box[]) => g.every((b) => Math.abs(b.cb.y - g[0]!.cb.y) <= 3) && !groupCell(bs, g);
+  const lines: { y: number; parts: Box[][] }[] = [];
+  for (const g of groups.filter(flat)) {
+    const line = lines.find((l) => Math.abs(l.y - g[0]!.cb.y) <= 3);
+    if (line) line.parts.push(g);
+    else lines.push({ y: g[0]!.cb.y, parts: [g] });
+  }
+  lines.sort((a, b) => b.y - a.y);
+  const replaced = new Set<Box[]>();
+  const added: Box[][] = [];
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (lines[i]!.parts.some((g) => replaced.has(g)) || lines[i + 1]!.parts.some((g) => replaced.has(g))) continue;
+    const r1 = lines[i]!.parts.flat();
+    const r2 = lines[i + 1]!.parts.flat();
+    if (r1.length < 2 || r2.length < 2) continue;
+    const gap = r1[0]!.cb.y - (r2[0]!.cb.y + r2[0]!.cb.height);
+    if (gap < 0 || gap > 12) continue;
+    const xs1 = [...r1].sort((a, b) => b.cb.x - a.cb.x);
+    const xs2 = [...r2].sort((a, b) => b.cb.x - a.cb.x);
+    const starts = xs1.filter((b) => xs2.some((o) => Math.abs(o.cb.x - b.cb.x) <= 2)).map((b) => b.cb.x);
+    if (starts.length < 2 || Math.abs(starts[0]! - xs1[0]!.cb.x) > 2 || Math.abs(starts[0]! - xs2[0]!.cb.x) > 2) continue;
+    // A start must open a column in both rows: nothing of the other row sits between it and the previous start.
+    const top = r1[0]!.cb.y + r1[0]!.cb.height;
+    const left = Math.min(...xs1.map((b) => b.cb.x), ...xs2.map((b) => b.cb.x));
+    const right = Math.max(...xs1.map((b) => b.cb.x + b.cb.width));
+    const heads = labels
+      .filter((l) => !claimed.has(l.id) && !isHeading(l) && l.y > top - 1 && l.y - top <= 20 && l.x + l.width > left - 30 && l.x < right + 10 && cleanLabel(l.str).split(" ").length <= 3)
+      .sort((a, b) => b.x - a.x);
+    if (heads.length !== starts.length || heads.some((h) => Math.abs(h.y - heads[0]!.y) > 3)) continue;
+    const column = (b: Box) => starts.findIndex((s, k) => b.cb.x <= s + 2 && (k === starts.length - 1 || b.cb.x > starts[k + 1]! + 2));
+    const cols = starts.map(() => [] as Box[]);
+    for (const b of [...xs1, ...xs2]) {
+      const k = column(b);
+      if (k < 0) { cols.length = 0; break; }
+      cols[k]!.push(b);
+    }
+    if (!cols.length || cols.some((c) => !c.length)) continue;
+    for (const g of [...lines[i]!.parts, ...lines[i + 1]!.parts]) replaced.add(g);
+    cols.forEach((c, k) => {
+      const g = c.sort((a, b) => (Math.abs(a.cb.y - b.cb.y) <= 3 ? b.cb.x - a.cb.x : b.cb.y - a.cb.y));
+      added.push(g);
+      titles.set(g, heads[k]!);
+    });
+  }
+  return { groups: replaced.size ? [...groups.filter((g) => !replaced.has(g)), ...added] : groups, titles };
+}
+
 /** The walls of a group's cell, when every square of it sits in one walled cell. */
 function groupCell(bs: Border[], group: Box[]): { lo: number; hi: number } | null {
   let cell: { lo: number; hi: number } | null = null;
@@ -351,7 +435,8 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   const walls = borders(page);
   /** Cells taken by a question of squares: no place to write is looked for inside them. */
   const choiceCells: Rect[] = [];
-  const grouped = joinLongOptions([...checkGroups(labelled.filter(isOption), walls), ...labelled.filter((b) => !isOption(b)).map((b) => [b])], walls, isOption);
+  const joined = joinLongOptions([...checkGroups(labelled.filter(isOption), walls, page.shapes.lines), ...labelled.filter((b) => !isOption(b)).map((b) => [b])], walls, isOption);
+  const { groups: grouped, titles: alignedTitles } = splitAlignedColumns(joined, walls, page.labels, claimed);
   for (const group of grouped) {
     const rightmost = group[0]!;
     if (group.length === 1) {
@@ -368,7 +453,9 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     let question: PageLabel | undefined;
     let bestGap = Infinity;
     const cell = groupCell(walls, group);
-    if (cell) {
+    const preset = alignedTitles.get(group);
+    if (preset && !claimed.has(preset.id)) question = preset;
+    if (!question && cell) {
       const bottomY = Math.min(...group.map((g) => g.cb.y));
       choiceCells.push({ x: cell.lo, y: bottomY - 3, width: cell.hi - cell.lo, height: top - bottomY + 20 });
       for (const l of page.labels) {
@@ -378,7 +465,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
       }
     }
     if (!question) for (const l of page.labels) {
-      if (claimed.has(l.id)) continue;
+      if (claimed.has(l.id) || isHeading(l)) continue;
       const sameRow = Math.abs(l.y + l.height * 0.35 - (rightmost.cb.y + rightmost.cb.height / 2)) <= 8;
       const gap = sameRow ? l.x - right : top < l.y && l.y - top <= 30 && overlapsX(left - 12, right + 12, l) ? 60 + (l.y - top) : Infinity;
       if (gap >= -3 && gap <= 120 && gap < bestGap) { question = l; bestGap = gap; }
@@ -432,7 +519,14 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     usedLabels.add(label.id);
     const text = cleanLabel(label.str);
     if (!text) continue;
-    let type = area.kind === "comb" && area.cells === 9 ? "id_number" : typeFromLabel(text);
+    let type: FieldType = typeFromLabel(text);
+    // Printed digit cells: bank details are a number; otherwise nine cells are an ID, and a run too short for a word
+    // is a number, unless the name already says what it is.
+    if (area.kind === "comb" && (type === "short_text" || type === "number")) {
+      if (has(normalizeText(text), ["בנק", "סניף", "חשבון"])) type = "number";
+      else if (area.cells === 9) type = "id_number";
+      else if ((area.cells ?? 0) <= 4) type = "number";
+    }
     let box = area.box;
     if (type === "signature") box = { ...box, width: Math.min(box.width, 200), height: DEFAULT_SIZE.signature.height };
     else if (area.kind === "box" && box.height >= 30 && type === "short_text") type = "long_text";
@@ -460,6 +554,18 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
       .filter((f) => cx >= f.x && cx <= f.x + f.width && label.y >= f.y && label.y + label.height * 0.5 <= f.y + f.height)
       .sort((a, b) => a.width * a.height - b.width * b.height)[0];
     if (!frame) continue;
+    // A title printed over two lines ("מספר תיק" / "ניכויים"): the lines just under it, aligned to its right edge,
+    // are the rest of the name, and the room to write starts under the last of them.
+    const rest: PageLabel[] = [];
+    for (let last = label; ; ) {
+      const next = labels.find((o) => !usedLabels.has(o.id) && !claimed.has(o.id) && o !== label && !rest.includes(o)
+        && Math.abs(o.x + o.width - (last.x + last.width)) <= 3 && o.y < last.y && last.y - o.y <= last.height * 1.4
+        && cleanLabel(o.str).split(" ").length <= 3);
+      if (!next) break;
+      rest.push(next);
+      last = next;
+    }
+    const base = rest.length ? rest[rest.length - 1]! : label;
     const right = label.x + label.width;
     const leftNeighbour = labels
       .filter((o) => o !== label && Math.abs(o.y - label.y) <= 3 && o.x + o.width <= label.x + 2)
@@ -470,8 +576,8 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     const x = Math.max(frame.x + 2, leftNeighbour + 4, cellLo !== null ? cellLo + 2 : 0);
     const rightEdge = cellHi !== null ? Math.min(right, cellHi - 2) : right;
     const width = Math.min(260, Math.max(cellHi !== null || cellLo !== null ? 30 : 50, rightEdge - x));
-    const y = Math.max(frame.y + 1, label.y - 20);
-    const height = Math.min(DEFAULT_SIZE.text.height, label.y - 2 - y);
+    const y = Math.max(frame.y + 1, base.y - 20);
+    const height = Math.min(DEFAULT_SIZE.text.height, base.y - 2 - y);
     if (height < 10) continue;
     // Over cells already read from a ruled grid: the name is the caption of that group ("כתובת פרטית"), not a field.
     const below = { x, y, width, height };
@@ -483,6 +589,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     });
     if (overCells) continue;
     usedLabels.add(label.id);
+    rest.forEach((o) => usedLabels.add(o.id));
     out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(x), y: round1(y), width: round1(width), height: round1(height) } });
   }
 
