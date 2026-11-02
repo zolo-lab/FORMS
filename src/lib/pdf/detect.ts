@@ -268,6 +268,55 @@ function mergeCells(groups: Box[][], bs: Border[]): Box[][] {
   return out;
 }
 
+/**
+ * Squares with long texts are statements of their own ("☐ אני תושב/ת…"), except when several share one walled cell
+ * as alternatives of its question: a short one among them ("☐ לא") or the same opening word ("☐ כן, …" / "☐ כן, …")
+ * (Form 101: "חבר קיבוץ/מושב שיתופי"). Those become one question.
+ */
+function joinLongOptions(groups: Box[][], bs: Border[], isOption: (b: Box) => boolean): Box[][] {
+  if (!bs.length) return groups;
+  const key = (g: Box[]) => {
+    const ks = new Set(g.map((b) => cellKey(bs, b.cb)));
+    const k = ks.size === 1 ? [...ks][0]! : "";
+    return k.includes("|") && !k.startsWith("-|") && !k.endsWith("|-") ? k : "";
+  };
+  const top = (g: Box[]) => Math.max(...g.map((b) => b.cb.y + b.cb.height));
+  const bottom = (g: Box[]) => Math.min(...g.map((b) => b.cb.y));
+  const firstWord = (b: Box) => normalizeText(cleanLabel(b.label!.str, true)).split(/[\s,.]+/)[0] ?? "";
+  const byCell = new Map<string, Box[][]>();
+  for (const g of groups) {
+    const k = key(g);
+    if (!k) continue;
+    byCell.set(k, [...(byCell.get(k) ?? []), g]);
+  }
+  const replaced = new Set<Box[]>();
+  const added: Box[][] = [];
+  for (const list of byCell.values()) {
+    if (list.length < 2 || !list.some((g) => g.some((b) => !isOption(b)))) continue;
+    const sorted = [...list].sort((a, b) => top(b) - top(a));
+    let run: Box[][] = [sorted[0]!];
+    const flush = () => {
+      const boxes = run.flat();
+      const longs = boxes.filter((b) => !isOption(b));
+      // Alternatives, not a statement with its own sub-choices: two or more long ones that open the same way
+      // ("כן, …" / "כן, …"), with only a yes/no word beside them ("לא").
+      const shorts = boxes.filter((b) => isOption(b)).map((b) => normalizeText(cleanLabel(b.label!.str)));
+      const yesNoWords = new Set(["כן", "לא", "אין"].map(normalizeText));
+      const alternatives = longs.length >= 2 && new Set(longs.map(firstWord)).size === 1 && shorts.every((w) => yesNoWords.has(w));
+      if (run.length >= 2 && alternatives) {
+        run.forEach((g) => replaced.add(g));
+        added.push(boxes.sort((a, b) => (Math.abs(a.cb.y - b.cb.y) <= 3 ? b.cb.x - a.cb.x : b.cb.y - a.cb.y)));
+      }
+    };
+    for (const g of sorted.slice(1)) {
+      if (bottom(run.flat()) - top(g) <= 20) run.push(g);
+      else { flush(); run = [g]; }
+    }
+    flush();
+  }
+  return replaced.size ? [...groups.filter((g) => !replaced.has(g)), ...added] : groups;
+}
+
 /** The walls of a group's cell, when every square of it sits in one walled cell. */
 function groupCell(bs: Border[], group: Box[]): { lo: number; hi: number } | null {
   let cell: { lo: number; hi: number } | null = null;
@@ -302,7 +351,8 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   const walls = borders(page);
   /** Cells taken by a question of squares: no place to write is looked for inside them. */
   const choiceCells: Rect[] = [];
-  for (const group of [...checkGroups(labelled.filter(isOption), walls), ...labelled.filter((b) => !isOption(b)).map((b) => [b])]) {
+  const grouped = joinLongOptions([...checkGroups(labelled.filter(isOption), walls), ...labelled.filter((b) => !isOption(b)).map((b) => [b])], walls, isOption);
+  for (const group of grouped) {
     const rightmost = group[0]!;
     if (group.length === 1) {
       const statement = cleanLabel(rightmost.label!.str, true);
@@ -359,8 +409,17 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   };
   const areas = textAreas(page, ruled).filter((a) => !inChoiceCell(a.box));
   const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
+  // 3a. A name alone in a ruled cell with room beside it (a grid of small titles, Form 101 part ב "רחוב/שכונה |
+  // מספר | עיר/ישוב | מיקוד"): the answer goes in that room, inside the cell, never across its lines.
+  const cells = cellFields(page, labels, bs, areas);
+  for (const c of cells) {
+    out.push(c.field);
+    claimed.add(c.label.id);
+  }
+  // A writing line that served those cells is theirs: it is not offered to another name (a caption above the row).
+  const cellTaken = (a: Area) => a.kind === "line" && cells.some((c) => Math.abs(c.field.box.y - a.edge.y) <= 1.5 && a.edge.x < c.field.box.x + c.field.box.width && a.edge.x + a.edge.width > c.field.box.x);
   const pairs: Pair[] = [];
-  for (const area of areas) for (const label of labels) {
+  for (const area of areas.filter((a) => !cellTaken(a))) for (const label of labels.filter((l) => !claimed.has(l.id))) {
     const cost = costOf(area, label);
     if (cost !== null) pairs.push({ area, label, cost });
   }
@@ -393,7 +452,7 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   //    cell, which ends where the next label to its left begins.
   const frames = page.shapes.boxes.filter((b) => labelsInside(b, page.labels).length >= 2);
   for (const label of labels) {
-    if (usedLabels.has(label.id)) continue;
+    if (usedLabels.has(label.id) || claimed.has(label.id)) continue;
     const text = cleanLabel(label.str);
     if (!text || text.length > 30 || text.split(" ").length > 4) continue;
     const cx = label.x + label.width / 2;
@@ -414,13 +473,77 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
     const y = Math.max(frame.y + 1, label.y - 20);
     const height = Math.min(DEFAULT_SIZE.text.height, label.y - 2 - y);
     if (height < 10) continue;
+    // Over cells already read from a ruled grid: the name is the caption of that group ("כתובת פרטית"), not a field.
+    const below = { x, y, width, height };
+    const overCells = cells.some((c) => {
+      const b = c.field.box;
+      const w = Math.min(below.x + below.width, b.x + b.width) - Math.max(below.x, b.x);
+      const h = Math.min(below.y + below.height, b.y + b.height) - Math.max(below.y, b.y);
+      return w > 0 && h > 0 && w * h > b.width * b.height * 0.3;
+    });
+    if (overCells) continue;
     usedLabels.add(label.id);
     out.push({ label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(x), y: round1(y), width: round1(width), height: round1(height) } });
   }
 
   // 5. A page with only names and nothing drawn to write on ("שם העובד", "אישור מזכירה"…): each short name gets a
   //    place to its left, on its own row, up to the next text or the page margin.
-  if (!out.length) out.push(...labelOnlyFields(page, labels));
+  if (!out.length) out.push(...labelOnlyFields(page, labels.filter((l) => !claimed.has(l.id))));
+  return out;
+}
+
+/**
+ * Names that sit alone in a closed ruled cell (lines above and below, walls on both sides) with room to write next to
+ * them in the same cell, and no line or box of their own inside it. The room is the larger free band above or below
+ * the name. Without such a cell nothing is proposed here and the usual pairing decides.
+ */
+function cellFields(page: GuessPage, labels: PageLabel[], bs: Border[], areas: Area[]): { label: PageLabel; field: Omit<DetectedField, "id"> }[] {
+  const out: { label: PageLabel; field: Omit<DetectedField, "id"> }[] = [];
+  const hl = page.shapes.lines;
+  for (const l of labels) {
+    const text = cleanLabel(l.str);
+    if (!text || text.split(" ").length > 4) continue;
+    const cx = l.x + l.width / 2;
+    const band = { lo: l.y + 0.5, hi: l.y + l.height - 0.5 };
+    // The walls beside the name, and the cell they bound: from the lines above and below, or else the walls' own ends.
+    let left: Border | null = null;
+    let right: Border | null = null;
+    for (const b of bs) {
+      if (b.y1 > band.lo || b.y2 < band.hi) continue;
+      if (b.x <= l.x + 0.5 && (!left || b.x > left.x)) left = b;
+      if (b.x >= l.x + l.width - 0.5 && (!right || b.x < right.x)) right = b;
+    }
+    if (!left || !right) continue;
+    const lo = left.x;
+    const hi = right.x;
+    if (hi - lo < l.width + 8 || hi - lo > 320) continue;
+    const spans = (r: HLine) => r.x1 <= lo + 2 && r.x2 >= hi - 2;
+    const wallTop = Math.min(left.y2, right.y2);
+    const wallBottom = Math.max(left.y1, right.y1);
+    const lineAbove = hl.filter((r) => spans(r) && r.y >= l.y + l.height * 0.5 && r.y <= wallTop + 1).sort((a, b) => a.y - b.y)[0];
+    const lineBelow = hl.filter((r) => spans(r) && r.y <= l.y + 1 && r.y >= wallBottom - 1).sort((a, b) => b.y - a.y)[0];
+    const top = lineAbove?.y ?? wallTop;
+    const bottom = lineBelow?.y ?? wallBottom;
+    if (top - bottom < 6 || top - bottom > 60) continue;
+    // The room to write: above a writing line that crosses the cell over the name (the name is its caption), else the
+    // larger free band above or below the name.
+    const cellTop = wallTop > top + 4 ? wallTop : top;
+    const inCell = (x: number, y: number) => x > lo + 0.5 && x < hi - 0.5 && y > bottom + 0.5 && y < cellTop - 0.5;
+    if (page.labels.some((o) => o !== l && o.id !== l.id && inCell(o.x + o.width / 2, o.y + o.height / 2))) continue;
+    if (areas.some((a) => a.box.width < (hi - lo) * 0.9 && inCell(a.box.x + a.box.width / 2, a.box.y + a.box.height / 2))) continue;
+    if (page.shapes.checkboxes.some((c) => inCell(c.x + c.width / 2, c.y + c.height / 2))) continue;
+    let box: Rect;
+    if (lineAbove && wallTop - lineAbove.y >= 5) {
+      box = { x: lo + 1, y: lineAbove.y + 0.5, width: hi - lo - 2, height: Math.min(DEFAULT_SIZE.text.height, wallTop - lineAbove.y - 1) };
+    } else {
+      const roomAbove = top - (l.y + l.height);
+      const roomBelow = l.y - bottom - 1;
+      const room = Math.max(roomAbove, roomBelow);
+      if (room < 6) continue;
+      box = { x: lo + 1, y: roomAbove >= roomBelow ? l.y + l.height + 0.5 : bottom + 0.5, width: hi - lo - 2, height: room - 1 };
+    }
+    out.push({ label: l, field: { label: text, type: typeFromLabel(text), page: page.index, box: { x: round1(box.x), y: round1(box.y), width: round1(box.width), height: round1(box.height) } } });
+  }
   return out;
 }
 
@@ -431,7 +554,11 @@ const LABEL_ONLY_WIDTH = 220;
 function labelOnlyFields(page: GuessPage, labels: PageLabel[]): Omit<DetectedField, "id">[] {
   const out: Omit<DetectedField, "id">[] = [];
   const mid = (l: PageLabel) => l.y + l.height * 0.35;
+  const heights = page.labels.map((l) => l.height).sort((a, b) => a - b);
+  const usual = heights[Math.floor(heights.length / 2)] ?? 10;
   for (const label of labels) {
+    // A heading printed larger than the names around it is not a field, numbered or not.
+    if (label.height > usual * 1.12 && !/:\s*$/.test(label.str)) continue;
     const text = cleanLabel(label.str);
     if (!text || text.length > 30 || text.split(" ").length > 4) continue;
     // The row ends at the nearest text to its left (another name or a value already printed).
@@ -510,13 +637,18 @@ function detectTables(page: GuessPage, claimed: Set<string>): FoundTable[] {
       return { y: round1(bottom + 1.5), height: round1(Math.min(DEFAULT_SIZE.text.height, r.y - bottom - 3)) };
     });
     const last = rules[rules.length - 1]!;
+    // The table's name: a short text just above its title row ("פרטי ילדים"), else "טבלה".
+    const name = free
+      .filter((o) => !used.has(o.id) && !inSpan.includes(o) && o.y > l.y + 2 && o.y - l.y <= 32 && overlapsX(first.x1, first.x2, o) && cleanLabel(o.str).split(" ").length <= 6)
+      .sort((a, b) => a.y - b.y)[0];
+    if (name) inSpan.push(name);
     inSpan.forEach((o) => used.add(o.id));
     rules.forEach((r) => usedRules.add(r));
     found.push({
       titles: inSpan,
       rules,
       field: {
-        label: "טבלה",
+        label: (name && cleanLabel(name.str)) || "טבלה",
         type: "repeating_table",
         page: page.index,
         box: { x: round1(first.x1), y: round1(last.y), width: round1(first.x2 - first.x1), height: round1(l.y + l.height - last.y) },
@@ -554,8 +686,39 @@ function inReadingOrder<T extends { page: number; box: Rect }>(list: T[]): T[] {
   return [...list].sort((a, b) => a.page - b.page || Math.round((b.box.y + b.box.height) / 6) - Math.round((a.box.y + a.box.height) / 6) || b.box.x - a.box.x);
 }
 
+/**
+ * A run of underscores or dots typed as text ("שם: ________") is a line to write on: it becomes a drawn line under
+ * the run and leaves the labels, so the name beside it pairs with it like with any line.
+ */
+export function typedLines(page: GuessPage): GuessPage {
+  const RUN = /[_]{4,}|[.]{6,}|[…]{3,}/g;
+  const lines: HLine[] = [];
+  const labels: PageLabel[] = [];
+  for (const l of page.labels) {
+    const matches = [...l.str.matchAll(RUN)];
+    if (!matches.length) { labels.push(l); continue; }
+    const per = l.width / Math.max(1, l.str.length);
+    // Text runs are stored in visual order for Hebrew: positions are measured from the left edge of the label.
+    const rtl = /[֐-׿]/.test(l.str);
+    for (const m of matches) {
+      const start = m.index!;
+      const end = start + m[0].length;
+      const x1 = rtl ? l.x + l.width - end * per : l.x + start * per;
+      lines.push({ x1: round1(x1), x2: round1(x1 + m[0].length * per), y: round1(l.y - 1) } as HLine);
+    }
+    const rest = l.str.replace(RUN, " ").replace(/\s+/g, " ").trim();
+    if (/[A-Za-z֐-׿]/.test(rest)) {
+      // The name keeps its own side: the right end in Hebrew, the left end otherwise.
+      const width = Math.max(4, l.width - matches.reduce((n, m) => n + m[0].length, 0) * per);
+      labels.push({ ...l, str: rest, x: rtl ? l.x + l.width - width : l.x, width });
+    }
+  }
+  if (!lines.length) return page;
+  return { ...page, labels, shapes: { ...page.shapes, lines: [...page.shapes.lines, ...lines] } };
+}
+
 export function detectFields(pages: GuessPage[]): DetectedField[] {
-  const all = pages.flatMap((p) => {
+  const all = pages.map(typedLines).flatMap((p) => {
     const heads = headingsOf(p);
     return detectPage(p).map((f) => {
       // The nearest heading above the field (its top edge, a little tolerance for headings on the same line).
