@@ -1,4 +1,5 @@
 "use client";
+import type { PickMode } from "@/lib/forms/pick-mode";
 import { StepSelect, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -54,9 +55,11 @@ export interface PdfPlacementProps {
   onSuggest?: (fieldId: string) => Promise<PdfStamp | null>;
   /** "New step from here": cut the form's step at this field. */
   onSplitStep?: (fieldId: string) => void;
+  /** "סימון בטופס": a click marks or unmarks the box's field as opened by the source field; nothing moves. */
+  pick?: PickMode;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -242,6 +245,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     e.stopPropagation();
     // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
     rootRef.current?.focus({ preventScroll: true });
+    if (mode === "move" && pick) {
+      pick.onToggle(baseFieldId(stamp.fieldId));
+      return;
+    }
     // "סימון שדות לשלב": a click puts the box's field in the chosen step, or takes it out; nothing moves.
     if (mode === "move" && focusRole && focusRole !== "unassigned" && onFieldPatch) {
       const r = roleOf(stamp);
@@ -575,7 +582,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         s.guessed && "border-dashed",
                         viewAs && shownRole(s) !== "none" && shownRole(s) !== viewAs && !inGroup && "opacity-25",
                         viewAs && shownRole(s) === viewAs && "ring-2 ring-primary ring-offset-1",
+                        pick && baseFieldId(s.fieldId) === pick.sourceId && "cursor-default border-success bg-success/25 ring-2 ring-success ring-offset-1",
+                        pick && pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer border-primary bg-primary/30 ring-2 ring-primary ring-offset-1",
+                        pick && baseFieldId(s.fieldId) !== pick.sourceId && !pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer opacity-50 hover:opacity-100",
                       )}
+                      aria-pressed={pick && baseFieldId(s.fieldId) !== pick.sourceId ? pick.ids.has(baseFieldId(s.fieldId)) : undefined}
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
                       <span className="pointer-events-none block truncate px-0.5 text-primary" title={chipOf(s)}>{chipOf(s)}</span>

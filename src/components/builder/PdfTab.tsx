@@ -1,4 +1,5 @@
 "use client";
+import type { PickMode } from "@/lib/forms/pick-mode";
 import type { StepView } from "./StepSelect";
 import type { FillerRole } from "@/lib/forms/schema";
 import { useEffect, useRef, useState } from "react";
@@ -39,7 +40,9 @@ export function PdfTab({
   templateId,
   steps,
   focusRole,
+  pick,
 }: {
+  pick?: PickMode;
   templateId?: string;
   steps?: StepView[];
   focusRole?: FillerRole | "";
@@ -249,7 +252,8 @@ export function PdfTab({
         <PdfPlacement
           definition={definition}
           steps={steps}
-          focusRole={focusRole}
+          focusRole={pick ? undefined : focusRole}
+          pick={pick}
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}
