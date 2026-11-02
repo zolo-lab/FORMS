@@ -4,12 +4,13 @@ import { FormRenderer } from "@/components/forms/FormRenderer";
 import type { UploadedFile } from "@/components/forms/fields/types";
 import { UPLOAD_ERRORS } from "@/lib/forms/upload";
 import type { Lookups } from "@/lib/forms/lookups";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { OnDocumentFill, type OnDocPdf } from "@/components/pdf/OnDocumentFill";
-import { coversAll } from "@/lib/pdf/on-document";
+import { canFillOnDocument } from "@/lib/pdf/on-document";
 import { ViewToggle, useFillView } from "@/components/forms/ViewToggle";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
@@ -104,8 +105,8 @@ const ACTION_ERRORS: Record<string, string> = {
 export function SigningClient({ token, definition, pipeDefinition, initialAnswers, filled, role, subjectName, action, formOnly = false, returnTargets = [], pdfDocs = [], lookups }: Props) {
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const hasForm = definition.pages.length > 0;
-  // On-document mode only when every field of this role is placed on a PDF.
-  const onDocPdfs = pdfDocs.filter((d) => coversAll(d.mapping, definition));
+  // On-document mode when this role has fields on the (single) PDF; the ones without a place are asked after the pages.
+  const onDocPdfs = pdfDocs.filter((d) => canFillOnDocument(d.mapping, definition));
   const canOnDoc = !formOnly && hasForm && pdfDocs.length > 0 && onDocPdfs.length === pdfDocs.length && pdfDocs.length === 1;
   const [mode, setMode] = useFillView(canOnDoc);
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
@@ -172,6 +173,23 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
         <p className="text-sm text-muted-foreground">עבור: {subjectName}</p>
         {canOnDoc && <ViewToggle view={mode} onChange={setMode} />}
       </div>
+      {/* The document as filled so far, with the earlier steps' signatures – mainly for whoever approves it. */}
+      {pdfDocs.length > 0 && !(canOnDoc && mode === "document") && (
+        <div className="flex flex-wrap gap-2">
+          {pdfDocs.map((d) => (
+            <a
+              key={d.url}
+              href={`${d.url}?filled=1`}
+              target="_blank"
+              rel="noopener"
+              className={buttonVariants({ variant: action === "approve" ? "default" : "outline", size: "sm" })}
+            >
+              <FileText className="size-4" aria-hidden />
+              צפייה במסמך{pdfDocs.length > 1 ? `: ${d.title}` : ""}
+            </a>
+          ))}
+        </div>
+      )}
       {/* On the document, earlier answers sit in their own places; the separate list is only for the question view. */}
       {filled.length > 0 && !(hasForm && canOnDoc && mode === "document") && (
         <Card className="space-y-2 p-4" aria-label="פרטים שמולאו">
@@ -187,7 +205,7 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
         </Card>
       )}
       {hasForm && canOnDoc && mode === "document" ? (
-        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} actions={stepActions} />
+        <OnDocumentFill pdfs={onDocPdfs} definition={definition} answers={answers} onChange={setAnswers} role={role} errors={errors} onSubmit={onSubmit} onErrors={setErrors} filled={filled} actions={stepActions} lookups={lookups} onUpload={upload} />
       ) : hasForm ? (
         <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} actions={stepActions} />
       ) : (

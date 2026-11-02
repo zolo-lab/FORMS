@@ -8,7 +8,8 @@ import { hashToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
 import { staleFormulaValues } from "@/lib/forms/compute";
 import { mergedDefinitionForStep, type PackageDoc } from "@/lib/forms/merge";
-import { internalFieldIds, omitInternalAnswers, stripInternalStamps } from "@/lib/forms/internal";
+import { internalFieldIds, omitInternalAnswers, stripInternalFields, stripInternalStamps } from "@/lib/forms/internal";
+import { stampPdf } from "@/lib/forms/pdf-mapping";
 import { roleView, type FilledItem } from "@/lib/forms/role-view";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields, type FillerRole, type FormDefinition } from "@/lib/forms/schema";
@@ -38,7 +39,8 @@ export type SigningContext = {
   /** Earlier completed steps this step may send the request back to. */
   returnTargets: { id: string; label: string }[];
   /** Documents that have a PDF with placed fields (for the on-document mode). */
-  pdfDocs: { fileId: string; title: string; mapping: PdfMapping }[];
+  /** The documents built on a PDF. `definition` stays on the server (it is used to draw the answers on the PDF). */
+  pdfDocs: { fileId: string; title: string; mapping: PdfMapping; definition: FormDefinition }[];
   /** Message shown after submit (first document that defines one). */
   thankYou?: string;
 };
@@ -69,7 +71,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   const merged = docs.length ? mergedDefinitionForStep(docs, role) : { schemaVersion: 1 as const, title: request.subjectName, pages: [] };
   const view = roleView(merged, answers, role);
 
-  const pdfDocs = docRows.flatMap((d) => (d.pdfFileId && d.pdfMapping ? [{ fileId: d.pdfFileId, title: d.title, mapping: stripInternalStamps(d.pdfMapping, hidden) }] : []));
+  const pdfDocs = docRows.flatMap((d) => (d.pdfFileId && d.pdfMapping ? [{ fileId: d.pdfFileId, title: d.title, mapping: stripInternalStamps(d.pdfMapping, hidden), definition: stripInternalFields(d.definition) }] : []));
   const siblings = await db.select().from(signingSteps).where(eq(signingSteps.requestId, request.id)).orderBy(signingSteps.order);
   const returnTargets = siblings
     .filter((s) => s.order < step.order && s.status === "completed" && s.role !== "requester") // the requester has no signing link, so a request returned to them would be stuck
@@ -266,13 +268,17 @@ export async function performAction(token: string, cookieHeader: string | null, 
 }
 
 /** Blank template PDF bytes for the on-document mode; only files that belong to this request's documents. */
-export async function getPdfForToken(token: string, fileId: string): Promise<{ bytes: Uint8Array } | null> {
+export async function getPdfForToken(token: string, fileId: string, opts: { filled?: boolean } = {}): Promise<{ bytes: Uint8Array } | null> {
   const ctx = await loadByToken(token);
   if (ctx.state !== "ok" || !ctx.pdfDocs.some((d) => d.fileId === fileId)) return null;
   const [row] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.id, fileId));
   const storedId = row ? /([0-9a-f-]{36})$/.exec(row.blobUrl)?.[1] : undefined;
   const file = storedId ? await getFile(storedId) : null;
-  return file ? { bytes: file.bytes } : null;
+  if (!file) return null;
+  if (!opts.filled) return { bytes: file.bytes };
+  // The document as it stands: every answer collected so far (this step's draft included) drawn in its place.
+  const doc = ctx.pdfDocs.find((d) => d.fileId === fileId)!;
+  return { bytes: await stampPdf(file.bytes, doc.mapping, doc.definition, ctx.answers) };
 }
 
 export type UploadResult =

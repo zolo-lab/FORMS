@@ -147,10 +147,23 @@ export function writeCheck(field: FormField, current: unknown, stamp: StampLike,
   return checked ? stamp.whenValue : readCheck(field, current, stamp) ? undefined : current;
 }
 
-/** On-document mode is offered only when every answerable field of the role's form is placed on the PDF. */
-export function coversAll(mapping: PdfMapping, def: FormDefinition): boolean {
+/**
+ * Answerable fields of the role's form that have no place on the PDF (attachments, a question asked only on screen…).
+ * On the document they are asked in a short list after the pages.
+ */
+export function offDocumentFields(mapping: PdfMapping, def: FormDefinition): FormField[] {
   const placed = new Set(simpleStamps(mapping, def).map((s) => cellRef(s.fieldId)?.table ?? s.fieldId));
-  return allFields(def)
-    .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden" && !isComputedOrLocked(f))
-    .every((f) => placed.has(f.id));
+  return def.pages
+    .flatMap((p) => p.fields)
+    .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden" && !isComputedOrLocked(f) && !placed.has(f.id));
+}
+
+/** Every answerable field of the role's form is placed on the PDF. */
+export function coversAll(mapping: PdfMapping, def: FormDefinition): boolean {
+  return offDocumentFields(mapping, def).length === 0;
+}
+
+/** On-document filling makes sense when at least one field of this role sits on the PDF (the rest go in the list). */
+export function canFillOnDocument(mapping: PdfMapping, def: FormDefinition): boolean {
+  return simpleStamps(mapping, def).length > 0;
 }

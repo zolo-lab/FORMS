@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellRef, setStampValue, stampValue, coversAll, inputAttrs, isLockedOnDocument, tabOrder, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
+import { canFillOnDocument, offDocumentFields, cellRef, setStampValue, stampValue, coversAll, inputAttrs, isLockedOnDocument, tabOrder, readCheck, readText, simpleStamps, writeCheck, writeText } from "@/lib/pdf/on-document";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { allFields } from "@/lib/forms/schema";
 import { sampleForm } from "./fixtures/sample-form";
@@ -92,6 +92,13 @@ describe("coversAll", () => {
   });
   it("is false when a field has no stamp", () => {
     expect(coversAll(m(["firstName"]), employeeDef)).toBe(false);
+  });  it("lists the fields with no place on the document, which are asked after the pages", () => {
+    expect(offDocumentFields(m(["firstName"]), employeeDef).map((x) => x.id)).toEqual(["sig"]);
+    expect(offDocumentFields(m(["firstName", "sig"]), employeeDef)).toEqual([]);
+  });
+  it("offers filling on the document when at least one field of the role is on it", () => {
+    expect(canFillOnDocument(m(["firstName"]), employeeDef)).toBe(true);
+    expect(canFillOnDocument(m(["other"]), employeeDef)).toBe(false);
   });
 });
 
