@@ -7,7 +7,7 @@ import { requireAdmin } from "@/server/guards";
 import { listProjects } from "@/server/orgs-store";
 import { createGroup, deleteGroup, renameGroup } from "@/server/people-store";
 import { saveUserDetails, setGroupUsers } from "@/server/user-admin";
-import { currentUser, setUserGrants, setUserOrgAccess, setUserPermissions, setUserProjectAccess } from "@/server/users-store";
+import { currentUser, permissionsOf, setUserGrants, setUserOrgAccess, setUserPermissions, setUserProjectAccess } from "@/server/users-store";
 
 const PATH = "/admin/users";
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -58,11 +58,14 @@ export async function saveUserAction(fd: FormData) {
     const grants = Object.fromEntries(GRANT_KEYS.map((k) => [k, fd.get(`grant.${k}`) === "on"])) as unknown as UserGrants;
     await setUserGrants(userId, grants);
     const packageIds = fd.getAll("packages").map(String).filter((p) => UUID.test(p));
+    // "Sees every request" is a general grant now; the per-package flag is kept as it is, not re-posted by the form.
+    const existing = await permissionsOf(userId);
     const rows: PackagePermission[] = packageIds.map((p) => ({
       packageTemplateId: p,
       canOpen: !!fd.get(`${p}.open`),
-      canViewAll: !!fd.get(`${p}.view`),
+      canViewAll: existing.find((e) => e.packageTemplateId === p)?.canViewAll ?? false,
       canEditChain: false,
+      canEdit: !!fd.get(`${p}.edit`),
     }));
     await setUserPermissions(userId, rows, packageIds);
   }

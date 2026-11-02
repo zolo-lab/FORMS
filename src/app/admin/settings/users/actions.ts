@@ -60,6 +60,7 @@ export async function savePermissionsAction(fd: FormData) {
     canOpen: !!fd.get(`${p}.open`),
     canViewAll: !!fd.get(`${p}.view`),
     canEditChain: !!fd.get(`${p}.chain`),
+    canEdit: !!fd.get(`${p}.edit`),
   }));
   await setUserPermissions(userId, rows, packageIds);
   revalidatePath(PATH);

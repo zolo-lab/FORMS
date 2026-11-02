@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { SESSION_COOKIE, sessionEmail } from "@/lib/auth/session";
-import { allowedOrgIds, isTrackOnly, resolveAccess, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
+import { allowedOrgIds, canSeeFormTemplates, editablePackageIds, hasGrant, isTrackOnly, resolveAccess, normalizeGrants, normalizeRole, openablePackageIds, roleForNewUser, visibilityScope, type OrgAccess, type PackagePermission, type SessionUser, type UserGrants, type UserRole } from "@/lib/auth/permissions";
 
 const { users, packagePermissions, userOrganizations, userProjects, projects } = schema;
 
@@ -45,7 +45,7 @@ export const currentUser = cache(async (): Promise<SessionUser | null> => {
 
 export const permissionsOf = cache(async (userId: string): Promise<PackagePermission[]> => {
   return db
-    .select({ packageTemplateId: packagePermissions.packageTemplateId, canOpen: packagePermissions.canOpen, canViewAll: packagePermissions.canViewAll, canEditChain: packagePermissions.canEditChain })
+    .select({ packageTemplateId: packagePermissions.packageTemplateId, canOpen: packagePermissions.canOpen, canViewAll: packagePermissions.canViewAll, canEditChain: packagePermissions.canEditChain, canEdit: packagePermissions.canEdit })
     .from(packagePermissions)
     .where(eq(packagePermissions.userId, userId));
 });
@@ -76,6 +76,17 @@ export async function viewerOpenablePackages(): Promise<string[] | null> {
   return openablePackageIds(user, perms);
 }
 
+/** The forms tab: may the viewer open it, and which packages may they send / edit (`null` = all). */
+export async function viewerFormAccess(): Promise<{ allowed: boolean; openable: string[] | null; editable: string[] | null; builder: boolean }> {
+  const { user, perms } = await viewer();
+  return {
+    allowed: canSeeFormTemplates(user, perms),
+    openable: openablePackageIds(user, perms),
+    editable: editablePackageIds(user, perms),
+    builder: hasGrant(user, "manageForms"),
+  };
+}
+
 export async function viewerScope() {
   const { user, perms, access } = await viewer();
   return visibilityScope(user, perms, access);
@@ -97,7 +108,7 @@ export async function updateUser(id: string, patch: { role?: UserRole; active?: 
 
 export async function listAllPermissions(): Promise<(PackagePermission & { userId: string })[]> {
   return db
-    .select({ userId: packagePermissions.userId, packageTemplateId: packagePermissions.packageTemplateId, canOpen: packagePermissions.canOpen, canViewAll: packagePermissions.canViewAll, canEditChain: packagePermissions.canEditChain })
+    .select({ userId: packagePermissions.userId, packageTemplateId: packagePermissions.packageTemplateId, canOpen: packagePermissions.canOpen, canViewAll: packagePermissions.canViewAll, canEditChain: packagePermissions.canEditChain, canEdit: packagePermissions.canEdit })
     .from(packagePermissions);
 }
 
@@ -124,7 +135,7 @@ export async function setUserProjectAccess(userId: string, projectIds: string[])
 /** Replace a user's rows for the given packages (a row with all three false is removed). */
 export async function setUserPermissions(userId: string, rows: PackagePermission[], packageIds: string[]) {
   if (packageIds.length) await db.delete(packagePermissions).where(and(eq(packagePermissions.userId, userId), inArray(packagePermissions.packageTemplateId, packageIds)));
-  const keep = rows.filter((r) => r.canOpen || r.canViewAll || r.canEditChain);
+  const keep = rows.filter((r) => r.canOpen || r.canViewAll || r.canEditChain || r.canEdit);
   if (keep.length) await db.insert(packagePermissions).values(keep.map((r) => ({ ...r, userId })));
 }
 

@@ -8,6 +8,8 @@ import { formLinkOrgs } from "@/server/public-fill";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { listTemplates, requestCountsByTemplate } from "@/server/forms-store";
+import { viewerFormAccess } from "@/server/users-store";
+import { ManagerFormsList } from "./ManagerFormsList";
 import { DeleteFormButton } from "./DeleteFormButton";
 import { archiveFormAction, combineFormsAction, duplicateFormAction, importFormAction } from "./actions";
 import { NewFormFromPdf } from "./NewFormFromPdf";
@@ -18,6 +20,9 @@ const STATUS = { draft: ["טיוטה", "warning"], active: ["פעיל", "success
 
 export default async function FormsListPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string; combine?: string }> }) {
   const { error, deleted, combine } = await searchParams;
+  const access = await viewerFormAccess();
+  // A manager who is not a form builder sees only the forms they were given, and edits only those ticked for editing.
+  if (!access.builder) return <ManagerFormsList access={access} />;
   const [templates, counts] = await Promise.all([listTemplates(), requestCountsByTemplate()]);
   const links = await formLinkOrgs(templates.filter((t) => t.publishedVersion && t.status !== "archived").map((t) => t.id));
   return (

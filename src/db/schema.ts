@@ -292,6 +292,8 @@ export const packagePermissions = pgTable(
     canViewAll: boolean("can_view_all").notNull().default(false),
     /** May change the approval chain of a request they open (6.15b). */
     canEditChain: boolean("can_edit_chain").notNull().default(false),
+    /** May edit the form templates of this package in the builder (without the "build forms" grant). */
+    canEdit: boolean("can_edit").notNull().default(false),
     ...timestamps,
   },
   (t) => [primaryKey({ columns: [t.packageTemplateId, t.userId] })],

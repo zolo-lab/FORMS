@@ -28,9 +28,10 @@ interface Org {
 
 const STEPS = ["טופס וארגון", "פרטי העובד", "שדות המבקש", "סיכום ושליחה"] as const;
 
-export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chainEditable = [] }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups; contacts?: { id: string; name: string }[]; chainEditable?: string[] }) {
+export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chainEditable = [], initialPackageId }: { packages: WizardPackage[]; orgs: Org[]; lookups?: Lookups; contacts?: { id: string; name: string }[]; chainEditable?: string[]; initialPackageId?: string }) {
   const [step, setStep] = useState(0);
-  const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
+  // Arriving from the forms tab ("שליחה" on one form) the wizard opens on that form.
+  const [packageId, setPackageId] = useState(packages.find((p) => p.id === initialPackageId)?.id ?? packages[0]?.id ?? "");
   const [organizationId, setOrganizationId] = useState(orgs[0]?.id ?? "");
   const [projectId, setProjectId] = useState(orgs[0]?.projectRequired ? (orgs[0].projects?.[0]?.id ?? "") : "");
   const [subject, setSubject] = useState({ name: "", idNumber: "", email: "", phone: "" });

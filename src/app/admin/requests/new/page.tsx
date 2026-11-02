@@ -9,7 +9,8 @@ import { NewRequestWizard } from "@/components/requests/NewRequestWizard";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewRequestPage() {
+export default async function NewRequestPage({ searchParams }: { searchParams: Promise<{ package?: string }> }) {
+  const { package: wanted } = await searchParams;
   const [all, orgs, allowed, contacts, v, projects] = await Promise.all([listPackagesForWizard(), listOrganizations({ activeOnly: true }), viewerOpenablePackages(), listContacts(), viewer(), listProjects()]);
   const packages = allowed ? all.filter((p) => allowed.includes(p.id)) : all;
   const ids = usableOrgIds(v.access);
@@ -25,6 +26,7 @@ export default async function NewRequestPage() {
         lookups={lookups}
         contacts={contacts.map((c) => ({ id: c.id, name: c.name }))}
         chainEditable={packages.filter((p) => can(v.user, v.perms, p.id, "edit_chain")).map((p) => p.id)}
+        initialPackageId={wanted}
       />
     </main>
   );

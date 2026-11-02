@@ -1,5 +1,5 @@
 "use server";
-import { requireGrant } from "@/server/guards";
+import { requireGrant, requireTemplateEdit } from "@/server/guards";
 import { redirect } from "next/navigation";
 import { combineTemplates, createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
 import { revalidatePath } from "next/cache";
@@ -68,7 +68,7 @@ export async function archiveFormAction(formData: FormData) {
 }
 
 export async function saveDraftAction(templateId: string, definition: unknown, pdf?: { pdfFileId: string | null; pdfMapping: unknown }) {
-  await requireGrant("manageForms");
+  await requireTemplateEdit(templateId);
   let pdfArg;
   if (pdf) {
     const mapping = pdf.pdfMapping === null ? null : pdfMappingSchema.safeParse(pdf.pdfMapping);
@@ -79,7 +79,7 @@ export async function saveDraftAction(templateId: string, definition: unknown, p
 }
 
 export async function publishAction(templateId: string) {
-  await requireGrant("manageForms");
+  await requireTemplateEdit(templateId);
   return publishTemplate(templateId);
 }
 

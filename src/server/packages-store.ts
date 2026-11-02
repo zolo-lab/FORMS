@@ -209,3 +209,12 @@ export async function packageIdsWithForms(): Promise<Set<string>> {
   const items = await db.selectDistinct({ pkg: packageTemplateItems.packageTemplateId }).from(packageTemplateItems);
   return new Set(items.map((i) => i.pkg));
 }
+
+/** Which form templates belong to which packages (for the forms tab of a manager limited to some packages). */
+export async function templatesOfPackages(packageIds: string[]): Promise<{ templateId: string; packageTemplateId: string }[]> {
+  if (!packageIds.length) return [];
+  return db
+    .select({ templateId: packageTemplateItems.templateId, packageTemplateId: packageTemplateItems.packageTemplateId })
+    .from(packageTemplateItems)
+    .where(inArray(packageTemplateItems.packageTemplateId, packageIds));
+}
