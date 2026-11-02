@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
+import { withCopies } from "@/lib/forms/copy";
 import { withDefaults } from "@/lib/forms/defaults";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
@@ -41,8 +42,8 @@ export function FormRenderer({
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
-  // Defaults and computed (formula) fields are filled live; the server applies both again on submit.
-  const answers = useMemo(() => computeFormulas(definition, withDefaults(definition, rawAnswers, todayStr), todayStr), [definition, rawAnswers, todayStr]);
+  // Defaults, iForms-style copies ("fname1" ← "fname") and computed (formula) fields are filled live; the server applies both again on submit.
+  const answers = useMemo(() => computeFormulas(definition, withCopies(definition, withDefaults(definition, rawAnswers, todayStr)), todayStr), [definition, rawAnswers, todayStr]);
   const layout = definition.settings?.layout ?? "wizard";
   const wizard = layout === "wizard" && !readonly;
   const cardMode = layout === "card" && !readonly;
