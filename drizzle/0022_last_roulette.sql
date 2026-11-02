@@ -1,0 +1,1 @@
+ALTER TABLE "package_permissions" ADD COLUMN "can_edit" boolean DEFAULT false NOT NULL;

@@ -155,6 +155,13 @@
       "when": 1793651900000,
       "tag": "0021_package_permission_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793654507375,
+      "tag": "0022_last_roulette",
+      "breakpoints": true
     }
   ]
 }
