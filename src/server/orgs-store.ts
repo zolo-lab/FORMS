@@ -21,7 +21,7 @@ export interface OrgPatch {
   primaryColor: string | null;
   senderName: string | null;
   senderEmail: string | null;
-  reminderPolicy: ReminderPolicy;
+  reminderPolicy?: ReminderPolicy;
   logoFileId?: string | null;
 }
 

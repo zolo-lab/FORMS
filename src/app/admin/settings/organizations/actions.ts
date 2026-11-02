@@ -2,11 +2,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { parseReminderPolicy } from "@/lib/workflow/reminder-policy";
 import { createOrg, createProject, deleteProject, setOrgActive, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
+import type { AutoSaveResult } from "@/components/ui/auto-save-form";
 
 const PATH = "/admin/settings/organizations";
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -31,34 +31,35 @@ export async function createProjectAction(formData: FormData) {
   await requireAdmin();
   const organizationId = String(formData.get("organizationId") ?? "");
   const name = parseProjectName(formData.get("name"));
-  if (!UUID.test(organizationId) || !name) redirect(`${PATH}?error=project`);
-  if (!(await createProject(organizationId, name))) redirect(`${PATH}?error=projectExists`);
+  if (!UUID.test(organizationId)) redirect(`${PATH}?error=project`);
+  if (!name) redirect(`${PATH}?edit=${organizationId}&error=project`);
+  if (!(await createProject(organizationId, name))) redirect(`${PATH}?edit=${organizationId}&error=projectExists`);
   revalidatePath(PATH);
   redirect(`${PATH}?edit=${organizationId}&saved=newproj-${organizationId}`);
 }
 
-export async function updateProjectAction(formData: FormData) {
+/** Autosave of one project row (name, active). Returns a result instead of redirecting. */
+export async function updateProjectAction(formData: FormData): Promise<AutoSaveResult> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const name = parseProjectName(formData.get("name"));
-  if (!UUID.test(id) || !name) redirect(`${PATH}?error=project`);
-  if (!(await updateProject(id, { name, active: !!formData.get("active") }))) redirect(`${PATH}?error=projectExists`);
+  if (!UUID.test(id) || !name) return { ok: false, error: "project" };
+  if (!(await updateProject(id, { name, active: !!formData.get("active") }))) return { ok: false, error: "projectExists" };
   revalidatePath(PATH);
-  const org = String(formData.get("org") ?? "");
-  redirect(`${PATH}?${UUID.test(org) ? `edit=${org}&` : ""}saved=proj-${id}`);
+  return { ok: true };
 }
 
-/** Inline edit of one row: name, ח"פ, active. */
-export async function updateOrgBasicsAction(formData: FormData) {
+/** Autosave of the details: name, ח"פ, active. */
+export async function updateOrgBasicsAction(formData: FormData): Promise<AutoSaveResult> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  if (!UUID.test(id)) redirect(`${PATH}?error=name`);
+  if (!UUID.test(id)) return { ok: false, error: "name" };
   const parsed = parseOrgInput(Object.fromEntries(formData));
-  if (!parsed.ok) redirect(`${PATH}?error=${parsed.error}`);
-  if (!(await updateOrgBasics(id, parsed.value))) redirect(`${PATH}?error=exists`);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  if (!(await updateOrgBasics(id, parsed.value))) return { ok: false, error: "exists" };
   await setOrgActive(id, !!formData.get("active"));
   revalidatePath(PATH);
-  redirect(`${PATH}?edit=${id}&saved=org-${id}`);
+  return { ok: true };
 }
 import { putFile } from "@/server/storage";
 
@@ -70,23 +71,24 @@ const clean = (v: FormDataEntryValue | null) => {
   return s === "" ? null : s;
 };
 
-/** Branding, sender and reminders of one organization (the name is edited in the table). */
-export async function updateOrgAction(formData: FormData) {
+/** Branding and sender of one organization (the name is edited in the table). */
+export async function updateOrgAction(formData: FormData): Promise<AutoSaveResult> {
   await requireAdmin();
-  const id = String(formData.get("id"));
+  const id = String(formData.get("id") ?? "");
+  if (!UUID.test(id)) return { ok: false, error: "name" };
 
   const colorRaw = clean(formData.get("primaryColor"));
   const primaryColor = colorRaw ? normalizeHex(colorRaw) : null;
-  if (colorRaw && !primaryColor) redirect("/admin/settings/organizations?error=color");
+  if (colorRaw && !primaryColor) return { ok: false, error: "color" };
 
   const email = clean(formData.get("senderEmail"));
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) redirect("/admin/settings/organizations?error=email");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "email" };
 
   let logoFileId: string | null | undefined;
   const logo = formData.get("logo");
   if (formData.get("removeLogo") === "1") logoFileId = null;
   else if (logo instanceof File && logo.size > 0) {
-    if (!LOGO_TYPES.includes(logo.type) || logo.size > MAX_LOGO) redirect("/admin/settings/organizations?error=logo");
+    if (!LOGO_TYPES.includes(logo.type) || logo.size > MAX_LOGO) return { ok: false, error: "logo" };
     logoFileId = (await putFile({ name: logo.name, mime: logo.type, bytes: new Uint8Array(await logo.arrayBuffer()) })).id;
   }
 
@@ -94,11 +96,10 @@ export async function updateOrgAction(formData: FormData) {
     primaryColor,
     senderName: clean(formData.get("senderName")),
     senderEmail: email,
-    reminderPolicy: parseReminderPolicy(Object.fromEntries(formData)),
     ...(logoFileId !== undefined ? { logoFileId } : {}),
   });
-  revalidatePath("/admin/settings/organizations");
-  redirect(`/admin/settings/organizations?edit=${id}&saved=brand-${id}`);
+  revalidatePath(PATH);
+  return { ok: true };
 }
 
 /** A project nothing is filed under is deleted; one in use is only reported (it can be switched off instead). */
