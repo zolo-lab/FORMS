@@ -64,14 +64,11 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
 
   // The tracking screen shows the same route, status only, behind a toggle.
   await page.goto(`/admin/track?q=${encodeURIComponent(name)}`);
-  const row = page.getByRole("row").filter({ hasText: name });
-  try {
-    await expect(row).toBeVisible();
-  } catch (e) {
-    const text = await page.locator("body").innerText().catch(() => "(no body)");
-    throw new Error(`${(e as Error).message}\nURL: ${page.url()}\nPAGE: ${text.slice(0, 1500)}`);
-  }
-  await row.locator("summary").click();
-  await expect(row.getByRole("list", { name: "שלבי הבקשה" })).toBeVisible();
-  await expect(row.locator('[aria-current="step"]')).toContainText("ממתין עכשיו");
+  // One request matches; the table (wide screens) or the cards (narrow) show it – use whichever is visible.
+  await expect(page.getByText(name, { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  const toggle = page.locator("summary").filter({ visible: true }).first();
+  await toggle.click();
+  const route = page.getByRole("list", { name: "שלבי הבקשה" }).filter({ visible: true }).first();
+  await expect(route).toBeVisible();
+  await expect(route.locator('[aria-current="step"]')).toContainText("ממתין עכשיו");
 });
