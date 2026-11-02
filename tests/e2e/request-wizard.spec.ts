@@ -65,7 +65,12 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
   // The tracking screen shows the same route, status only, behind a toggle.
   await page.goto(`/admin/track?q=${encodeURIComponent(name)}`);
   const row = page.getByRole("row").filter({ hasText: name });
-  await expect(row).toBeVisible();
+  try {
+    await expect(row).toBeVisible();
+  } catch (e) {
+    const text = await page.locator("body").innerText().catch(() => "(no body)");
+    throw new Error(`${(e as Error).message}\nURL: ${page.url()}\nPAGE: ${text.slice(0, 1500)}`);
+  }
   await row.locator("summary").click();
   await expect(row.getByRole("list", { name: "שלבי הבקשה" })).toBeVisible();
   await expect(row.locator('[aria-current="step"]')).toContainText("ממתין עכשיו");
