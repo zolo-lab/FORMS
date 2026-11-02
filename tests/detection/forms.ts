@@ -287,6 +287,24 @@ export const CASES: Record<string, Case> = {
     return f.build("residency", "טופס משולב: הצהרת תושבות");
   },
 
+  async employeeNotice() {
+    const f = await FormDraw.create();
+    f.heading("הודעה לעובד/ת על תנאי עבודה", R, 800);
+    f.typedLine("1. זהות המעביד", "short_text", R, 760, 20);
+    f.typedLine("2. תאריך תחילת העבודה", "date", R, 735, 14);
+    f.note("העובד מוותר בזאת על כל טענה כלפי המעסיק בגין אי ביצוע הפקדות", R, 700);
+    f.underlinedText("בחירת הקופה, ככל שלא פעל בהתאם לחובותיו", R, 686);
+    f.note("הריני מאשר שקראתי והבנתי את האמור", R, 660);
+    f.signatureCaptions(["חתימת עובד/ת", "חתימת המעסיק"], 420, 560);
+    return f.build("employeeNotice", "הודעה לעובד: קווים מוקלדים, טקסט עם קו תחתון, חתימות בלי קו");
+  },
+
+  async unreadablePage() {
+    const f = await FormDraw.create();
+    f.linesOnly([{ x1: 380, x2: 500, y: 700 }, { x1: 160, x2: 290, y: 700 }, { x1: 380, x2: 500, y: 640 }]);
+    return f.build("unreadablePage", "עמוד שהמילים בו לא קריאות (מצוירות כצורות): שדה בלי שם לכל קו");
+  },
+
   async employment() {
     const f = await FormDraw.create();
     f.heading("טופס פרטי עובד", R, 805);

@@ -375,6 +375,30 @@ export class FormDraw {
     this.page.drawText(str.trimEnd(), { x: left, y, size: 10, font: this.font, color: BLACK });
   }
 
+  /** Underlined text inside a paragraph (emphasis): the underline is not a place to write. */
+  underlinedText(str: string, right: number, y: number) {
+    const left = this.text(str, right, y);
+    this.line(left, right, y - 1.5);
+    this.notFields.push(str);
+  }
+  /** Captions with nothing drawn ("חתימת העובד/ת    חתימת המעסיק"): each signature goes in the room above it. */
+  signatureCaptions(captions: string[], right: number, y: number, gap = 120) {
+    let r = right;
+    for (const c of captions) {
+      const left = this.text(c, r, y);
+      const mid = (left + r) / 2;
+      this.expected.push({ label: c, type: "signature", page: this.pageIndex, area: { x: mid - 40, y: y + 12, width: 80, height: 25 } });
+      r = left - gap;
+    }
+  }
+  /** A page whose words are not text (drawn as shapes or scanned): only the lines are seen. */
+  linesOnly(lines: { x1: number; x2: number; y: number }[]) {
+    lines.forEach((l, i) => {
+      this.line(l.x1, l.x2, l.y);
+      this.expected.push({ label: `שדה ${i + 1}`, type: "short_text", page: this.pageIndex, area: { x: l.x1, y: l.y, width: l.x2 - l.x1, height: 12 } });
+    });
+  }
+
   async build(name: string, pattern: string): Promise<TestForm> {
     return { name, pattern, bytes: await this.doc.save(), expected: this.expected, notFields: this.notFields };
   }
