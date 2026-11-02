@@ -52,4 +52,23 @@ test("creates a request and shows a copyable link plus a WhatsApp share link", a
   await done.getByRole("link", { name: "לעמוד הבקשה" }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
   await expect(page.getByText("בתהליך")).toBeVisible();
+
+  // The chain as a tracking timeline: the requester's step is done, the employee's is waiting since today.
+  const chain = page.getByRole("list", { name: "שלבי הבקשה" });
+  await expect(chain).toBeVisible();
+  const current = chain.locator('[aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText("ממתין עכשיו · מהיום");
+  await expect(current).toContainText("עוד לא נפתח");
+  await expect(page.getByText(/^אצל .+ · מהיום · שלב \d+ מתוך \d+$/)).toBeVisible();
+
+  // The tracking screen shows the same route, status only, behind a toggle.
+  await page.goto(`/admin/track?q=${encodeURIComponent(name)}`);
+  // One request matches; the table (wide screens) or the cards (narrow) show it – use whichever is visible.
+  await expect(page.getByText(name, { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  const toggle = page.locator("summary").filter({ visible: true }).first();
+  await toggle.click();
+  const route = page.getByRole("list", { name: "שלבי הבקשה" }).filter({ visible: true }).first();
+  await expect(route).toBeVisible();
+  await expect(route.locator('[aria-current="step"]')).toContainText("ממתין עכשיו");
 });
