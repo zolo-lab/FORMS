@@ -183,18 +183,40 @@ function optionLabel(cb: Rect, labels: PageLabel[], taken: Set<string>): PageLab
   return best?.l;
 }
 
-/** Rows (same baseline, squares not far apart) and columns (same x, stacked closely) of two or more squares. */
-function checkGroups(boxes: Box[]): Box[][] {
+type Border = { x: number; y1: number; y2: number };
+
+/** A table wall (vertical border) runs between two squares of one row: they answer different questions. */
+function wallBetween(bs: Border[], right: Rect, left: Rect): boolean {
+  const x1 = left.x + left.width;
+  const x2 = right.x;
+  const yLo = Math.min(left.y, right.y) + 1;
+  const yHi = Math.max(left.y + left.height, right.y + right.height) - 1;
+  return bs.some((b) => b.x > x1 + 0.5 && b.x < x2 - 0.5 && b.y1 <= yLo && b.y2 >= yHi);
+}
+
+/** The table cell a square sits in, by its nearest walls; "" when no wall bounds it on either side. */
+function cellKey(bs: Border[], cb: Rect): string {
+  const { lo, hi } = cellSides(bs, cb.x + cb.width / 2, cb.y + 1, cb.y + cb.height - 1);
+  return lo === null && hi === null ? "" : `${lo === null ? "-" : Math.round(lo)}|${hi === null ? "-" : Math.round(hi)}`;
+}
+
+/**
+ * Rows (same baseline, squares not far apart) and columns (same x, stacked closely) of two or more squares.
+ * In a ruled table a row of squares is cut at every wall, and squares in one cell on consecutive rows are one
+ * question (Form 101 part ב: "מין" זכר/נקבה, "מצב משפחתי" in two rows, "תושב ישראל" כן/לא side by side).
+ */
+function checkGroups(boxes: Box[], bs: Border[] = []): Box[][] {
   const used = new Set<Box>();
   const groups: Box[][] = [];
   const byRow = [...boxes].sort((a, b) => b.cb.y - a.cb.y || b.cb.x - a.cb.x);
   for (const b of byRow) {
     if (used.has(b)) continue;
-    const row = byRow.filter((o) => !used.has(o) && Math.abs(o.cb.y - b.cb.y) <= 3).sort((p, q) => q.cb.x - p.cb.x);
+    // The row from this square leftwards: a square cut off by a wall on its right starts a chain of its own.
+    const row = byRow.filter((o) => !used.has(o) && Math.abs(o.cb.y - b.cb.y) <= 3 && o.cb.x <= b.cb.x).sort((p, q) => q.cb.x - p.cb.x);
     const chain: Box[] = [];
     for (const o of row) {
       const prev = chain[chain.length - 1];
-      if (!prev || prev.cb.x - (o.cb.x + o.cb.width) <= 90) chain.push(o);
+      if (!prev || (prev.cb.x - (o.cb.x + o.cb.width) <= 90 && !wallBetween(bs, prev.cb, o.cb))) chain.push(o);
       else break;
     }
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
@@ -211,7 +233,51 @@ function checkGroups(boxes: Box[]): Box[][] {
     if (chain.length >= 2) { chain.forEach((c) => used.add(c)); groups.push(chain); }
   }
   for (const b of boxes) if (!used.has(b)) groups.push([b]);
-  return groups;
+  return bs.length ? mergeCells(groups, bs) : groups;
+}
+
+/** Groups (single squares included) that sit in the same walled cell, one under the other, are one question. */
+function mergeCells(groups: Box[][], bs: Border[]): Box[][] {
+  const keyOf = (g: Box[]) => {
+    const keys = new Set(g.map((b) => cellKey(bs, b.cb)));
+    const k = keys.size === 1 ? [...keys][0]! : "";
+    return k.includes("|") && !k.startsWith("-|") && !k.endsWith("|-") ? k : "";
+  };
+  const top = (g: Box[]) => Math.max(...g.map((b) => b.cb.y + b.cb.height));
+  const bottom = (g: Box[]) => Math.min(...g.map((b) => b.cb.y));
+  const out: Box[][] = [];
+  const sorted = [...groups].sort((a, b) => top(b) - top(a));
+  const taken = new Set<Box[]>();
+  for (const g of sorted) {
+    if (taken.has(g)) continue;
+    taken.add(g);
+    const k = keyOf(g);
+    let merged = g;
+    if (k) {
+      for (const o of sorted) {
+        if (taken.has(o) || keyOf(o) !== k) continue;
+        // The next row down in the same cell, close under the last one.
+        if (bottom(merged) - top(o) > 20 || top(o) > bottom(merged) + 1) continue;
+        taken.add(o);
+        merged = [...merged, ...o];
+      }
+    }
+    // Reading order inside a question: rows from the top, right to left.
+    out.push(merged.length > g.length ? [...merged].sort((a, b) => (Math.abs(a.cb.y - b.cb.y) <= 3 ? b.cb.x - a.cb.x : b.cb.y - a.cb.y)) : g);
+  }
+  return out;
+}
+
+/** The walls of a group's cell, when every square of it sits in one walled cell. */
+function groupCell(bs: Border[], group: Box[]): { lo: number; hi: number } | null {
+  let cell: { lo: number; hi: number } | null = null;
+  for (const b of group) {
+    const { lo, hi } = cellSides(bs, b.cb.x + b.cb.width / 2, b.cb.y + 1, b.cb.y + b.cb.height - 1);
+    if (lo === null || hi === null) return null;
+    if (cell && (Math.abs(cell.lo - lo) > 1 || Math.abs(cell.hi - hi) > 1)) return null;
+    cell = { lo, hi };
+  }
+  return cell;
 }
 
 const union = (rs: Rect[]): Rect => {
@@ -233,7 +299,10 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   // Short texts are options of one question; a long statement beside a square stands alone.
   const labelled = boxes.filter((b) => b.label);
   const isOption = (b: Box) => cleanLabel(b.label!.str).split(" ").length <= 4;
-  for (const group of [...checkGroups(labelled.filter(isOption)), ...labelled.filter((b) => !isOption(b)).map((b) => [b])]) {
+  const walls = borders(page);
+  /** Cells taken by a question of squares: no place to write is looked for inside them. */
+  const choiceCells: Rect[] = [];
+  for (const group of [...checkGroups(labelled.filter(isOption), walls), ...labelled.filter((b) => !isOption(b)).map((b) => [b])]) {
     const rightmost = group[0]!;
     if (group.length === 1) {
       const statement = cleanLabel(rightmost.label!.str, true);
@@ -241,13 +310,24 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
       out.push({ label: statement, type: "consent", page: page.index, box: rightmost.cb });
       continue;
     }
-    // The question: text just right of the first square on its row, else just above the group.
+    // The question: in a walled cell, the title above the squares inside the cell; otherwise text just right of the
+    // first square on its row, else just above the group.
     const top = Math.max(...group.map((g) => g.cb.y + g.cb.height));
     const left = Math.min(...group.map((g) => g.cb.x));
     const right = Math.max(...group.map((g) => g.cb.x + g.cb.width));
     let question: PageLabel | undefined;
     let bestGap = Infinity;
-    for (const l of page.labels) {
+    const cell = groupCell(walls, group);
+    if (cell) {
+      const bottomY = Math.min(...group.map((g) => g.cb.y));
+      choiceCells.push({ x: cell.lo, y: bottomY - 3, width: cell.hi - cell.lo, height: top - bottomY + 20 });
+      for (const l of page.labels) {
+        if (claimed.has(l.id) || l.x + l.width / 2 < cell.lo || l.x + l.width / 2 > cell.hi) continue;
+        const gap = l.y - top;
+        if (gap >= -2 && gap <= 20 && gap < bestGap) { question = l; bestGap = gap; }
+      }
+    }
+    if (!question) for (const l of page.labels) {
       if (claimed.has(l.id)) continue;
       const sameRow = Math.abs(l.y + l.height * 0.35 - (rightmost.cb.y + rightmost.cb.height / 2)) <= 8;
       const gap = sameRow ? l.x - right : top < l.y && l.y - top <= 30 && overlapsX(left - 12, right + 12, l) ? 60 + (l.y - top) : Infinity;
@@ -271,8 +351,13 @@ function detectPage(page: GuessPage): Omit<DetectedField, "id">[] {
   }
 
   // 3. Places to write: each pairs with its closest unclaimed label, one label per area.
-  const bs = borders(page);
-  const areas = textAreas(page, ruled);
+  const bs = walls;
+  const inChoiceCell = (b: Rect) => {
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    return choiceCells.some((c) => cx > c.x && cx < c.x + c.width && cy > c.y && cy < c.y + c.height);
+  };
+  const areas = textAreas(page, ruled).filter((a) => !inChoiceCell(a.box));
   const labels = page.labels.filter((l) => !claimed.has(l.id) && !isHeading(l) && !isProse(l.str));
   const pairs: Pair[] = [];
   for (const area of areas) for (const label of labels) {
