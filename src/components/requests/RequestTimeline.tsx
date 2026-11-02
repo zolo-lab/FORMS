@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * so it is safe on the tracking screen too. Each state has an icon and a word, not only a colour.
  */
 
-const STATE: Record<TimelineState, { label: string; Icon: typeof Check; dot: string; text: string }> = {
+export const STATE: Record<TimelineState, { label: string; Icon: typeof Check; dot: string; text: string }> = {
   done: { label: "הושלם", Icon: Check, dot: "bg-success text-primary-foreground border-success", text: "text-success" },
   current: { label: "ממתין עכשיו", Icon: Clock, dot: "bg-primary text-primary-foreground border-primary", text: "text-primary" },
   upcoming: { label: "בהמשך", Icon: Circle, dot: "bg-card text-muted-foreground border-border", text: "text-muted-foreground" },
