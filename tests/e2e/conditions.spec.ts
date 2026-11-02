@@ -68,15 +68,18 @@ test("a ticked box and a filled field open other fields; hidden ones are not req
   await page.getByLabel("תושב יישוב מזכה").uncheck();
   await expect(page.getByLabel("מתאריך")).toHaveCount(0);
 
-  // A hidden required field does not block sending.
+  // A hidden required field does not block sending (the declaration box itself is required by default: tick it).
+  await page.getByLabel("תושב יישוב מזכה").check();
   await page.getByRole("button", { name: "שליחה" }).click();
   await page.getByText("התשובות כפי שנשמרות (JSON)").click();
   await expect(page.getByTestId("result")).toBeVisible();
 
   // Once shown, it is required.
   await page.goto(`/preview/form/${id}?all=1`);
+  await page.getByLabel("תושב יישוב מזכה").check();
   await page.getByLabel("הכנסה נוספת").fill("שכירות");
   await expect(page.getByLabel("סכום ההכנסה הנוספת")).toBeVisible();
   await page.getByRole("button", { name: "שליחה" }).click();
   await expect(page.getByText("שדה חובה").first()).toBeVisible();
+  await expect(page.getByTestId("result")).toHaveCount(0);
 });
