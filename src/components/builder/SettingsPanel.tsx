@@ -19,6 +19,7 @@ import { TODAY } from "@/lib/forms/defaults";
 import { STANDARD_FIELD_IDS } from "@/lib/forms/standard-ids";
 import { GROUP_SOURCE_PREFIX, groupIdOfSource } from "@/lib/workflow/assignee";
 import { ConditionEditor } from "./ConditionEditor";
+import { OpensFields } from "./OpensFields";
 import { checkboxAbove } from "@/lib/forms/checkbox-links";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import { FormulaEditor } from "./FormulaEditor";
@@ -179,7 +180,7 @@ function LinkToBox({ def, field, stamps, onPatch }: { def: FormDefinition; field
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, groups = [], steps = DEFAULT_STEPS, stamps = [],
+  def, field, onPatch, onRename, onMoveToPage, onDefChange, groups = [], steps = DEFAULT_STEPS, stamps = [],
 }: {
   def: FormDefinition;
   /** The form's places on the PDF, to find the box a field belongs to ("קשר לתיבה שמעל"). */
@@ -193,6 +194,8 @@ export function FieldSettings({
   onRename: (to: string) => string | undefined;
   /** Move the field to the end of another page of the form. */
   onMoveToPage?: (page: number) => void;
+  /** Change other fields too (the fields this one opens get their own visibleIf). */
+  onDefChange?: (def: FormDefinition) => void;
 }) {
   const meta = FIELD_TYPE_META[field.type];
   const v: FieldValidation = field.validation ?? {};
@@ -425,6 +428,7 @@ export function FieldSettings({
       )}
 
       <Section title="תנאים">
+        {onDefChange && meta.hasAnswer && <OpensFields def={def} field={field} onDefChange={onDefChange} />}
         <LinkToBox def={def} field={field} stamps={stamps} onPatch={onPatch} />
         <ConditionEditor def={def} selfId={field.id} value={field.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג שדה זה אם" />
         <ConditionEditor def={def} selfId={field.id} value={field.disabledIf} onChange={(c) => onPatch({ disabledIf: c })} lead="נעל שדה אם" />
