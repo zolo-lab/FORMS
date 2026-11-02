@@ -41,8 +41,11 @@ export function PdfTab({
   steps,
   focusRole,
   pick,
+  onDefinitionAndPdf,
 }: {
   pick?: PickMode;
+  /** Change the form and its boxes in one step (one undo). */
+  onDefinitionAndPdf?: (d: FormDefinition, p: PdfState) => void;
   templateId?: string;
   steps?: StepView[];
   focusRole?: FillerRole | "";
@@ -254,6 +257,13 @@ export function PdfTab({
           steps={steps}
           focusRole={pick ? undefined : focusRole}
           pick={pick}
+          onTransform={onDefinitionAndPdf ? (fix) => {
+            const r = fix(defRef.current, pdf.mapping.stamps);
+            if (!r.def) return r.error;
+            defRef.current = r.def;
+            onDefinitionAndPdf(r.def, { ...pdf, mapping: { ...pdf.mapping, stamps: r.stamps } });
+            return undefined;
+          } : undefined}
           source={{ url: pdf.file.url }}
           pages={pdf.file.pages}
           mapping={pdf.mapping}
