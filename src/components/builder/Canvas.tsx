@@ -1,4 +1,5 @@
 "use client";
+import type { PickMode } from "@/lib/forms/pick-mode";
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ export interface CanvasProps {
   focusRole?: FillerRole;
   /** Step names by role ("שלב 2 · העובד"), shown on each field; a field whose role has no step is "לא משויך לשלב". */
   stepNames?: Partial<Record<FillerRole, string>>;
+  /** "סימון בטופס": tick the fields the source field opens. */
+  pick?: PickMode;
 }
 
 function readDrop(e: React.DragEvent): { type?: FieldType; fieldId?: string } {
@@ -86,15 +89,36 @@ export function Canvas(p: CanvasProps) {
                 const matches = p.focusRole === "unassigned" ? noStep : role === p.focusRole;
                 const inFocus = !!p.focusRole && answers && matches;
                 const outOfFocus = !!p.focusRole && answers && !matches;
-                const assigning = !!p.focusRole && p.focusRole !== "unassigned" && answers;
+                const assigning = !p.pick && !!p.focusRole && p.focusRole !== "unassigned" && answers;
+                const isSource = !!p.pick && p.pick.sourceId === f.id;
+                const picking = !!p.pick && !isSource && f.type !== "hidden";
+                const picked = picking && p.pick!.ids.has(f.id);
                 return (
                   <div key={f.id}>
                     {zone(pi, fi, `before-${f.id}`, <div className="h-2" />)}
                     <div
                       draggable={!selected}
                       onDragStart={(e) => { e.dataTransfer.setData(DRAG_FIELD, f.id); e.dataTransfer.effectAllowed = "move"; }}
-                      className={cn("flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity", selected && "border-primary ring-2 ring-primary/40", inFocus && "border-2 border-primary bg-primary/10", outOfFocus && "opacity-40 hover:opacity-100")}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity",
+                        selected && !p.pick && "border-primary ring-2 ring-primary/40",
+                        !p.pick && inFocus && "border-2 border-primary bg-primary/10",
+                        !p.pick && outOfFocus && "opacity-40 hover:opacity-100",
+                        isSource && "border-2 border-success bg-success/10",
+                        picked && "border-2 border-primary bg-primary/10",
+                        picking && !picked && "opacity-60 hover:opacity-100",
+                      )}
                     >
+                      {picking && (
+                        <input
+                          type="checkbox"
+                          className="size-5 shrink-0 accent-primary"
+                          checked={picked}
+                          onChange={() => p.pick!.onToggle(f.id)}
+                          aria-label={`${f.label || "השדה"} נפתח מהשדה המסומן`}
+                        />
+                      )}
+                      {isSource && <span className="shrink-0 rounded bg-success/20 px-1.5 py-0.5 text-xs font-medium text-success">המקור</span>}
                       {assigning && (
                         <input
                           type="checkbox"

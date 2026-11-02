@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Eye, X } from "lucide-react";
+import { Eye, MousePointerClick, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { addDependent, dependentCandidates, dependentsOf, removeDependent, revealWord } from "@/lib/forms/dependents";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
@@ -10,7 +10,7 @@ import { FieldPicker } from "./FieldPicker";
  * From the source field: «כשהשדה הזה מסומן / מלא – הצג גם…» (as in iForms). Each chosen field gets a visibleIf on
  * this one; the list shows every field that already depends on it, wherever the rule was set.
  */
-export function OpensFields({ def, field, onDefChange }: { def: FormDefinition; field: FormField; onDefChange: (d: FormDefinition) => void }) {
+export function OpensFields({ def, field, onDefChange, onStartPick }: { def: FormDefinition; field: FormField; onDefChange: (d: FormDefinition) => void; onStartPick?: (sourceId: string) => void }) {
   const [error, setError] = useState<string>();
   const opens = dependentsOf(def, field.id);
   const candidates = dependentCandidates(def, field.id);
@@ -33,10 +33,16 @@ export function OpensFields({ def, field, onDefChange }: { def: FormDefinition; 
           ))}
         </ul>
       )}
+      {onStartPick && (
+        <Button variant="outline" size="sm" className="min-h-11 w-full justify-start" onClick={() => onStartPick(field.id)}>
+          <MousePointerClick className="size-4" aria-hidden />
+          סימון בטופס או על המסמך
+        </Button>
+      )}
       {candidates.length > 0 && (
         <FieldPicker
           label="הוספת שדה שנפתח"
-          placeholder="הקלידו שם השדה שייפתח…"
+          placeholder="או הקלידו שם השדה שייפתח…"
           fields={candidates}
           clearOnPick
           onPick={(id) => {

@@ -19,6 +19,7 @@ test("a ticked box and a filled field open other fields; hidden ones are not req
   };
   await add("הצהרה / אישור", "תושב יישוב מזכה");
   await add("תאריך", "מתאריך");
+  await add("תשובה קצרה", "שם היישוב");
   await add("תשובה קצרה", "הכנסה נוספת");
   await add("סכום (₪)", "סכום ההכנסה הנוספת");
   await page.getByRole("switch", { name: "שדה חובה" }).click();
@@ -30,6 +31,16 @@ test("a ticked box and a filled field open other fields; hidden ones are not req
   await opens.fill("מתאריך");
   await opens.press("Enter");
   await expect(page.getByRole("list", { name: "שדות שנפתחים מהשדה הזה" })).toContainText("מתאריך");
+
+  // Or mark them on the form: "סימון בטופס", tick, save.
+  await page.getByRole("button", { name: "סימון בטופס או על המסמך" }).click();
+  const bar = page.getByRole("region", { name: "סימון שדות שנפתחים" });
+  await expect(bar).toContainText("1 מסומנים");
+  await page.getByRole("checkbox", { name: "שם היישוב נפתח מהשדה המסומן" }).check();
+  await expect(bar).toContainText("2 מסומנים");
+  await bar.getByRole("button", { name: "שמירה" }).click();
+  await expect(bar).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "שדות שנפתחים מהשדה הזה" })).toContainText("שם היישוב");
 
   // From a text field: "when this is filled – show also".
   await page.getByRole("button", { name: /^הכנסה נוספת/ }).first().click();
@@ -49,9 +60,11 @@ test("a ticked box and a filled field open other fields; hidden ones are not req
   await page.goto(`/preview/form/${id}?all=1`);
   await expect(page.getByLabel("הכנסה נוספת")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByLabel("מתאריך")).toHaveCount(0);
+  await expect(page.getByLabel("שם היישוב")).toHaveCount(0);
   await expect(page.getByLabel("סכום ההכנסה הנוספת")).toHaveCount(0);
   await page.getByLabel("תושב יישוב מזכה").check();
   await expect(page.getByLabel("מתאריך")).toBeVisible();
+  await expect(page.getByLabel("שם היישוב")).toBeVisible();
   await page.getByLabel("תושב יישוב מזכה").uncheck();
   await expect(page.getByLabel("מתאריך")).toHaveCount(0);
 

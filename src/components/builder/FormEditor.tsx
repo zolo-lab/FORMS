@@ -1,4 +1,6 @@
 "use client";
+import type { PickMode } from "@/lib/forms/pick-mode";
+import { dependentsOf, revealWord, setDependents } from "@/lib/forms/dependents";
 import { cn } from "@/lib/utils";
 import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components/packages/StepsEditor";
 import { OrgRoutes } from "@/components/packages/OrgRoutes";
@@ -28,7 +30,7 @@ import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/fiel
 import { buildXlsx } from "@/lib/export/xlsx";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FieldType } from "@/lib/forms/field-types";
-import { parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { findField, parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { Canvas, type Selection } from "./Canvas";
 import { FormSettings } from "./FormSettings";
 import { Palette } from "./Palette";
@@ -102,6 +104,31 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const unassigned = flow ? unassignedFields(def, stepRoles) : [];
   // "סימון שדות לשלב": the fields of one step are marked, in the responsive form and on the PDF.
   const [focusRole, setFocusRole] = useState<FillerRole | "">("");
+  // "סימון בטופס": the fields a source field opens, marked by clicking them in the form or on the PDF, then saved.
+  const [picking, setPicking] = useState<{ sourceId: string; ids: Set<string> } | null>(null);
+  const pick: PickMode | undefined = picking
+    ? {
+        sourceId: picking.sourceId,
+        ids: picking.ids,
+        onToggle: (id) => setPicking((cur) => {
+          if (!cur || id === cur.sourceId) return cur;
+          const ids = new Set(cur.ids);
+          if (ids.has(id)) ids.delete(id);
+          else ids.add(id);
+          return { ...cur, ids };
+        }),
+      }
+    : undefined;
+  const pickSource = picking ? findField(def, picking.sourceId) : undefined;
+  function savePick() {
+    if (!picking) return;
+    const r = setDependents(def, picking.sourceId, [...picking.ids]);
+    if (r.added || r.removed) commit(r.def);
+    setIssues(r.errors);
+    setNote(`נשמר: ${r.added} שדות נוספו${r.removed ? `, ${r.removed} הוסרו` : ""}.`);
+    setSelection({ kind: "field", id: picking.sourceId });
+    setPicking(null);
+  }
   // One history for the form and its boxes on the PDF: undoing a delete brings back the field and its boxes together.
   const [past, setPast] = useState<HistoryEntry[]>([]);
   const [future, setFuture] = useState<HistoryEntry[]>([]);
@@ -406,7 +433,17 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           ]}
         />
       </div>
-      {views && (tab === "edit" || tab === "pdf") && (
+      {picking && pickSource && (tab === "edit" || tab === "pdf") && (
+        <div role="region" aria-label="סימון שדות שנפתחים" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-primary/10 px-4 py-2 text-sm">
+          <span>
+            סמנו את השדות שנפתחים כש<bdi className="font-semibold">{pickSource.label || pickSource.id}</bdi> {revealWord(pickSource)}: {tab === "pdf" ? "לחצו על התיבות במסמך" : "סמנו את השדות ברשימה"}.
+            {" "}<strong>{picking.ids.size}</strong> מסומנים.
+          </span>
+          <Button size="sm" onClick={savePick}>שמירה</Button>
+          <Button variant="ghost" size="sm" onClick={() => setPicking(null)}>ביטול</Button>
+        </div>
+      )}
+      {!picking && views && (tab === "edit" || tab === "pdf") && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-muted/40 px-4 py-2 text-sm">
           <label className="flex items-center gap-2">
             <span className="font-medium">סימון שדות לשלב</span>
@@ -459,6 +496,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               <Canvas
                 def={def}
                 focusRole={focusRole || undefined}
+                pick={pick}
                 stepNames={views ? Object.fromEntries([...views].reverse().map((v) => [v.role, v.label])) : undefined}
                 selection={selection}
                 onSelect={setSelection}
@@ -486,6 +524,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onDefChange={(d) => commit(d)}
+                  onStartPick={(sourceId) => {
+                    setFocusRole("");
+                    setPicking({ sourceId, ids: new Set(dependentsOf(def, sourceId).map((f) => f.id)) });
+                  }}
                   onMoveToPage={(pi) => commit(moveField(def, selectedField.id, { page: pi, index: def.pages[pi]!.fields.length }))}
                   onRename={(to) => {
                     const r = renameFieldId(def, selectedField.id, to);
@@ -582,7 +624,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             )}
           </div>
         )}
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

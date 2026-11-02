@@ -3,7 +3,7 @@ import { parseFormDefinition, findField, type FormDefinition } from "@/lib/forms
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { validateAnswers } from "@/lib/forms/validate";
 import {
-  addDependent, dependentCandidates, dependentsOf, pickerText, removeDependent, resolvePicked, revealRule, revealWord, visibilityDependsOn,
+  addDependent, dependentCandidates, dependentsOf, pickerText, removeDependent, resolvePicked, revealRule, revealWord, setDependents, visibilityDependsOn,
 } from "@/lib/forms/dependents";
 
 const def = (fields: unknown[]): FormDefinition =>
@@ -127,5 +127,22 @@ describe("pickers", () => {
     expect(resolvePicked(c, "שם היישוב")).toBe("town");
     expect(resolvePicked(c, "שם פרטי")).toBeNull(); // two fields share it
     expect(resolvePicked(c, "")).toBeNull();
+  });
+});
+
+describe("setDependents (mark on the form, then save)", () => {
+  it("adds the newly marked, removes the unmarked, keeps the rest", () => {
+    const start = addDependent(addDependent(form, "resident", "fromDate").def!, "resident", "spouse").def!;
+    const r = setDependents(start, "resident", ["fromDate", "town", "resident"]);
+    expect(dependentsOf(r.def, "resident").map((f) => f.id)).toEqual(["fromDate", "town"]);
+    expect([r.added, r.removed, r.errors]).toEqual([1, 1, []]);
+    expect(findField(r.def, "spouse")!.visibleIf).toBeUndefined();
+  });
+  it("skips a field that would make a loop and says why", () => {
+    const start = addDependent(form, "resident", "town").def!;
+    const r = setDependents(start, "town", ["resident", "fromDate"]);
+    expect(r.added).toBe(1);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/מעגל/);
   });
 });

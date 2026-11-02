@@ -121,3 +121,30 @@ export function resolvePicked(candidates: Pick<FormField, "id" | "label">[], typ
   const byLabel = candidates.filter((f) => (f.label ?? "").trim() === t);
   return byLabel.length === 1 ? byLabel[0]!.id : null;
 }
+
+/**
+ * "Mark on the form, then save": make exactly `wanted` the fields that `sourceId` opens. New ones are added, unmarked
+ * ones lose this rule; a field that cannot be linked (loop, complex condition) is skipped with its reason.
+ */
+export function setDependents(def: FormDefinition, sourceId: string, wanted: string[]): { def: FormDefinition; added: number; removed: number; errors: string[] } {
+  const want = new Set(wanted.filter((id) => id !== sourceId));
+  const now = new Set(dependentsOf(def, sourceId).map((f) => f.id));
+  let next = def;
+  let added = 0;
+  let removed = 0;
+  const errors: string[] = [];
+  for (const id of now) {
+    if (want.has(id)) continue;
+    next = removeDependent(next, sourceId, id);
+    removed++;
+  }
+  for (const id of want) {
+    if (now.has(id)) continue;
+    const r = addDependent(next, sourceId, id);
+    if (r.def) {
+      next = r.def;
+      added++;
+    } else errors.push(r.error);
+  }
+  return { def: next, added, removed, errors };
+}
