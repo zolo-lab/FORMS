@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { parseReminderPolicy } from "@/lib/workflow/reminder-policy";
 import { createOrg, createProject, deleteProject, setOrgActive, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
@@ -72,7 +71,7 @@ const clean = (v: FormDataEntryValue | null) => {
   return s === "" ? null : s;
 };
 
-/** Branding, sender and reminders of one organization (the name is edited in the table). */
+/** Branding and sender of one organization (the name is edited in the table). */
 export async function updateOrgAction(formData: FormData): Promise<AutoSaveResult> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
@@ -97,7 +96,6 @@ export async function updateOrgAction(formData: FormData): Promise<AutoSaveResul
     primaryColor,
     senderName: clean(formData.get("senderName")),
     senderEmail: email,
-    reminderPolicy: parseReminderPolicy(Object.fromEntries(formData)),
     ...(logoFileId !== undefined ? { logoFileId } : {}),
   });
   revalidatePath(PATH);

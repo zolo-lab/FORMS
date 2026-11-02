@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgTheme } from "@/components/branding";
 import { normalizeHex } from "@/lib/branding";
-import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
 import { listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
 import { ORG_ERRORS } from "@/lib/orgs/input";
 import { createOrgAction, createProjectAction, deleteProjectAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
@@ -35,7 +34,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
   );
 }
 
-/** Organizations as a table; adding and editing (details, projects, branding, reminders) in a centered window that saves itself. */
+/** Organizations as a table; adding and editing (details, projects, branding, sender) in a centered window that saves itself. */
 export default async function OrganizationsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; edit?: string; n?: string }> }) {
   const { error, saved, edit, n } = await searchParams;
   const [orgs, projects, usage] = await Promise.all([listOrgs(), listProjects(), projectUsage()]);
@@ -75,7 +74,6 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       {editing && (() => {
         const o = editing;
         const mine = projects.filter((p) => p.organizationId === o.id);
-        const rp = o.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
         return (
           <Panel title={o.name} subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined} note="השינויים נשמרים אוטומטית" closeHref={PATH}>
             {errorText && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
@@ -143,9 +141,8 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               </form>
             </section>
 
-            <section aria-labelledby="sec-brand" className="space-y-3 border-t pt-4">
-              <h3 id="sec-brand" className="font-semibold">מיתוג, שולח ותזכורות</h3>
-              <OrgTheme org={o}>
+            <section aria-label="מיתוג ושולח" className="space-y-3 border-t pt-4">
+              <OrgTheme org={o} header={false}>
                 <AutoSaveForm action={updateOrgAction} errors={ERRORS} className="space-y-4">
                   <input type="hidden" name="id" value={o.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -157,17 +154,6 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <label className="flex items-center gap-2 text-sm"><Checkbox name="removeLogo" value="1" /> הסרת הלוגו הקיים</label>
                     )}
                   </div>
-                  <fieldset className="space-y-2">
-                    <legend className="text-sm font-medium">מדיניות תזכורות</legend>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <Field label="תזכורת ראשונה אחרי (שעות)" htmlFor="o-first"><Input id="o-first" name="firstAfterHours" type="number" inputMode="numeric" min={1} defaultValue={rp.firstAfterHours} /></Field>
-                      <Field label="כל (שעות)" htmlFor="o-every"><Input id="o-every" name="everyHours" type="number" inputMode="numeric" min={1} defaultValue={rp.everyHours} /></Field>
-                      <Field label="מקסימום (0 = עד שחותמים)" htmlFor="o-max"><Input id="o-max" name="maxCount" type="number" inputMode="numeric" min={0} max={10} defaultValue={rp.maxCount} /></Field>
-                      <Field label="לא לשלוח מהשעה" htmlFor="o-qf"><Input id="o-qf" name="quietFromHour" type="number" inputMode="numeric" min={0} max={23} defaultValue={rp.quietFromHour} /></Field>
-                      <Field label="עד השעה" htmlFor="o-qt"><Input id="o-qt" name="quietToHour" type="number" inputMode="numeric" min={0} max={23} defaultValue={rp.quietToHour} /></Field>
-                      <label className="flex items-center gap-2 self-end pb-2 text-sm"><Checkbox name="skipShabbat" defaultChecked={rp.skipShabbat} /> לא לשלוח בשבת</label>
-                    </div>
-                  </fieldset>
                 </AutoSaveForm>
               </OrgTheme>
             </section>
