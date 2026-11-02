@@ -1,7 +1,9 @@
 /**
- * SMS sending behind a small interface. The real Israeli provider (InforU or 019) is chosen by the owner and
- * added as another case in `getSmsProvider`; until then (and in dev/CI) the console provider only logs.
+ * SMS sending behind a small interface. SMS_PROVIDER=sms4free sends through SMS4Free (production only);
+ * without it (dev/CI/preview) the console provider only logs.
  */
+import { sms4freeProvider } from "./sms4free";
+
 export interface SmsResult {
   ok: boolean;
   id?: string;
@@ -25,5 +27,6 @@ const consoleProvider: SmsProvider = {
 export function getSmsProvider(env: Record<string, string | undefined> = process.env): SmsProvider {
   const name = env.SMS_PROVIDER?.trim();
   if (!name || name === "console") return consoleProvider;
-  throw new Error(`unknown SMS_PROVIDER "${name}" (supported: console)`);
+  if (name === "sms4free") return sms4freeProvider({ env });
+  throw new Error(`unknown SMS_PROVIDER "${name}" (supported: console, sms4free)`);
 }
