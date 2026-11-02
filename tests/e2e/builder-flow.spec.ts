@@ -34,7 +34,10 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // Condition: the salary shows only for monthly employment.
   await page.getByRole("button", { name: /^שכר/ }).first().click();
   await page.getByRole("button", { name: "הוספת תנאי" }).first().click();
-  await page.getByRole("combobox", { name: "שדה", exact: true }).first().selectOption({ label: "סוג העסקה" });
+  // The field is picked by typing its name (long forms such as 101 have too many fields for a plain list).
+  const pick = page.getByRole("combobox", { name: "שדה לתנאי חדש" }).first();
+  await pick.fill("סוג העסקה");
+  await pick.press("Enter");
   await page.getByRole("combobox", { name: "ערך", exact: true }).first().selectOption({ label: "חודשי" });
 
   // Second page with one field.
