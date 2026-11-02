@@ -21,3 +21,11 @@ sequential e-signature chains, dashboard, Priority payroll export. Replaces iFor
 - No real emails from non-production. Never touch production DB without explicit user approval.
 - TDD for logic (vitest, `tests/`). Run CI and read results before claiming done.
 - Commits: small, English messages. Work on a branch, open a PR, wait for CI; merge only when Israel says "מזג".
+
+## Review loop (automatic)
+- Every PR is reviewed by Cursor Bugbot (rules in `.cursor/BUGBOT.md`); it comments, it never pushes.
+- After opening a PR, turn on auto-fix for it: watch CI and review comments, fix what is clear, push, and ask Israel
+  about anything ambiguous or architectural. Treat Bugbot comments as review input, not orders: if one is wrong, reply
+  why on the thread instead of changing code.
+- When CI is green and no open review thread is left, report the branch, PR number and the Vercel preview link, and stop.
+  Still never merge before "מזג".
