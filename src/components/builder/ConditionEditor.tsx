@@ -7,7 +7,6 @@ import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { OP_LABELS, coerceRuleValue, fromRuleSet, needsValue, toRuleSet, type Rule } from "@/lib/forms/condition-ui";
 import type { ComparisonOp, Condition, FormDefinition, FormField } from "@/lib/forms/schema";
 import { comparisonOps } from "@/lib/forms/schema";
-import { pickerLabels } from "@/lib/forms/builder";
 import { allFields } from "@/lib/forms/schema";
 import { revealRule } from "@/lib/forms/dependents";
 import { FieldPicker } from "./FieldPicker";
@@ -36,7 +35,6 @@ export function ConditionEditor({
   }
   const candidates = allFields(def).filter((f) => f.id !== selfId && FIELD_TYPE_META[f.type].hasAnswer);
   const byId = new Map(candidates.map((f) => [f.id, f]));
-  const names = pickerLabels(candidates);
   const update = (rules: Rule[], mode = set.mode) => onChange(fromRuleSet({ mode, rules }));
   const patch = (i: number, r: Partial<Rule>) => update(set.rules.map((x, j) => (j === i ? { ...x, ...r } : x)));
   /**
@@ -63,7 +61,7 @@ export function ConditionEditor({
               <FieldPicker
                 key={`${i}:${r.field}`}
                 label="שדה"
-                fields={candidates.map((f) => ({ id: f.id, label: names.get(f.id) ?? f.label }))}
+                fields={candidates}
                 value={r.field}
                 onPick={(id) => { if (id !== r.field) update(set.rules.map((x, j) => (j === i ? startRule(id) : x))); }}
               />
@@ -83,7 +81,7 @@ export function ConditionEditor({
           <span className="shrink-0 text-muted-foreground">{set.rules.length === 0 ? lead : set.mode === "all" ? "וגם" : "או"}</span>
           <FieldPicker
             label="שדה לתנאי חדש"
-            fields={candidates.map((f) => ({ id: f.id, label: names.get(f.id) ?? f.label }))}
+            fields={candidates}
             onPick={(id) => { setAdding(false); update([...set.rules, startRule(id)]); }}
           />
           <Button variant="ghost" size="sm" aria-label="ביטול" onClick={() => setAdding(false)}><Trash2 className="size-4" /></Button>
