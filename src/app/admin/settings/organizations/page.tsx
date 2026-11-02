@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Trash2, X } from "lucide-react";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { AutoSaveForm } from "@/components/ui/auto-save-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgTheme } from "@/components/branding";
 import { normalizeHex } from "@/lib/branding";
-import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
 import { listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
 import { ORG_ERRORS } from "@/lib/orgs/input";
 import { createOrgAction, createProjectAction, deleteProjectAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
@@ -34,7 +34,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
   );
 }
 
-/** Organizations as a table; adding and editing (details, projects, branding, reminders) in a side panel. */
+/** Organizations as a table; adding and editing (details, projects, branding, sender) in a centered window that saves itself. */
 export default async function OrganizationsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; edit?: string; n?: string }> }) {
   const { error, saved, edit, n } = await searchParams;
   const [orgs, projects, usage] = await Promise.all([listOrgs(), listProjects(), projectUsage()]);
@@ -74,20 +74,18 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       {editing && (() => {
         const o = editing;
         const mine = projects.filter((p) => p.organizationId === o.id);
-        const rp = o.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
         return (
-          <Panel title={o.name} subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined} closeHref={PATH}>
+          <Panel title={o.name} subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined} note="השינויים נשמרים אוטומטית" closeHref={PATH}>
             {errorText && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
 
             <section aria-labelledby="sec-details" className="space-y-3">
               <h3 id="sec-details" className="font-semibold">פרטים</h3>
-              <form action={updateOrgBasicsAction} className="grid gap-3 sm:grid-cols-[2fr_1fr] sm:items-end">
+              <AutoSaveForm action={updateOrgBasicsAction} errors={ERRORS} className="grid gap-3 sm:grid-cols-[2fr_1fr] sm:items-end" statusClassName="sm:col-span-2">
                 <input type="hidden" name="id" value={o.id} />
                 <Field label="שם העמותה / העסק" htmlFor="o-name"><Input id="o-name" name="name" defaultValue={o.name} required maxLength={120} /></Field>
                 <Field label='ח"פ' htmlFor="o-reg"><Input id="o-reg" name="registrationNumber" defaultValue={o.registrationNumber} required inputMode="numeric" dir="ltr" /></Field>
                 <label className="flex min-h-11 items-center gap-2 text-sm"><Checkbox name="active" defaultChecked={o.active} /> פעילה</label>
-                <div><SubmitButton saved={saved === `org-${o.id}` || saved === "new"}>שמירה</SubmitButton></div>
-              </form>
+              </AutoSaveForm>
             </section>
 
             <section aria-labelledby="sec-projects" className="space-y-3 border-t pt-4">
@@ -103,7 +101,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                         <th scope="col" className="px-3 py-2 text-start font-medium">שם</th>
                         <th scope="col" className="w-20 px-3 py-2 text-start font-medium">פעיל</th>
                         <th scope="col" className="w-16 px-3 py-2 text-start font-medium">בשימוש</th>
-                        <th scope="col" className="w-40 px-3 py-2"><span className="sr-only">פעולות</span></th>
+                        <th scope="col" className="w-28 px-3 py-2"><span className="sr-only">פעולות</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -116,11 +114,10 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                           <td className="px-3 py-1.5 text-muted-foreground">{usage.get(p.id) ?? 0}</td>
                           <td className="px-3 py-1.5">
                             <span className="flex items-center justify-end gap-1">
-                              <form id={`proj-${p.id}`} action={updateProjectAction}>
+                              <AutoSaveForm id={`proj-${p.id}`} action={updateProjectAction} errors={ERRORS}>
                                 <input type="hidden" name="id" value={p.id} />
                                 <input type="hidden" name="org" value={o.id} />
-                                <SubmitButton size="sm" variant="outline" saved={saved === `proj-${p.id}`}>שמירה</SubmitButton>
-                              </form>
+                              </AutoSaveForm>
                               <form action={deleteProjectAction}>
                                 <input type="hidden" name="id" value={p.id} />
                                 <input type="hidden" name="org" value={o.id} />
@@ -144,10 +141,9 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               </form>
             </section>
 
-            <section aria-labelledby="sec-brand" className="space-y-3 border-t pt-4">
-              <h3 id="sec-brand" className="font-semibold">מיתוג, שולח ותזכורות</h3>
-              <OrgTheme org={o}>
-                <form action={updateOrgAction} className="space-y-4">
+            <section aria-label="מיתוג ושולח" className="space-y-3 border-t pt-4">
+              <OrgTheme org={o} header={false}>
+                <AutoSaveForm action={updateOrgAction} errors={ERRORS} className="space-y-4">
                   <input type="hidden" name="id" value={o.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="צבע ראשי" htmlFor="o-color"><Input id="o-color" name="primaryColor" defaultValue={normalizeHex(o.primaryColor) ?? ""} placeholder="#1d4ed8" dir="ltr" /></Field>
@@ -158,19 +154,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <label className="flex items-center gap-2 text-sm"><Checkbox name="removeLogo" value="1" /> הסרת הלוגו הקיים</label>
                     )}
                   </div>
-                  <fieldset className="space-y-2">
-                    <legend className="text-sm font-medium">מדיניות תזכורות</legend>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <Field label="תזכורת ראשונה אחרי (שעות)" htmlFor="o-first"><Input id="o-first" name="firstAfterHours" type="number" inputMode="numeric" min={1} defaultValue={rp.firstAfterHours} /></Field>
-                      <Field label="כל (שעות)" htmlFor="o-every"><Input id="o-every" name="everyHours" type="number" inputMode="numeric" min={1} defaultValue={rp.everyHours} /></Field>
-                      <Field label="מקסימום (0 = עד שחותמים)" htmlFor="o-max"><Input id="o-max" name="maxCount" type="number" inputMode="numeric" min={0} max={10} defaultValue={rp.maxCount} /></Field>
-                      <Field label="לא לשלוח מהשעה" htmlFor="o-qf"><Input id="o-qf" name="quietFromHour" type="number" inputMode="numeric" min={0} max={23} defaultValue={rp.quietFromHour} /></Field>
-                      <Field label="עד השעה" htmlFor="o-qt"><Input id="o-qt" name="quietToHour" type="number" inputMode="numeric" min={0} max={23} defaultValue={rp.quietToHour} /></Field>
-                      <label className="flex items-center gap-2 self-end pb-2 text-sm"><Checkbox name="skipShabbat" defaultChecked={rp.skipShabbat} /> לא לשלוח בשבת</label>
-                    </div>
-                  </fieldset>
-                  <SubmitButton saved={saved === `brand-${o.id}`}>שמירה</SubmitButton>
-                </form>
+                </AutoSaveForm>
               </OrgTheme>
             </section>
           </Panel>
@@ -180,22 +164,22 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
   );
 }
 
-/** Side panel (half the page on a computer, the whole screen on a phone); closing goes back to the table. */
-function Panel({ title, subtitle, closeHref, children }: { title: string; subtitle?: string; closeHref: string; children: React.ReactNode }) {
+/** Centered window over the table (the whole screen on a phone); closing goes back to the table. */
+function Panel({ title, subtitle, note, closeHref, children }: { title: string; subtitle?: string; note?: string; closeHref: string; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-foreground/30" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 md:p-6" role="dialog" aria-modal="true" aria-labelledby="panel-title">
       <Link href={closeHref} scroll={false} className="absolute inset-0" aria-label="סגירה" tabIndex={-1} />
-      <div className="relative h-full w-full overflow-y-auto bg-background shadow-xl md:w-1/2 md:min-w-[36rem]">
-        <div className="sticky top-0 z-10 flex items-start gap-3 border-b bg-background px-4 py-3">
+      <div className="relative flex h-full w-full flex-col overflow-hidden bg-background shadow-xl md:h-auto md:max-h-[90vh] md:max-w-4xl md:rounded-xl md:border">
+        <div className="flex items-start gap-3 border-b bg-background px-5 py-3">
           <div className="min-w-0 flex-1">
             <h2 id="panel-title" className="text-lg font-semibold">{title}</h2>
             {subtitle && <p className="text-sm text-muted-foreground"><bdi dir="ltr">{subtitle}</bdi></p>}
+            {note && <p className="text-xs text-muted-foreground">{note}</p>}
           </div>
           <Link href={closeHref} scroll={false} className={buttonVariants({ variant: "ghost", size: "icon" })} aria-label="סגירה"><X className="size-5" aria-hidden /></Link>
         </div>
-        <div className="space-y-6 p-4">{children}</div>
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );
 }
-
