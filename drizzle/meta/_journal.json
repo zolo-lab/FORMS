@@ -148,6 +148,13 @@
       "when": 1793559219483,
       "tag": "0020_project_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793651900000,
+      "tag": "0021_package_permission_edit",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { allowedOrgIds, can, canTrack, canViewContent, hasGrant, isTrackOnly, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, projectLimit, resolveAccess, roleForNewUser, usableOrgIds, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
+import { allowedOrgIds, can, canSeeFormTemplates, canTrack, canViewContent, editablePackageIds, hasGrant, isTrackOnly, normalizeGrants, isAdmin, normalizeRole, openablePackageIds, orgAllowed, projectLimit, resolveAccess, roleForNewUser, usableOrgIds, visibilityScope, type PackagePermission, type SessionUser } from "@/lib/auth/permissions";
 
 const admin: SessionUser = { id: "a", email: "a@x.org", name: "A", role: "admin", active: true };
 const user: SessionUser = { id: "u", email: "U@x.org", name: "U", role: "manager", active: true };
 const perms: PackagePermission[] = [
-  { packageTemplateId: "p1", canOpen: true, canViewAll: false, canEditChain: true },
-  { packageTemplateId: "p2", canOpen: false, canViewAll: true, canEditChain: true },
+  { packageTemplateId: "p1", canOpen: true, canViewAll: false, canEditChain: true, canEdit: false },
+  { packageTemplateId: "p2", canOpen: false, canViewAll: true, canEditChain: true, canEdit: true },
 ];
 
 describe("roles", () => {
@@ -127,7 +127,7 @@ describe("tracking-only users", () => {
     expect(hasGrant(tracker, "export")).toBe(false);
     expect(hasGrant(tracker, "viewAll")).toBe(false);
     expect(hasGrant(tracker, "trackOnly")).toBe(true);
-    expect(can(tracker, [{ packageTemplateId: "p", canOpen: true, canViewAll: true, canEditChain: true }], "p", "open")).toBe(false);
+    expect(can(tracker, [{ packageTemplateId: "p", canOpen: true, canViewAll: true, canEditChain: true, canEdit: true }], "p", "open")).toBe(false);
     expect(openablePackageIds(tracker, [])).toEqual([]);
     expect(visibilityScope(tracker, [])?.allRequests).toBe(true);
   });
@@ -141,5 +141,43 @@ describe("tracking-only users", () => {
     const m: SessionUser = { id: "m", email: "m@x", name: "m", role: "manager", active: true, grants: {} };
     expect(canTrack(m)).toBe(false);
     expect(canTrack({ ...m, grants: { viewAll: true } })).toBe(true);
+  });
+});
+
+describe("forms tab (עריכה / שליחה per form)", () => {
+  const builder: SessionUser = { ...user, grants: { manageForms: true } };
+  const sender: SessionUser = { ...user, grants: {} };
+  const only: PackagePermission[] = [
+    { packageTemplateId: "p1", canOpen: true, canViewAll: false, canEditChain: false, canEdit: false },
+    { packageTemplateId: "p2", canOpen: false, canViewAll: false, canEditChain: false, canEdit: true },
+  ];
+
+  it("a user with at least one form to send or edit gets the tab", () => {
+    expect(canSeeFormTemplates(sender, only)).toBe(true);
+    expect(canSeeFormTemplates(sender, [])).toBe(false);
+    expect(canSeeFormTemplates(admin, [])).toBe(true);
+    expect(canSeeFormTemplates(builder, [])).toBe(true);
+  });
+
+  it("a user with only the openAll grant gets the tab too", () => {
+    expect(canSeeFormTemplates({ ...user, grants: { openAll: true } }, [])).toBe(true);
+  });
+
+  it("editing is limited to the forms ticked for it", () => {
+    expect(can(sender, only, "p2", "edit")).toBe(true);
+    expect(can(sender, only, "p1", "edit")).toBe(false);
+    expect(editablePackageIds(sender, only)).toEqual(["p2"]);
+    expect(editablePackageIds(builder, only)).toBe(null);
+    expect(editablePackageIds(admin, only)).toBe(null);
+  });
+
+  it("the build-forms grant covers every form", () => {
+    expect(can(builder, [], "whatever", "edit")).toBe(true);
+  });
+
+  it("an inactive or tracking-only user never reaches the tab", () => {
+    expect(canSeeFormTemplates({ ...user, active: false }, only)).toBe(false);
+    expect(canSeeFormTemplates({ ...user, grants: { trackOnly: true } }, only)).toBe(false);
+    expect(editablePackageIds({ ...user, grants: { trackOnly: true } }, only)).toEqual([]);
   });
 });

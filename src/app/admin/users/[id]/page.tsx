@@ -94,15 +94,15 @@ export default async function UserPage({ params, searchParams }: { params: Promi
 
           <Card className="space-y-3 p-4 sm:p-6">
             <h2 className="text-lg font-semibold">טפסים</h2>
-            <p className="text-sm text-muted-foreground">אילו טפסים המנהל רשאי לשלוח, ובאילו הוא רואה את כל מה שנשלח (לא רק את מה ששלח או אישר).</p>
+            <p className="text-sm text-muted-foreground">אילו טפסים המנהל רשאי לשלוח ואילו הוא רשאי גם לערוך. מי שסומן לו לפחות טופס אחד יראה למעלה לשונית &quot;תבניות טפסים&quot; עם הטפסים האלה בלבד. מה הוא רואה מהבקשות שנשלחו נקבע בהרשאה הכללית למעלה.</p>
             {packages.length === 0 ? <p className="text-sm text-muted-foreground">אין טפסים עדיין.</p> : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-muted-foreground">
                     <tr className="border-b">
                       <th scope="col" className="py-2 text-start font-medium">טופס</th>
-                      <th scope="col" className="w-28 py-2 text-center font-medium">שולח</th>
-                      <th scope="col" className="w-28 py-2 text-center font-medium">רואה הכול</th>
+                      <th scope="col" className="w-28 py-2 text-center font-medium">שליחה</th>
+                      <th scope="col" className="w-28 py-2 text-center font-medium">עריכה</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -111,8 +111,8 @@ export default async function UserPage({ params, searchParams }: { params: Promi
                       return (
                         <tr key={p.id}>
                           <td className="py-2"><input type="hidden" name="packages" value={p.id} />{p.name}</td>
-                          <td className="py-2 text-center"><Checkbox name={`${p.id}.open`} defaultChecked={row?.canOpen ?? false} aria-label={`שולח – ${p.name}`} /></td>
-                          <td className="py-2 text-center"><Checkbox name={`${p.id}.view`} defaultChecked={row?.canViewAll ?? false} aria-label={`רואה הכול – ${p.name}`} /></td>
+                          <td className="py-2 text-center"><Checkbox name={`${p.id}.open`} defaultChecked={row?.canOpen ?? false} aria-label={`שליחה – ${p.name}`} /></td>
+                          <td className="py-2 text-center"><Checkbox name={`${p.id}.edit`} defaultChecked={row?.canEdit ?? false} aria-label={`עריכה – ${p.name}`} /></td>
                         </tr>
                       );
                     })}

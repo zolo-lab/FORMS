@@ -81,9 +81,6 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <Link href="/admin/requests/bulk" className={buttonVariants({ variant: "ghost" })}>
             שליחה מקובץ
           </Link>
-          <Link href="/admin/requests/new" className={buttonVariants()}>
-            בקשה חדשה
-          </Link>
           </>
         }
       />

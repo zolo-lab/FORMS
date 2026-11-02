@@ -1,6 +1,6 @@
 import { formLinkOrgs } from "@/server/public-fill";
 import { listOrgs, listProjects } from "@/server/orgs-store";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
 import { saveStepsAction, saveOrgRouteAction } from "@/app/admin/packages/actions";
@@ -8,6 +8,7 @@ import { assignRoles, draftOf, stepFromDraft } from "@/lib/workflow/step-who";
 import { getEditorData, getPdfFile } from "@/server/forms-store";
 import { listContacts, listGroups } from "@/server/people-store";
 import { formPackageId, getPackage, setWorkflow } from "@/server/packages-store";
+import { mayEditTemplate } from "@/server/guards";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   const { id } = await params;
   const { tab, ...query } = await searchParams;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
+  // A manager without the "build forms" grant reaches the builder only for the forms ticked "עריכה" for them.
+  if (!(await mayEditTemplate(id))) redirect("/admin/forms");
   const data = await getEditorData(id);
   if (!data) notFound();
   const pkgId = await formPackageId(id, data.template.title);

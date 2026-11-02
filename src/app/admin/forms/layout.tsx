@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
-import { hasGrant } from "@/lib/auth/permissions";
-import { currentUser } from "@/server/users-store";
+import { viewerFormAccess } from "@/server/users-store";
 
-/** Building forms and packages: admins, and managers with the "build forms and packages" grant. */
-export default async function AdminOnlyLayout({ children }: { children: React.ReactNode }) {
-  if (!hasGrant(await currentUser(), "manageForms")) redirect("/admin/requests");
+/**
+ * The forms tab: admins and form builders see everything; any other user who was given at least one form to send
+ * or to edit sees exactly those forms (read-only unless the form is ticked for editing).
+ */
+export default async function FormsLayout({ children }: { children: React.ReactNode }) {
+  if (!(await viewerFormAccess()).allowed) redirect("/admin/requests");
   return children;
 }

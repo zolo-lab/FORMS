@@ -103,6 +103,8 @@ export interface PackagePermission {
   canOpen: boolean;
   canViewAll: boolean;
   canEditChain: boolean;
+  /** May edit this package's form templates in the builder. */
+  canEdit: boolean;
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -126,7 +128,7 @@ export const canViewContent = (u: SessionUser | null | undefined): boolean => !i
 /** May the user open the tracking screen? Admins, managers who see every request, and tracking-only users. */
 export const canTrack = (u: SessionUser | null | undefined): boolean => isAdmin(u) || (!!u && u.active && (u.grants?.viewAll === true || u.grants?.trackOnly === true));
 
-export type Ability = "open" | "view_all" | "edit_chain";
+export type Ability = "open" | "view_all" | "edit_chain" | "edit";
 
 export function can(u: SessionUser | null | undefined, perms: PackagePermission[], packageTemplateId: string, ability: Ability): boolean {
   if (isAdmin(u)) return true;
@@ -140,7 +142,28 @@ export function can(u: SessionUser | null | undefined, perms: PackagePermission[
       return u!.grants?.viewAll === true || !!p?.canViewAll;
     case "edit_chain":
       return (openAll || !!p?.canOpen) && !!p?.canEditChain;
+    case "edit":
+      return u!.grants?.manageForms === true || !!p?.canEdit;
   }
+}
+
+/** Package ids whose form templates a user may edit; `null` = all (admin, or the "build forms" grant). */
+export function editablePackageIds(u: SessionUser | null | undefined, perms: PackagePermission[]): string[] | null {
+  if (isAdmin(u)) return null;
+  if (!u!.active || isTrackOnly(u)) return [];
+  if (u!.grants?.manageForms) return null;
+  return perms.filter((p) => p.canEdit).map((p) => p.packageTemplateId);
+}
+
+/**
+ * May the user open the "תבניות טפסים" tab? Admins and form builders always; any other user as soon as there is
+ * at least one package they may send or edit – there they see exactly those forms.
+ */
+export function canSeeFormTemplates(u: SessionUser | null | undefined, perms: PackagePermission[]): boolean {
+  if (isAdmin(u) || hasGrant(u, "manageForms")) return true;
+  if (!u!.active || isTrackOnly(u)) return false;
+  if (u!.grants?.openAll === true) return true;
+  return perms.some((p) => p.canOpen || p.canEdit);
 }
 
 /** Package ids a user may start requests of; `null` = all (admin). */
