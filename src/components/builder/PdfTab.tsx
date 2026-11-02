@@ -13,6 +13,8 @@ import { detectFields, type DetectedField } from "@/lib/pdf/detect";
 import { applyRefinements, type Refinement } from "@/lib/pdf/refine";
 import { applyLearned, feedbackFrom, type Learned } from "@/lib/pdf/learn";
 import { DetectDialog } from "@/components/pdf/DetectDialog";
+import { CheckboxLinksDialog } from "./CheckboxLinksDialog";
+import { applyCheckboxLinks, suggestCheckboxLinks, type LinkSuggestion } from "@/lib/forms/checkbox-links";
 import type { Match } from "@/lib/pdf/match";
 import { nanoid } from "nanoid";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
@@ -73,6 +75,8 @@ export function PdfTab({
   const offer = (list: DetectedField[], source: DetectedField[] = list) => { proposed.current = source; setFound(list); };
   /** Places to write the existing fields did not claim (offered after the placement question). */
   const [extra, setExtra] = useState<DetectedField[]>([]);
+  /** After detection: fields that sit next to a box, offered "show only when ticked" (applied only on approval). */
+  const [links, setLinks] = useState<LinkSuggestion[] | null>(null);
   const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
   const defRef = useRef(definition);
@@ -304,11 +308,23 @@ export function PdfTab({
           }
           const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), opts);
           changeDefinition(added.definition);
-          onChange({ ...pdf, mapping: { ...pdf.mapping, stamps: [...pdf.mapping.stamps, ...added.stamps] } });
+          const stamps = [...pdf.mapping.stamps, ...added.stamps];
+          onChange({ ...pdf, mapping: { ...pdf.mapping, stamps } });
           setFound(null);
           setExtra([]);
           // Say what happened (silent success is easy to miss).
           setGuessNote(`נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך. אפשר לעבור ללשונית העריכה כדי לראות אותם.`);
+          const suggested = suggestCheckboxLinks(added.definition, stamps);
+          if (suggested.length) setLinks(suggested);
+        }}
+      />
+      <CheckboxLinksDialog
+        suggestions={links}
+        onClose={() => setLinks(null)}
+        onApply={(chosen) => {
+          changeDefinition(applyCheckboxLinks(defRef.current, chosen));
+          setLinks(null);
+          setGuessNote(`${chosen.length} שדות יוצגו רק כשמסמנים את התיבה שלהם.`);
         }}
       />
       <Dialog open={!!guess} onClose={() => setGuess(null)} title="שיבוץ אוטומטי של השדות" className="w-[min(92vw,30rem)]">
