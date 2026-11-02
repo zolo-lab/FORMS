@@ -35,9 +35,9 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: /^שכר/ }).first().click();
   await page.getByRole("button", { name: "הוספת תנאי" }).first().click();
   // The field is picked by typing its name (long forms such as 101 have too many fields for a plain list).
-  const pick = page.getByRole("combobox", { name: "שדה לתנאי חדש" }).first();
-  await pick.fill("סוג העסקה");
-  await pick.press("Enter");
+  const fieldPick = page.getByRole("combobox", { name: "שדה לתנאי חדש" }).first();
+  await fieldPick.fill("סוג העסקה");
+  await fieldPick.press("Enter");
   await page.getByRole("combobox", { name: "ערך", exact: true }).first().selectOption({ label: "חודשי" });
 
   // Second page with one field.
