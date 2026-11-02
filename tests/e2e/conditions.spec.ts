@@ -10,7 +10,7 @@ test.setTimeout(180_000);
 test("a ticked box and a filled field open other fields; hidden ones are not required", async ({ page }) => {
   await login(page, "/admin/forms");
   const id = await newFormFromPdf(page, `תנאים e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תאריך|סכום \(₪\)|הצהרה \/ אישור)$/ });
   const quick = page.getByRole("group", { name: "עריכה מהירה" }).or(page.locator('[aria-label="עריכה מהירה"]'));
   const add = async (type: string, label: string) => {

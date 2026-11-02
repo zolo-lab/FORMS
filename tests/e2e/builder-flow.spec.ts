@@ -10,7 +10,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
   const id = await newFormFromPdf(page, title);
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });
 
   // Eight field types from the palette; the last one added is selected in the settings panel.
@@ -95,7 +95,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
 
   // "סימון שדות לשלב": each step separately; ticking a field puts it in the step, unticking leaves it in no step.
-  await page.getByRole("tab", { name: "עריכה (רספונסיבי)" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   const pick = page.getByLabel("סימון שדות לשלב");
   await expect(pick.locator("option")).toHaveText(["— בחרו שלב —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test"]);
   await pick.selectOption({ label: "שלב 3 · payroll@example.test" });

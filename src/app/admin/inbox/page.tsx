@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { LayoutGrid, List } from "lucide-react";
+import { ChainTable } from "@/components/requests/ChainTable";
+import { cn } from "@/lib/utils";
 import { Board } from "@/components/requests/Board";
 import { Card } from "@/components/ui/card";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -12,8 +15,9 @@ import { openMyStepAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 /** "Waiting for me": steps addressed to the signed-in user; without a signed-in user (open mode / password) the viewer picks a role. */
-export default async function InboxPage({ searchParams }: { searchParams: Promise<{ role?: string; gone?: string }> }) {
-  const { role: raw, gone } = await searchParams;
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ role?: string; gone?: string; view?: string }> }) {
+  const { role: raw, gone, view } = await searchParams;
+  const cards = view === "cards";
   const me = await currentUser();
   if (me) {
     const now = new Date();
@@ -26,12 +30,39 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         {gone && <p role="alert" className="rounded-md bg-muted p-3 text-sm">הבקשה כבר לא ממתינה לך (נחתמה, בוטלה או פג תוקפה).</p>}
         {result.rows.length === 0 ? <Card className="p-6 text-center text-muted-foreground">אין בקשות שממתינות לך.</Card> : <Board rows={result.rows} onOpen={openMyStepAction} />}
         <section className="space-y-3" aria-labelledby="my-chain">
-          <div>
-            <h2 id="my-chain" className="text-lg font-semibold">בשרשרת שלי</h2>
-            <p className="text-sm text-muted-foreground">בקשות פתוחות שאת/ה חלק מהן: התור שלך עוד לא הגיע, או שכבר סיימת. כך רואים איפה הבקשה נמצאת.</p>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="my-chain" className="text-lg font-semibold">בשרשרת שלי</h2>
+              <p className="text-sm text-muted-foreground">בקשות פתוחות שאת/ה חלק מהן: התור שלך עוד לא הגיע, או שכבר סיימת. כך רואים איפה הבקשה נמצאת.</p>
+            </div>
+            {chain.length > 0 && (
+              <nav aria-label="תצוגה" className="inline-flex rounded-md border p-0.5">
+                {[
+                  { key: "table", label: "טבלה", Icon: List, href: "/admin/inbox" },
+                  { key: "cards", label: "כרטיסים", Icon: LayoutGrid, href: "/admin/inbox?view=cards" },
+                ].map(({ key, label, Icon, href }) => {
+                  const on = (key === "cards") === cards;
+                  return (
+                    <Link
+                      key={key}
+                      href={href}
+                      scroll={false}
+                      aria-current={on ? "page" : undefined}
+                      className={cn("inline-flex min-h-9 items-center gap-1.5 rounded px-3 text-sm", on ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}
+                    >
+                      <Icon className="size-4" aria-hidden /> {label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            )}
           </div>
           {chain.length === 0 ? (
             <Card className="p-6 text-center text-muted-foreground">אין בקשות פתוחות נוספות בשרשרת שלך.</Card>
+          ) : !cards ? (
+            <ChainTable
+              rows={chain.map((r) => ({ ...r, timeline: buildTimeline(chainSteps.get(r.id) ?? [], r.status, { now, viewerEmail: me.email }) }))}
+            />
           ) : (
             <ul className="grid gap-3 lg:grid-cols-2">
               {chain.map((r) => (
