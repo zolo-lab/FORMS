@@ -16,6 +16,7 @@ import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
 import { withDefaults } from "./defaults";
 import { matchesCharset } from "./charset";
+import { autoRowsOn, isBlankRow } from "./rows";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
 import {
   isValidBankAccount,
@@ -217,8 +218,9 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       const s = field.settings ?? {};
       const minRows = (s.minRows as number | undefined) ?? 0;
       const maxRows = s.maxRows as number | undefined;
-      if (value.length < minRows) return MSG.rows(minRows);
-      if (maxRows !== undefined && value.length > maxRows) return MSG.maxRows(maxRows);
+      const count = autoRowsOn(field) ? value.filter((r) => !isBlankRow(r)).length : value.length;
+      if (count < minRows) return MSG.rows(minRows);
+      if (maxRows !== undefined && count > maxRows) return MSG.maxRows(maxRows);
       return null;
     }
     case "heading":
@@ -243,7 +245,10 @@ function validateFieldList(
   for (const field of fields) {
     if (!FIELD_TYPE_META[field.type].hasAnswer) continue;
     if (!evaluateCondition(field.visibleIf, scopeAnswers)) continue;
-    const value = answers[field.id];
+    const raw = answers[field.id];
+    // Auto-rows tables never keep empty rows (the empty row at the end is just where the next one is typed).
+    const value =
+      field.type === "repeating_table" && autoRowsOn(field) && Array.isArray(raw) && raw.every(isBlankRow) ? [] : raw;
     const key = prefix + field.id;
     // Locked fields: not validated and their value is dropped.
     if (field.disabledIf && evaluateCondition(field.disabledIf, scopeAnswers)) continue;
@@ -276,7 +281,10 @@ function validateFieldList(
     // Nested rows of a repeating table: each row is its own scope for conditions.
     if (field.type === "repeating_table" && field.fields && Array.isArray(value)) {
       const rowsOut: Answers[] = [];
+      const skipBlank = autoRowsOn(field);
       value.forEach((row, i) => {
+        // Indexes stay those the filler sees, so errors land on the right row; empty rows are left out.
+        if (skipBlank && isBlankRow(row)) return;
         const rowAnswers = (row ?? {}) as Answers;
         const rowCleaned: Answers = {};
         validateFieldList(field.fields!, rowAnswers, errors, rowCleaned, opts, `${key}.${i}.`, { ...scopeAnswers, ...rowAnswers });
