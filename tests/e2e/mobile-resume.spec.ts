@@ -36,7 +36,7 @@ test("a form with two steps: the employee fills step 1 on a phone, leaves, and c
   const dialog = page.getByRole("dialog", { name: "שדות שזוהו ב-PDF" });
   await expect(dialog).toBeVisible({ timeout: 45_000 });
   await dialog.getByRole("button", { name: /^הוספת 4 שדות לטופס$/ }).click();
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   await expect(page.getByText("עמוד 2").filter({ visible: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });

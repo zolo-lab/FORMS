@@ -10,7 +10,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
   const id = await newFormFromPdf(page, title);
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });
 
   // Eight field types from the palette; the last one added is selected in the settings panel.

@@ -131,6 +131,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
   const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
   const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
+  const pushHistory = () => {
+    history.current.past = [...history.current.past.slice(-49), latest.current];
+    history.current.future = [];
+  };
+  /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
+  const roleOf = (s: PdfStamp): FillerRole | "none" => {
+    const f = allFields(definition).find((x) => x.id === baseFieldId(s.fieldId));
+    return f ? (f.filledBy ?? "employee") : "none";
+  };
   const selectionKey = useMemo(() => {
     const ids = new Set<string>();
     for (const g of group) {
@@ -143,15 +152,6 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   useEffect(() => {
     onSelectionChange?.(selectionKey ? selectionKey.split("\n") : []);
   }, [selectionKey, onSelectionChange]);
-  const pushHistory = () => {
-    history.current.past = [...history.current.past.slice(-49), latest.current];
-    history.current.future = [];
-  };
-  /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
-  const roleOf = (s: PdfStamp): FillerRole | "none" => {
-    const f = allFields(definition).find((x) => x.id === baseFieldId(s.fieldId));
-    return f ? (f.filledBy ?? "employee") : "none";
-  };
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };

@@ -13,7 +13,7 @@ test("PDF-first: tab order and duplicate keeps the document", async ({ page }) =
   await expect(page.getByText(/source\.pdf/)).toBeVisible({ timeout: 30_000 });
   const tabs = await page.getByRole("tab").allTextContents();
   expect(tabs[0]).toContain("PDF");
-  expect(tabs[1]).toContain("עריכה");
+  expect(tabs[1]).toContain("רספונסיבי");
   await expect(page.getByRole("button", { name: "הסרת ה-PDF מהטופס" })).toHaveCount(0);
 
   await page.goto("/admin/forms");

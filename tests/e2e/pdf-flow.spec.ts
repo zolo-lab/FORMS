@@ -44,7 +44,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await page.getByLabel("באיזה שלב").selectOption("employee");
 
   // The drawn fields are ordinary fields of the form: they show in the editor like any other (no hidden page).
-  await page.getByRole("tab", { name: "עריכה" }).click();
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
   await expect(page.getByText("מספר זהות").first()).toBeVisible();
   await expect(page.getByText("שדות במסמך")).toHaveCount(0);
 
