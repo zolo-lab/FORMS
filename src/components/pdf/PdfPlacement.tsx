@@ -1,5 +1,6 @@
 "use client";
 import type { PickMode } from "@/lib/forms/pick-mode";
+import type { FixResult } from "@/lib/forms/detect-fixes";
 import { StepSelect, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -57,9 +58,11 @@ export interface PdfPlacementProps {
   onSplitStep?: (fieldId: string) => void;
   /** "סימון בטופס": a click marks or unmarks the box's field as opened by the source field; nothing moves. */
   pick?: PickMode;
+  /** Detection fixes that change the form and its boxes together (see detect-fixes.ts). */
+  onTransform?: (fix: (def: FormDefinition, stamps: PdfStamp[]) => FixResult) => string | undefined;
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -636,6 +639,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 stamp={selectedStamp}
                 placed={(value) => stampByKey.has(stampKey({ fieldId: selectedStamp.fieldId, whenValue: value }))}
                 onFieldPatch={(patch) => onFieldPatch(selectedStamp.fieldId, patch)}
+                definition={definition}
+                onTransform={onTransform}
                 onStampPatch={(patch) => patchStamp(selectedStamp.id, patch)}
                 onPlaceOptions={(values) => placeMany(
                   values.map((v) => items.find((i) => i.key === stampKey({ fieldId: selectedStamp.fieldId, whenValue: v }))).filter((i): i is PlaceableItem => !!i),

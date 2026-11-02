@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { Crosshair } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -9,7 +10,8 @@ import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
 import { FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { SWITCHABLE_TYPES, canSwitchType, typeChangePatch } from "@/lib/forms/builder";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
-import type { FormField } from "@/lib/forms/schema";
+import type { FormDefinition, FormField } from "@/lib/forms/schema";
+import { boxSwitchTargets, moveOption, optionMoveTargets, switchBoxType, type FixResult } from "@/lib/forms/detect-fixes";
 
 /** Types whose answer can be written either as plain text or one character per printed box. */
 const COMB_ABLE = new Set<FormField["type"]>(["short_text", "id_number", "date", "phone", "number", "currency", "percent", "email"]);
@@ -33,7 +35,13 @@ export function StampFieldControls({
   onFieldPatch,
   onStampPatch,
   onPlaceOptions,
+  definition,
+  onTransform,
 }: {
+  /** The whole form, for fixes that touch other fields (moving an option to the field it belongs to). */
+  definition?: FormDefinition;
+  /** Change the form and its boxes together; returns an error to show, if any. */
+  onTransform?: (fix: (def: FormDefinition, stamps: PdfStamp[]) => FixResult) => string | undefined;
   field: FormField;
   stamp: PdfStamp;
   /** Whether the X of this option value is already on the document. */
@@ -45,14 +53,27 @@ export function StampFieldControls({
   const hasOptions = FIELD_TYPE_META[field.type].hasOptions && !field.optionsSource;
   const options = field.options ?? [];
   const missing = options.filter((o) => !placed(o.value)).map((o) => o.value);
+  const boxTargets = onTransform ? boxSwitchTargets(field.type) : [];
+  const moveTargets = onTransform && definition ? optionMoveTargets(definition, field.id) : [];
+  const [fixError, setFixError] = useState<string>();
+  const switchType = (to: FieldType) => {
+    if (boxTargets.includes(to)) setFixError(onTransform!((d, st) => switchBoxType(d, st, field.id, to)));
+    else {
+      const p = typeChangePatch(field, to);
+      if (p) onFieldPatch(p);
+    }
+  };
+  const typeChoices: FieldType[] = canSwitchType(field.type) ? [...SWITCHABLE_TYPES, ...boxTargets] : boxTargets.length ? [field.type, ...boxTargets] : [];
   return (
     <section aria-label="הגדרות השדה" className="space-y-2 rounded-md border p-2">
-      {canSwitchType(field.type) ? (
+      {fixError && <p role="alert" className="text-xs text-destructive">{fixError}</p>}
+      {typeChoices.length ? (
         <div className="space-y-1">
           <Label htmlFor={`stamp-field-type-${field.id}`} className="text-muted-foreground">סוג השדה</Label>
-          <Select id={`stamp-field-type-${field.id}`} className="h-9" value={field.type} onChange={(e) => { const p = typeChangePatch(field, e.target.value as FieldType); if (p) onFieldPatch(p); }}>
-            {SWITCHABLE_TYPES.map((t) => <option key={t} value={t}>{FIELD_TYPE_META[t].label}</option>)}
+          <Select id={`stamp-field-type-${field.id}`} className="h-9" value={field.type} onChange={(e) => switchType(e.target.value as FieldType)}>
+            {typeChoices.map((t) => <option key={t} value={t}>{FIELD_TYPE_META[t].label}</option>)}
           </Select>
+          {boxTargets.length > 0 && <p className="text-xs text-muted-foreground">{field.type === "consent" ? "שינוי לשדה כתיבה: ה-X על המסמך יהפוך למקום שכותבים בו." : "שינוי לתיבת סימון: במקום טקסט ייכתב X."}</p>}
           {field.type === "id_number" && <p className="text-xs text-muted-foreground">מתקבל רק מספר זהות תקין (9 ספרות עם ספרת ביקורת).</p>}
         </div>
       ) : (
@@ -123,6 +144,17 @@ export function StampFieldControls({
                   <span className="flex-1 truncate">{placed(o.value) ? "✓ " : ""}X ליד &quot;{o.label}&quot;</span>
                   {!placed(o.value) && (
                     <Button variant="ghost" size="sm" aria-label={`מיקום X ליד ${o.label}`} onClick={() => onPlaceOptions([o.value])}><Crosshair className="size-4" /></Button>
+                  )}
+                  {moveTargets.length > 0 && (
+                    <Select
+                      aria-label={`העברת "${o.label}" לשדה אחר`}
+                      className="h-8 w-auto max-w-36 text-xs"
+                      value=""
+                      onChange={(e) => { const to = e.target.value; if (to) setFixError(onTransform!((d, st) => moveOption(d, st, field.id, o.value, to))); }}
+                    >
+                      <option value="">העברה ל…</option>
+                      {moveTargets.map((t) => <option key={t.id} value={t.id}>{t.label || t.id}</option>)}
+                    </Select>
                   )}
                 </li>
               ))}
