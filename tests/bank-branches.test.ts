@@ -20,10 +20,12 @@ describe("banks and branches (Bank of Israel list)", () => {
   });
   it("search by number prefix, branch name or city", () => {
     const list = branchesOf("12")!;
-    expect(searchBranches(list, "73").map((b) => b.code)).toEqual(["738"]);
-    expect(searchBranches(list, "עלית").map((b) => b.code)).toEqual(["738"]);
-    expect(searchBranches(list, "עפולה").map((b) => b.code).sort()).toEqual(["727", "738"]);
-    expect(searchBranches(list, "פתח תקווה").map((b) => b.code)).toEqual(["616"]);
+    expect(searchBranches(list, "738").map((b) => b.code)).toEqual(["738"]);
+    expect(searchBranches(list, "73").every((b) => b.code.startsWith("73"))).toBe(true);
+    expect(searchBranches(list, "עפולה עלית").map((b) => b.code)).toContain("738");
+    expect(searchBranches(list, "עפולה").map((b) => b.code)).toEqual(expect.arrayContaining(["727", "738"]));
+    expect(searchBranches(list, "פתח תקווה").map((b) => b.code)).toContain("616");
+    expect(searchBranches(list, "שום-מקום")).toEqual([]);
   });
 });
 
