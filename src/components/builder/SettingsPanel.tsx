@@ -520,6 +520,16 @@ function ValidationSection({ field, v, setV }: { field: FormField; v: FieldValid
       <Row key="patm" label="הודעת שגיאה לתבנית"><Input value={v.patternMessage ?? ""} onChange={(e) => setV({ patternMessage: e.target.value || undefined })} /></Row>,
     );
   }
+  if (t === "phone") {
+    rows.push(
+      <Row key="pk" label="סוג המספר">
+        <Select aria-label="סוג המספר" value={v.phoneKind ?? ""} onChange={(e) => setV({ phoneKind: e.target.value === "mobile" ? "mobile" : undefined })}>
+          <option value="">נייד או קווי</option>
+          <option value="mobile">נייד בלבד (05X)</option>
+        </Select>
+      </Row>,
+    );
+  }
   if (t === "number" || t === "currency" || t === "percent") {
     rows.push(
       <div key="mm" className="grid grid-cols-2 gap-2">

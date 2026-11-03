@@ -32,6 +32,10 @@ export interface DetectedField {
   /** repeating_table: one column per title (right to left) and the rows ruled under the titles. */
   columns?: DetectedColumn[];
   rows?: { y: number; height: number }[];
+  /** bank_account: where each part is written (bank code, branch, account number). */
+  parts?: { part: BankPart; box: Rect }[];
+  /** phone: the name says mobile ("נייד", "סלולרי"), so only a mobile number is accepted. */
+  mobile?: boolean;
   /** Set from earlier corrections (learn.ts): the proposal follows a person's decision; `skip` = they dropped it. */
   learned?: boolean;
   skip?: boolean;
@@ -875,10 +879,55 @@ export function typedLines(page: GuessPage): GuessPage {
   return { ...page, labels, shapes: { ...page.shapes, lines: [...page.shapes.lines, ...lines] } };
 }
 
+type BankPart = "bank" | "branch" | "account";
+type Found = Omit<DetectedField, "id">;
+
+/** Which part of a bank account a name asks for: "בנק"/"שם הבנק"/"מספר בנק", "סניף", "מספר חשבון". */
+function bankPartOf(label: string): BankPart | null {
+  const n = normalizeText(label);
+  if (/בעל|שמ בעל|מוטב/.test(n)) return null; // the account holder's name is its own field
+  if (/^(מספר |מס )?סניפ$|^סניפ בנק$|^מספר הסניפ$/.test(n)) return "branch";
+  if (/^(מספר |מס )?(ה)?חשבונ( בנק)?$|^מספר חשבונ הבנק$/.test(n)) return "account";
+  if (/^(שמ |מספר |מס |קוד )?(ה)?בנק$/.test(n)) return "bank";
+  return null;
+}
+
+/**
+ * Bank details written as separate places ("בנק ___  סניף ___  מספר חשבון ___") are one answer: a bank account,
+ * chosen from the list of banks and branches and checked as a whole. Each part keeps its own place on the page.
+ * Needs the account number and at least one of bank / branch, close together (one block of the form).
+ */
+function joinBankParts(found: Found[]): Found[] {
+  const parts = found.map((f) => ({ f, part: f.type === "short_text" || f.type === "number" ? bankPartOf(f.label) : null }));
+  const out: Found[] = [];
+  const used = new Set<Found>();
+  for (const acc of parts.filter((p) => p.part === "account")) {
+    const cy = acc.f.box.y;
+    const pick = (part: BankPart) =>
+      parts
+        .filter((p) => p.part === part && !used.has(p.f) && Math.abs(p.f.box.y - cy) <= 90 && Math.abs(p.f.box.x - acc.f.box.x) <= 300)
+        .sort((a, b) => Math.abs(a.f.box.y - cy) - Math.abs(b.f.box.y - cy))[0];
+    const bank = pick("bank");
+    const branch = pick("branch");
+    if (!bank && !branch) continue;
+    const members = [bank, branch, acc].filter((p): p is (typeof parts)[number] => !!p);
+    members.forEach((m) => used.add(m.f));
+    out.push({
+      label: "חשבון בנק",
+      type: "bank_account",
+      page: acc.f.page,
+      box: union(members.map((m) => m.f.box)),
+      parts: members.map((m) => ({ part: m.part!, box: m.f.box })),
+    });
+  }
+  return [...found.filter((f) => !used.has(f)), ...out];
+}
+
 export function detectFields(pages: GuessPage[]): DetectedField[] {
   const all = pages.map(typedLines).flatMap((p) => {
     const heads = headingsOf(p);
-    return detectPage(p).map((f) => {
+    return joinBankParts(detectPage(p)).map((f) => {
+      if (f.type === "phone" && /נייד|סלולרי|mobile|cell/i.test(f.label)) f = { ...f, mobile: true };
       // The nearest heading above the field (its top edge, a little tolerance for headings on the same line).
       const top = f.box.y + f.box.height;
       const above = heads.filter((x) => x.y >= top - 2).sort((a, b) => a.y - b.y);

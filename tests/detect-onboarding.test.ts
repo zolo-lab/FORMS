@@ -37,8 +37,8 @@ describe("fund choice: underlined text in a paragraph", () => {
   it("is not a place to write", () => {
     expect(on(3).filter((f) => /פעל בהתאם|בחירת הקופה/.test(f.label))).toEqual([]);
   });
-  it("bank details are still found", () => {
-    expect(on(3).map((f) => f.label)).toEqual(expect.arrayContaining(["שם בעל החשבון", "בנק", "סניף", "מס חשבון"]));
+  it("bank details are still found (the holder's name, and the account as one field)", () => {
+    expect(on(3).map((f) => f.label)).toEqual(expect.arrayContaining(["שם בעל החשבון", "חשבון בנק"]));
   });
 });
 

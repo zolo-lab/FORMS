@@ -271,6 +271,7 @@ export const CASES: Record<string, Case> = {
       ],
       R, 760,
     );
+    f.asBankAccount(["בנק", "סניף", "מספר חשבון"]);
     return f.build("bankCombs", "כמה שורות תאים באותה שורה (פרטי בנק)");
   },
 
@@ -320,6 +321,7 @@ export const CASES: Record<string, Case> = {
     f.underline("שם הבנק", "short_text", R, 565, 120);
     f.underline("מספר סניף", "number", R, 540, 80);
     f.underline("מספר חשבון", "number", R, 515, 120);
+    f.asBankAccount(["שם הבנק", "מספר סניף", "מספר חשבון"]);
     f.heading("ג. הצהרה", R, 485);
     f.consent("אני מאשר/ת שהפרטים נכונים ומלאים", R, 460);
     f.underline("תאריך", "date", R, 430, 100);

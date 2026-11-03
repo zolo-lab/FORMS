@@ -2,7 +2,12 @@
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resolveOptions } from "@/lib/forms/lookups";
+import { isKnownBranch } from "@/lib/forms/bank-branches";
+import { BranchPicker } from "./BranchPicker";
 import type { FieldProps } from "./types";
+
+/** A new bank keeps the branch only if that bank has it. */
+const keepBranch = (bank: string, branch?: string) => (branch && bank && isKnownBranch(bank, branch) ? branch : "");
 
 type Part = { key: string; label: string; ltr?: boolean; inputMode?: "numeric"; maxLength?: number; span?: string };
 
@@ -48,18 +53,18 @@ export function BankAccountInput({ field, domId, value, onChange, disabled, inva
   const set = (k: string, v: string) => onChange({ ...obj, [k]: v });
   return (
     <div id={domId} className="grid grid-cols-1 gap-3 sm:grid-cols-6">
-      <div className="space-y-1 sm:col-span-3">
+      <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`${domId}-bank`} className="text-muted-foreground">בנק</Label>
-        <Select id={`${domId}-bank`} value={obj.bank ?? ""} disabled={disabled} aria-invalid={invalid && !obj.bank} onChange={(e) => set("bank", e.target.value)}>
+        <Select id={`${domId}-bank`} value={obj.bank ?? ""} disabled={disabled} aria-invalid={invalid && !obj.bank} onChange={(e) => onChange({ ...obj, bank: e.target.value, branch: keepBranch(e.target.value, obj.branch) })}>
           <option value="">{field.placeholder ?? "בחר בנק…"}</option>
           {banks.map((b) => (
             <option key={b.value} value={b.value}>{b.label}</option>
           ))}
         </Select>
       </div>
-      <div className="space-y-1 sm:col-span-1">
+      <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`${domId}-branch`} className="text-muted-foreground">סניף</Label>
-        <Input id={`${domId}-branch`} dir="ltr" className="text-start" inputMode="numeric" maxLength={3} value={obj.branch ?? ""} disabled={disabled} aria-invalid={invalid && !obj.branch} onChange={(e) => set("branch", e.target.value.replace(/\D/g, ""))} />
+        <BranchPicker id={`${domId}-branch`} bank={obj.bank ?? ""} value={obj.branch ?? ""} disabled={disabled} invalid={invalid && !obj.branch} onChange={(v) => set("branch", v)} />
       </div>
       <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`${domId}-account`} className="text-muted-foreground">מספר חשבון</Label>
