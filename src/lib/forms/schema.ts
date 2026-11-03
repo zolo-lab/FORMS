@@ -65,6 +65,8 @@ export const validationSchema = z
     patternMessage: z.string().optional(),
     /** Text fields: allowed characters ("ספרות בלבד" / "עברית בלבד" / "אנגלית בלבד" in iForms). */
     charset: z.enum(["digits", "hebrew", "english"]).optional(),
+    /** Phone fields: "mobile" accepts only a mobile number (05X); unset = mobile or landline. */
+    phoneKind: z.enum(["mobile"]).optional(),
     /** For checkbox/multi-select: min/max selected items. */
     minSelected: z.number().int().nonnegative().optional(),
     maxSelected: z.number().int().positive().optional(),

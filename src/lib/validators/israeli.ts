@@ -29,6 +29,11 @@ export function isValidIsraeliPhone(raw: string): boolean {
   return /^05\d{8}$/.test(d) || /^0[23489]\d{7}$/.test(d) || /^07\d{8}$/.test(d);
 }
 
+/** Mobile only: 05X and seven more digits (+972 / 972 prefixes accepted). */
+export function isValidIsraeliMobile(raw: string): boolean {
+  return /^05\d{8}$/.test(normalizeIsraeliPhone(raw));
+}
+
 /** Format 0501234567 → 050-1234567. */
 export function formatIsraeliPhone(raw: string): string {
   const d = normalizeIsraeliPhone(raw);

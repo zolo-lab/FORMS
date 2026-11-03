@@ -399,6 +399,19 @@ export class FormDraw {
     });
   }
 
+  /** Bank, branch and account drawn as separate places are one answer: a bank account (its parts keep their places). */
+  asBankAccount(labels: string[]) {
+    const parts = this.expected.filter((e) => labels.includes(e.label));
+    this.expected = this.expected.filter((e) => !labels.includes(e.label));
+    const xs = parts.map((p) => p.area!);
+    const x = Math.min(...xs.map((a) => a.x));
+    const y = Math.min(...xs.map((a) => a.y));
+    this.expected.push({
+      label: "חשבון בנק", type: "bank_account", page: this.pageIndex,
+      area: { x, y, width: Math.max(...xs.map((a) => a.x + a.width)) - x, height: Math.max(...xs.map((a) => a.y + a.height)) - y },
+    });
+  }
+
   async build(name: string, pattern: string): Promise<TestForm> {
     return { name, pattern, bytes: await this.doc.save(), expected: this.expected, notFields: this.notFields };
   }

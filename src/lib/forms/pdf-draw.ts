@@ -232,7 +232,7 @@ export function addDetectedFields(
   const ordered = [...detected].sort((a, b) => readingOrder({ page: a.page, ...a.box }, { page: b.page, ...b.box }));
   for (const d of ordered) {
     const fieldId = d.key && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(d.key) ? uniqueId(d.key, new Set(allFields(definition).map((f) => f.id))) : uniqueFieldId(definition, `pdf_${d.type}_`);
-    const field: FormField = { id: fieldId, type: d.type, label: d.label };
+    const field: FormField = { id: fieldId, type: d.type, label: d.label, ...(d.mobile ? { validation: { phoneKind: "mobile" as const } } : {}) };
     const base = PDF_PALETTE.find((e) => e.fieldType === d.type)?.stamp;
     const stamps: PdfStamp[] = [];
     const put = (partial: Partial<PdfStamp> & { kind: PdfStamp["kind"] }, box: { x: number; y: number; width: number; height: number }) =>
@@ -261,6 +261,8 @@ export function addDetectedFields(
       put({ kind: "check" }, d.box);
     } else if (d.type === "signature") {
       put({ kind: "signature" }, d.box);
+    } else if (d.type === "bank_account" && d.parts?.length) {
+      for (const p of d.parts) put({ kind: "text", part: p.part }, p.box);
     } else if (d.comb) {
       put({ kind: "comb", comb: { cells: d.comb } }, d.box);
     } else {

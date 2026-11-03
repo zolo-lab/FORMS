@@ -15,6 +15,7 @@ import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
 import { withDefaults } from "./defaults";
+import { isKnownBranch } from "./bank-branches";
 import { matchesCharset } from "./charset";
 import { autoRowsOn, isBlankRow } from "./rows";
 import type { FillerRole, FormDefinition, FormField } from "./schema";
@@ -22,7 +23,7 @@ import {
   isValidBankAccount,
   isValidEmail,
   isValidIsraeliId,
-  isValidIsraeliPhone,
+  isValidIsraeliMobile, isValidIsraeliPhone,
   isValidIsraeliZip,
 } from "@/lib/validators/israeli";
 
@@ -57,8 +58,10 @@ const MSG = {
   time: "שעה לא תקינה",
   email: "כתובת דוא\"ל לא תקינה",
   phone: "מספר טלפון לא תקין",
+  mobile: "מספר נייד לא תקין: 10 ספרות שמתחילות ב-05",
   id: "מספר תעודת זהות לא תקין",
   bank: "פרטי חשבון הבנק לא תקינים",
+  branch: "הסניף לא נמצא ברשימת הסניפים של הבנק שנבחר",
   zip: "מיקוד צריך להכיל 7 ספרות",
   consent: "יש לאשר כדי להמשיך",
   signature: "נדרשת חתימה",
@@ -163,6 +166,7 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
     case "email":
       return typeof value === "string" && isValidEmail(value) ? null : MSG.email;
     case "phone":
+      if (v.phoneKind === "mobile") return typeof value === "string" && isValidIsraeliMobile(value) ? null : MSG.mobile;
       return typeof value === "string" && isValidIsraeliPhone(value) ? null : MSG.phone;
     case "id_number":
       return typeof value === "string" && isValidIsraeliId(value) ? null : MSG.id;
@@ -171,10 +175,11 @@ function validateValue(field: FormField, value: unknown, opts: Required<Pick<Val
       const n = value as Record<string, string | undefined>;
       return n.first?.trim() && n.last?.trim() ? null : MSG.required;
     }
-    case "bank_account":
-      return typeof value === "object" && value !== null && isValidBankAccount(value as Record<string, string>)
-        ? null
-        : MSG.bank;
+    case "bank_account": {
+      if (typeof value !== "object" || value === null || !isValidBankAccount(value as Record<string, string>)) return MSG.bank;
+      const b = value as Record<string, string>;
+      return isKnownBranch(b.bank!, b.branch!) ? null : MSG.branch;
+    }
     case "address": {
       if (typeof value !== "object" || value === null) return MSG.required;
       const a = value as Record<string, string | undefined>;

@@ -1,4 +1,6 @@
 "use client";
+import { FIELD_TYPE_META } from "@/lib/forms/field-types";
+import { BANK_LIST, branchesOf, branchLabel, isKnownBranch } from "@/lib/forms/bank-branches";
 import type { FilledItem } from "@/lib/forms/role-view";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SignaturePicker } from "@/components/forms/fields/signature";
@@ -120,7 +122,34 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                   const invalid = cell ? Object.keys(rest.errors).includes(`${cell.table}.${cell.row}.${cell.col}`) : errorFields.has(s.fieldId);
                   const style = { left: b.x, top: b.y, width: b.width, height: b.height, fontSize: Math.max(9, Math.min(b.height * 0.6, 14)) } as const;
                   const ring = cn("absolute min-w-0 rounded-sm border bg-primary/5 focus-visible:outline-2 focus-visible:outline-ring", invalid ? "border-destructive bg-destructive/10" : "border-primary/40");
-                  const label = `${cell ? `שורה ${cell.row + 1} – ` : ""}${field.label}${s.part ? ` – ${s.part}` : ""}`;
+                  const partName = s.part ? FIELD_TYPE_META[field.type].parts?.find((p) => p.key === s.part)?.label ?? s.part : "";
+                  const label = `${cell ? `שורה ${cell.row + 1} – ` : ""}${field.label}${partName ? ` – ${partName}` : ""}`;
+                  // A bank account's bank and branch are chosen from the lists, not typed (the box on the page is small,
+                  // so the phone's own picker opens).
+                  if (field.type === "bank_account" && (s.part === "bank" || s.part === "branch") && s.kind === "text") {
+                    const obj = (value && typeof value === "object" ? value : {}) as Record<string, string>;
+                    const branches = s.part === "branch" && obj.bank ? branchesOf(obj.bank) : null;
+                    const choose = (v: string) => {
+                      const next = s.part === "bank" ? { ...obj, bank: v, branch: obj.branch && v && isKnownBranch(v, obj.branch) ? obj.branch : "" } : { ...obj, branch: v };
+                      setField(s, Object.values(next).some(Boolean) ? next : undefined);
+                    };
+                    if (s.part === "branch" && obj.bank && !branches) {
+                      return (
+                        <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={label} disabled={locked} dir="ltr" inputMode="numeric" maxLength={3}
+                          className={cn(ring, "px-0.5 text-start")} style={style} value={obj.branch ?? ""} onChange={(e) => choose(e.target.value.replace(/\D/g, ""))} />
+                      );
+                    }
+                    return (
+                      <select key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={label} disabled={locked || (s.part === "branch" && !obj.bank)}
+                        title={s.part === "branch" && !obj.bank ? "בחרו בנק קודם" : label} className={cn(ring, "min-w-0 px-0.5 text-start")} style={style}
+                        value={(s.part === "bank" ? obj.bank : obj.branch) ?? ""} onChange={(e) => choose(e.target.value)}>
+                        <option value="">{s.part === "bank" ? "בחרו בנק" : obj.bank ? "בחרו סניף" : "בחרו בנק קודם"}</option>
+                        {s.part === "bank"
+                          ? BANK_LIST.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)
+                          : (branches ?? []).map((b) => <option key={b.code} value={b.code}>{branchLabel(b)}</option>)}
+                      </select>
+                    );
+                  }
                   if (s.kind === "text" || s.kind === "comb" || s.kind === "initials") {
                     const attrs = inputAttrs(field);
                     const narrow = attrs.type === "date" || attrs.type === "time" ? "[&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0" : "";
