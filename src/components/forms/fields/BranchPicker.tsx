@@ -63,7 +63,13 @@ export function BranchPicker({ id, bank, value, onChange, disabled, invalid, des
         disabled={disabled}
         value={text}
         onFocus={(e) => { setOpen(true); e.currentTarget.select(); }}
-        onBlur={() => { setOpen(false); setQuery(null); }}
+        onBlur={() => {
+          // A typed branch number that is one of the bank's branches counts as chosen, without opening the list.
+          const exact = query && /^\d+$/.test(query.trim()) ? list.find((b) => Number(b.code) === Number(query.trim())) : undefined;
+          if (exact) onChange(exact.code);
+          setOpen(false);
+          setQuery(null);
+        }}
         onChange={(e) => { setQuery(e.target.value); setActive(0); setOpen(true); }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, shown.length - 1)); }
