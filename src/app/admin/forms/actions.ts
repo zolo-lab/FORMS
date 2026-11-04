@@ -1,7 +1,7 @@
 "use server";
 import { requireGrant, requireTemplateEdit } from "@/server/guards";
 import { redirect } from "next/navigation";
-import { combineTemplates, createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, publishTemplate, saveDraft, setArchived } from "@/server/forms-store";
+import { combineTemplates, createTemplate, deleteTemplate, duplicateTemplate, getPdfFile, listVersions, publishTemplate, restoreVersion, saveDraft, setArchived } from "@/server/forms-store";
 import { revalidatePath } from "next/cache";
 import { parseFormDefinition } from "@/lib/forms/schema";
 import { pdfMappingSchema } from "@/lib/forms/pdf-mapping";
@@ -76,6 +76,17 @@ export async function saveDraftAction(templateId: string, definition: unknown, p
     pdfArg = { pdfFileId: pdf.pdfFileId, pdfMapping: mapping && "success" in mapping ? mapping.data : null };
   }
   return saveDraft(templateId, definition, pdfArg);
+}
+
+export async function listVersionsAction(templateId: string) {
+  await requireTemplateEdit(templateId);
+  return listVersions(templateId);
+}
+
+export async function restoreVersionAction(templateId: string, version: number) {
+  await requireTemplateEdit(templateId);
+  if (!Number.isInteger(version) || version < 1) return { error: "גרסה לא תקינה" };
+  return restoreVersion(templateId, version);
 }
 
 export async function publishAction(templateId: string) {

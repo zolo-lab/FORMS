@@ -22,7 +22,7 @@ export function FormPreview({ definition, pdf, steps, startWithAll = false, show
         </label>
       )}
       {shown.pages.length === 0 ? (
-        <p className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">אין בשלב הזה שדות למילוי. בחרו שלב אחר למעלה, או שייכו לו שדות ב&quot;סימון שדות לשלב&quot;.</p>
+        <p className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">אין בשלב הזה שדות למילוי, ולכן זה שלב של אישור בלבד: מי שמקבל אותו רואה את המסמך כפי שמולא עד כה, ולוחץ &quot;הכל תקין – אישור והעברה&quot; (או מחזיר / דוחה). אם השלב צריך למלא משהו, שייכו לו שדות ב&quot;סימון שדות לשלב&quot;.</p>
       ) : (
         <FormTestFill key={role} definition={shown} pdf={pdf} />
       )}

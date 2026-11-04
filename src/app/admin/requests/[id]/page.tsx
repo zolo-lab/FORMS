@@ -13,7 +13,8 @@ import { eventLabel } from "@/lib/requests/list";
 import { buildTimeline } from "@/lib/requests/timeline";
 import { RequestTimeline } from "@/components/requests/RequestTimeline";
 import { REQUEST_STATUS_LABEL, runStepLabel } from "@/lib/workflow/labels";
-import { requestAnswerItems, uploadedFiles } from "@/server/dashboard-store";
+import { requestDocumentView, uploadedFiles } from "@/server/dashboard-store";
+import { DocumentViewer } from "@/components/requests/DocumentViewer";
 import { getRequest } from "@/server/requests-store";
 import { FollowUpCard } from "@/components/requests/FollowUpCard";
 import { RemindButton } from "@/components/requests/RemindButton";
@@ -33,7 +34,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   if (!(await canSeeRequest(id))) notFound();
   const me = await currentUser();
   const { request, steps, events, documents } = data;
-  const answers = await requestAnswerItems(id);
+  const docView = await requestDocumentView(id);
   const files = await uploadedFiles(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
@@ -42,6 +43,10 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const [pkg] = await db.select({ followUpStatuses: schema.packageTemplates.followUpStatuses }).from(schema.packageTemplates).where(eq(schema.packageTemplates.id, request.packageTemplateId));
   const followUps = normalizeFollowUpStatuses(pkg?.followUpStatuses);
   const timeline = buildTimeline(steps, request.status, { viewerEmail: me?.email });
+  // Which step fills a field of each role (for "טרם מולא · שלב 3 · דנה").
+  const stepOf: Record<string, string> = {};
+  for (const s of [...steps].sort((a, b) => a.order - b.order)) stepOf[s.role] ??= runStepLabel(s);
+  const doneSteps = [...steps].filter((s) => s.status === "completed").sort((a, b) => a.order - b.order);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
@@ -99,9 +104,12 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             canExtend
             canCancel={live && hasGrant(me, "cancel")}
             openSteps={openSteps.map((s) => ({ id: s.id, label: runStepLabel(s), name: s.assigneeName ?? "", email: s.assigneeEmail ?? "", phone: s.assigneePhone ?? "" }))}
+            doneSteps={live ? doneSteps.filter((d) => openSteps.some((o) => d.order < o.order)).map((d) => ({ id: d.id, label: runStepLabel(d) })) : []}
           />
         </section>
       )}
+
+      {request.status !== "draft" && <DocumentViewer requestId={request.id} docs={docView} files={files} stepOf={stepOf} />}
 
       {request.status === "completed" && (
         <section className="space-y-2">
@@ -145,39 +153,6 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
         <section className="space-y-2">
           <h2 className="font-semibold">שיתוף קישור</h2>
           <RefreshLinks requestId={request.id} />
-        </section>
-      )}
-
-      <section className="space-y-2">
-        <h2 className="font-semibold">תשובות</h2>
-        {answers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">עדיין לא נאספו תשובות.</p>
-        ) : (
-          <Card className="p-3">
-            <dl className="grid grid-cols-[minmax(8rem,14rem)_1fr] gap-x-4 gap-y-1 text-sm">
-              {answers.map((a, i) => (
-                <div key={i} className="contents">
-                  <dt className="text-muted-foreground">{a.label}</dt>
-                  <dd className="whitespace-pre-line break-words">{a.text}</dd>
-                </div>
-              ))}
-            </dl>
-          </Card>
-        )}
-      </section>
-
-      {files.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-semibold">קבצים שהועלו</h2>
-          <Card className="p-3">
-            <ul className="space-y-1 text-sm">
-              {files.map((f, i) => (
-                <li key={i}>
-                  <a href={f.url} target="_blank" rel="noreferrer" className="text-primary underline">{f.name}</a>
-                </li>
-              ))}
-            </ul>
-          </Card>
         </section>
       )}
 

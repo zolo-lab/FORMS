@@ -169,6 +169,16 @@ export function completeStep(input: EngineStep[], stepId: string, answers: Answe
   return { steps: next.steps, events: [{ type: "step_completed", stepId }, ...next.events] };
 }
 
+/** The admin moves the request on without this step: it is marked skipped and the next one starts. */
+export function skipStep(input: EngineStep[], stepId: string, answers: Answers, reason = "", contacts: Record<string, Person> = {}): EngineResult {
+  const steps = clone(input);
+  const s = find(steps, stepId);
+  if (s.status !== "active" && s.status !== "in_progress") throw new Error(`cannot skip a ${s.status} step`);
+  s.status = "skipped";
+  const next = activateNext(steps, answers, contacts);
+  return { steps: next.steps, events: [{ type: "step_skipped", stepId, payload: { reason: reason.trim(), by: "admin" } }, ...next.events] };
+}
+
 export function declineStep(input: EngineStep[], stepId: string, reason: string): EngineResult {
   if (!reason.trim()) throw new Error("decline reason is required");
   const steps = clone(input);

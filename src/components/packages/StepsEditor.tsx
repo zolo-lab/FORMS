@@ -31,7 +31,7 @@ const HINT: Partial<Record<StepWho, string>> = {
  * detail it needs; what is missing shows on the step itself. One save button for all of them.
  */
 export function StepsEditor({
-  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm,
+  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts,
 }: {
   drafts: EditorDraft[];
   onChange: (next: EditorDraft[]) => void;
@@ -43,6 +43,8 @@ export function StepsEditor({
   onSave: () => void;
   /** The form itself still has unsaved changes (its fields are checked by the server). */
   waitingForForm: boolean;
+  /** How many fields each step edits (by role): a step with none only looks the document over and approves it. */
+  fieldCounts?: Partial<Record<string, number>>;
 }) {
   const ctx = { contacts, groups, fields: emailFields };
   const problems = draftProblems(drafts, emailFields);
@@ -86,6 +88,11 @@ export function StepsEditor({
               <div className="mb-3 flex items-center gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold" aria-hidden>{n}</span>
                 <p className="min-w-0 flex-1 truncate font-semibold">{stepLabel(s, i, ctx)}</p>
+                {fieldCounts && s.who !== "employee" && (
+                  (fieldCounts[s.role] ?? 0) === 0
+                    ? <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs" title="אין לשלב הזה שדות: הוא רואה את המסמך כפי שמולא, ומאשר שהכל תקין, מחזיר או דוחה">רק אישור</span>
+                    : <span className="shrink-0 text-xs text-muted-foreground">{fieldCounts[s.role]} שדות</span>
+                )}
                 <div className="flex shrink-0 gap-1">
                   <Button type="button" variant="ghost" size="icon" disabled={i === 0 || (i === 1 && drafts[0]!.who === "requester")} onClick={() => move(i, -1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
                   <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => move(i, 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>

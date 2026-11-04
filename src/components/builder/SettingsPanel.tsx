@@ -1,5 +1,5 @@
 "use client";
-import { StepSelect, type StepView } from "./StepSelect";
+import { StepChecks, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { PREFILL_KEYS } from "@/lib/forms/prefill";
 import { copySourceInForm } from "@/lib/forms/copy";
@@ -411,8 +411,8 @@ export function FieldSettings({
               </Select>
             </Row>
           )}
-          <Row label="באיזה שלב השדה מופיע">
-            <StepSelect views={steps} value={field.filledBy} onChange={(r) => onPatch({ filledBy: r })} />
+          <Row label="באילו שלבים השדה פתוח לעריכה">
+            <StepChecks views={steps} field={field} onChange={onPatch} />
           </Row>
           <Row label="רוחב בדסקטופ">
             <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>

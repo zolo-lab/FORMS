@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { FieldType } from "@/lib/forms/field-types";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { fieldStyleClass } from "@/lib/forms/field-style";
-import type { FillerRole, FormDefinition, FormField } from "@/lib/forms/schema";
+import { fieldSteps, fillsIn, type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { FieldIcon } from "./field-icon";
@@ -37,6 +37,8 @@ export interface CanvasProps {
   stepNames?: Partial<Record<FillerRole, string>>;
   /** "סימון בטופס": tick the fields the source field opens. */
   pick?: PickMode;
+  /** "סימון שדות לשלב": tick = the field is also edited in that step, untick = not in it (its other steps stay). */
+  onToggleStep?: (id: string, role: FillerRole, on: boolean) => void;
 }
 
 function readDrop(e: React.DragEvent): { type?: FieldType; fieldId?: string } {
@@ -82,11 +84,12 @@ export function Canvas(p: CanvasProps) {
               ))}
               {page.fields.map((f, fi) => {
                 const selected = p.selection?.kind === "field" && p.selection.id === f.id;
-                const role = f.filledBy ?? "employee";
                 const answers = FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden";
-                const stepName = p.stepNames ? p.stepNames[role] : undefined;
+                // Every step that edits the field, by its name ("שלב 2 · העובד + שלב 3 · יוסי").
+                const stepNamesOf = p.stepNames ? fieldSteps(f).map((r) => p.stepNames![r]).filter((n): n is string => !!n) : [];
+                const stepName = stepNamesOf.length ? stepNamesOf.map((n, i) => (i ? n.replace(/^שלב (\d+) · /, "$1 · ") : n)).join(" + ") : undefined;
                 const noStep = !!p.stepNames && answers && !stepName;
-                const matches = p.focusRole === "unassigned" ? noStep : role === p.focusRole;
+                const matches = p.focusRole === "unassigned" ? noStep : !!p.focusRole && fillsIn(f, p.focusRole);
                 const inFocus = !!p.focusRole && answers && matches;
                 const outOfFocus = !!p.focusRole && answers && !matches;
                 const assigning = !p.pick && !!p.focusRole && p.focusRole !== "unassigned" && answers;
@@ -124,7 +127,7 @@ export function Canvas(p: CanvasProps) {
                           type="checkbox"
                           className="size-5 shrink-0 accent-primary"
                           checked={matches}
-                          onChange={(e) => p.onPatchField(f.id, { filledBy: e.target.checked ? p.focusRole : "unassigned" })}
+                          onChange={(e) => (p.onToggleStep ? p.onToggleStep(f.id, p.focusRole as FillerRole, e.target.checked) : p.onPatchField(f.id, { filledBy: e.target.checked ? p.focusRole : "unassigned" }))}
                           aria-label={`${f.label || "השדה"} בשלב הזה`}
                         />
                       )}

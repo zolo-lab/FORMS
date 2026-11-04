@@ -10,6 +10,7 @@ import {
   planSteps,
   requestStatus,
   returnTo,
+  skipStep,
   type EngineStep,
 } from "@/lib/workflow/engine";
 import type { Workflow } from "@/lib/workflow/types";
@@ -252,5 +253,28 @@ describe("a step routed by a field filled in an earlier step", () => {
     const s3 = r.steps.find((s) => s.id === "s3")!;
     expect(s3.status).toBe("active");
     expect(s3.assigneeEmail).toBe("boss@example.org");
+  });
+});
+
+describe("skipStep (admin moves the request on)", () => {
+  it("skips the waiting step and activates the next one", () => {
+    let { steps } = started(serial);
+    ({ steps } = completeStep(steps, "s1", {}));
+    const r = skipStep(steps, "s2", {}, "העובד לא זמין");
+    expect(byOrder(r.steps)).toBe("1:completed 2:skipped 3:active");
+    expect(r.events[0]).toEqual({ type: "step_skipped", stepId: "s2", payload: { reason: "העובד לא זמין", by: "admin" } });
+    expect(r.events.map((e) => e.type)).toContain("step_activated");
+  });
+  it("skipping the last step completes the request", () => {
+    let { steps } = started(serial);
+    ({ steps } = completeStep(steps, "s1", {}));
+    ({ steps } = completeStep(steps, "s2", {}));
+    const r = skipStep(steps, "s3", {});
+    expect(requestStatus(r.steps)).toBe("completed");
+    expect(r.events.map((e) => e.type)).toContain("request_completed");
+  });
+  it("only a waiting step can be skipped", () => {
+    const { steps } = started(serial);
+    expect(() => skipStep(steps, "s2", {})).toThrow();
   });
 });

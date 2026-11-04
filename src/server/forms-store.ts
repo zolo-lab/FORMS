@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db, schema } from "@/db";
 import { blankForm, publishIssues } from "@/lib/forms/builder";
-import { parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
+import { allFields, parseFormDefinition, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { formPackageId, getPackage, syncFormPackage } from "./packages-store";
 import { unassignedFields } from "@/lib/workflow/step-fields";
@@ -83,6 +83,39 @@ export async function saveDraft(
   await db.update(formTemplates).set({ title: parsed.data.title }).where(eq(formTemplates.id, templateId));
   if (parsed.data.title !== data.template.title) await syncFormPackage(templateId, { name: parsed.data.title });
   return { version: version.version };
+}
+
+/** Published versions of a form, newest first: the admin's record of earlier states to go back to. */
+export async function listVersions(templateId: string) {
+  const [template] = await db.select({ publishedVersion: formTemplates.publishedVersion }).from(formTemplates).where(eq(formTemplates.id, templateId));
+  if (!template) return [];
+  const rows = await db
+    .select({ version: formTemplateVersions.version, publishedAt: formTemplateVersions.publishedAt, definition: formTemplateVersions.definition })
+    .from(formTemplateVersions)
+    .where(eq(formTemplateVersions.templateId, templateId))
+    .orderBy(desc(formTemplateVersions.version));
+  return rows
+    .filter((r) => r.publishedAt)
+    .map((r) => ({
+      version: r.version,
+      publishedAt: r.publishedAt!,
+      title: r.definition.title,
+      fields: allFields(r.definition).length,
+      inUse: r.version === template.publishedVersion,
+    }));
+}
+
+/**
+ * Goes back to a published version: its fields and document become the current draft (one more version).
+ * Nothing changes for people filling the form until the draft is published.
+ */
+export async function restoreVersion(templateId: string, version: number): Promise<{ version: number } | { error: string }> {
+  const [v] = await db
+    .select()
+    .from(formTemplateVersions)
+    .where(and(eq(formTemplateVersions.templateId, templateId), eq(formTemplateVersions.version, version)));
+  if (!v || !v.publishedAt) return { error: "הגרסה לא נמצאה" };
+  return saveDraft(templateId, v.definition, { pdfFileId: v.pdfFileId, pdfMapping: v.pdfMapping });
 }
 
 export const NEEDS_PDF = "העלו PDF לפני הפרסום: כל טופס חדש מתחיל ממסמך";

@@ -85,6 +85,16 @@ const fieldIdSchema = z
   .string()
   .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "מזהה שדה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות");
 
+/** Every step that edits the field: its own (filledBy, default the employee) and any it is shared with. */
+export const fieldSteps = (f: { filledBy?: FillerRole; alsoFilledBy?: FillerRole[] }): FillerRole[] => {
+  const main = f.filledBy ?? "employee";
+  return [main, ...(f.alsoFilledBy ?? []).filter((r) => r !== main)];
+};
+
+/** May this step edit the field? */
+export const fillsIn = (f: { filledBy?: FillerRole; alsoFilledBy?: FillerRole[] }, role: FillerRole): boolean =>
+  (f.filledBy ?? "employee") === role || !!f.alsoFilledBy?.includes(role);
+
 export interface FormField {
   id: string;
   type: FieldType;
@@ -104,6 +114,8 @@ export interface FormField {
   prefill?: string;
   /** Which role in the signing chain fills this field. Default: employee. */
   filledBy?: FillerRole;
+  /** Further steps that may also edit it (e.g. the secretary corrects what the employee wrote). See fillsIn(). */
+  alsoFilledBy?: FillerRole[];
   /**
    * Staff only (e.g. cost centre): filled by the requester (or the API), never shown to any other step, never drawn on
    * the PDF or put in e-mails; kept in the data, the export and the staff views. See src/lib/forms/internal.ts.
@@ -156,6 +168,7 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     defaultValue: z.unknown().optional(),
     prefill: z.string().optional(),
     filledBy: z.enum(fillerRoles).optional(),
+    alsoFilledBy: z.array(z.enum(fillerRoles)).optional(),
     internal: z.boolean().optional(),
     options: z.array(optionSchema).optional(),
     optionsSource: z.string().optional(),

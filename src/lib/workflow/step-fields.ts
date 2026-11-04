@@ -3,7 +3,7 @@
  * field is in, which fields are in no step, and which fields can say where a step is sent.
  */
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
-import { allFields, type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { allFields, fieldSteps, type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { groupIdOfSource } from "./assignee";
 import { stepWhoOf, type StepWho } from "./step-who";
 import type { StepRole, WorkflowStep } from "./types";
@@ -63,13 +63,26 @@ export function namedStep(w: WorkflowStep): NamedStep {
 /** The step a field is in. A field never assigned belongs to the employee (the runtime rule), if the form has one. */
 export const fieldRole = (f: Pick<FormField, "filledBy">): FillerRole => f.filledBy ?? "employee";
 
+/**
+ * Put a field in a step, or take it out, keeping the other steps it is in. A field in no current step (or not yet
+ * assigned) simply becomes that step's. Taking out its main step hands the field to the next step it shares;
+ * taking out the last one leaves it "לא משויך".
+ */
+export function withStep(f: Pick<FormField, "filledBy" | "alsoFilledBy">, role: FillerRole, on: boolean, stepRoles: StepRole[]): Pick<FormField, "filledBy" | "alsoFilledBy"> {
+  const current = fieldSteps(f).filter((r) => r !== "unassigned" && stepRoles.includes(r));
+  const next = on ? (current.includes(role) ? current : [...current, role]) : current.filter((r) => r !== role);
+  const ordered = stepRoles.filter((r) => next.includes(r)); // the earliest step is the field's own
+  if (!ordered.length) return { filledBy: "unassigned", alsoFilledBy: undefined };
+  return { filledBy: ordered[0], alsoFilledBy: ordered.length > 1 ? ordered.slice(1) : undefined };
+}
+
 /** Fields that someone answers. */
 export const answerFields = (def: FormDefinition) => allFields(def).filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden");
 
 /** Fields that are in no step of the form: nobody would see or fill them. */
 export function unassignedFields(def: FormDefinition, roles: StepRole[]): FormField[] {
   const have = new Set(roles);
-  return answerFields(def).filter((f) => !have.has(fieldRole(f)));
+  return answerFields(def).filter((f) => !fieldSteps(f).some((r) => have.has(r)));
 }
 
 /** Email fields and group lists: a step can be sent to the address typed (or the member picked) in one of them. */

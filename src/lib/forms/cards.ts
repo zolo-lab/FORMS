@@ -3,7 +3,7 @@ import { evaluateCondition, type Answers } from "./conditions";
 import { FIELD_TYPE_META } from "./field-types";
 import { formatAnswer } from "./format";
 import { reachedPageIndexes } from "./paths";
-import type { FillerRole, FormDefinition, FormField } from "./schema";
+import { fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
 
 export interface Card {
   pageIndex: number;
@@ -23,7 +23,7 @@ export function buildCards(form: FormDefinition, answers: Answers, role?: Filler
         blocks.push(f);
         continue;
       }
-      const editable = (!role || (f.filledBy ?? "employee") === role) && !f.readOnly && !f.formula && !(f.disabledIf && evaluateCondition(f.disabledIf, answers));
+      const editable = (!role || fillsIn(f, role)) && !f.readOnly && !f.formula && !(f.disabledIf && evaluateCondition(f.disabledIf, answers));
       if (!editable) continue;
       cards.push({ pageIndex, blocks, field: f });
       blocks = [];

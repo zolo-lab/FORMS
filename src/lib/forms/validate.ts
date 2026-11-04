@@ -18,7 +18,7 @@ import { withDefaults } from "./defaults";
 import { isKnownBranch } from "./bank-branches";
 import { matchesCharset } from "./charset";
 import { autoRowsOn, isBlankRow } from "./rows";
-import type { FillerRole, FormDefinition, FormField } from "./schema";
+import { fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
 import {
   isValidBankAccount,
   isValidEmail,
@@ -262,7 +262,7 @@ function validateFieldList(
       if (value !== undefined) cleaned[field.id] = value;
       continue;
     }
-    const mine = !opts.role || (field.filledBy ?? "employee") === opts.role;
+    const mine = !opts.role || fillsIn(field, opts.role);
 
     // Keep values of visible fields regardless of role (other signers' data is preserved).
     if (value !== undefined) cleaned[field.id] = value;
