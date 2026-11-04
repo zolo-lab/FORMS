@@ -540,11 +540,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             })}
           </nav>
         )}
-        {rolesUsed.length > 0 && (
+        {viewAs && rolesUsed.length > 0 && (
           <ul aria-label="מקרא תפקידים" className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {rolesUsed.map((r) => (
-              <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{roleName(r)}</li>
-            ))}
+            <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-success" />{viewAs === "unassigned" ? "לא משויכים לשלב" : `בשלב: ${roleName(viewAs)}`}</li>
+            <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-primary/40" />בשלבים אחרים</li>
           </ul>
         )}
         {onFieldPatch && !onSelectionChange && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
@@ -615,11 +614,14 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       onPointerDown={(e) => startDrag(e, s, "move")}
                       className={cn(
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
-                        inGroup ? ROLE_OVERLAY[shownRole(s)].boxActive : ROLE_OVERLAY[shownRole(s)].box,
+                        // One colour for every box; the step chosen above stands out in green, the rest fade.
+                        viewAs && inViewStep(s)
+                          ? (inGroup ? "border-success bg-success/30" : "border-success bg-success/15")
+                          : inGroup ? ROLE_OVERLAY.none.boxActive : ROLE_OVERLAY.none.box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                         s.guessed && "border-dashed",
                         viewAs && shownRole(s) !== "none" && !inViewStep(s) && !inGroup && "opacity-25",
-                        viewAs && inViewStep(s) && "ring-2 ring-primary ring-offset-1",
+                        viewAs && inViewStep(s) && "ring-2 ring-success ring-offset-1",
                         pick && baseFieldId(s.fieldId) === pick.sourceId && "cursor-default border-success bg-success/25 ring-2 ring-success ring-offset-1",
                         pick && pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer border-primary bg-primary/30 ring-2 ring-primary ring-offset-1",
                         pick && baseFieldId(s.fieldId) !== pick.sourceId && !pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer opacity-50 hover:opacity-100",
