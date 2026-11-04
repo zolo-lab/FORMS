@@ -143,14 +143,19 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
-  /** "שכפול שדה": one more box of the same field, a little below and to the side; it writes the same answer. */
-  const duplicateBox = (s: PdfStamp) => {
-    const pg = pages[s.page]!;
-    const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
-    const copy = { ...s, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+  /**
+   * "העתקת תיבה": nothing is added yet. The next click on the document pastes one more box of the same field there
+   * (it writes the same answer, e.g. the ID number at the top of every page). Esc cancels.
+   */
+  const [boxCopy, setBoxCopy] = useState<PdfStamp | null>(null);
+  const pasteBoxAt = (page: number, at: { x: number; y: number }) => {
+    if (!boxCopy) return;
+    const pg = pages[page]!;
+    const c = clampBox({ width: boxCopy.width, height: boxCopy.height, x: at.x - boxCopy.width / 2, y: at.y - boxCopy.height / 2 }, pg.width, pg.height);
+    const copy = { ...boxCopy, id: nanoid(8), page, x: round1(c.x), y: round1(c.y) };
     setStamps([...mapping.stamps, copy]);
+    setBoxCopy(null);
     select(copy.id);
-    reveal(copy.id);
   };
   /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
   const inViewStep = (s: PdfStamp): boolean => {
@@ -383,6 +388,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const tag = (e.target as HTMLElement).tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     const mod = e.ctrlKey || e.metaKey;
+    if (e.key === "Escape" && boxCopy) { e.preventDefault(); setBoxCopy(null); return; }
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
     if (mod && e.key.toLowerCase() === "c" && group.length) { clipboard.current = selectedBoxes() as PdfStamp[]; return; }
@@ -527,6 +533,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-primary/40" />בשלבים אחרים</li>
           </ul>
         )}
+        {boxCopy && (
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+            <Copy className="size-4 text-primary" aria-hidden />
+            <span>הועתקה התיבה <bdi className="font-medium">{labelOf(boxCopy)}</bdi>. לחצו במסמך במקום שבו להדביק אותה.</span>
+            <Button variant="ghost" size="sm" onClick={() => setBoxCopy(null)}>ביטול (Esc)</Button>
+          </div>
+        )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
         <div ref={attachViewer} className="max-h-[75vh] space-y-4 overflow-auto rounded-lg bg-muted p-3">
           {!doc && !error && <p role="status" className="py-16 text-center text-sm text-muted-foreground">טוען את ה-PDF…</p>}
@@ -537,9 +550,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 key={pi}
                 ref={(el) => { pageRefs.current[pi] = el; }}
                 data-testid={`pdf-page-${pi}`}
-                className="relative mx-auto shadow"
+                className={cn("relative mx-auto shadow", boxCopy && "cursor-copy")}
                 style={{ width: pg.width * scale, height: pg.height * scale }}
-                onPointerDown={() => { setActivePage(pi); select(null); }}
+                onPointerDown={(e) => {
+                  setActivePage(pi);
+                  if (boxCopy) {
+                    const r = pageRefs.current[pi]!.getBoundingClientRect();
+                    const at = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: 0, height: 0 }, pg.height, scale);
+                    pasteBoxAt(pi, { x: at.x, y: at.y });
+                    return;
+                  }
+                  select(null);
+                }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -593,13 +615,17 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       {active && !pick && (
                         <button
                           type="button"
-                          aria-label="שכפול שדה"
-                          title="שכפול שדה: תיבה נוספת עם אותה תשובה"
+                          aria-label="העתקת התיבה"
+                          aria-pressed={boxCopy?.id === s.id}
+                          title="העתקה: אחר כך לוחצים במקום במסמך, ושם תודבק תיבה של אותו שדה"
                           onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); duplicateBox(s); }}
-                          className="absolute top-0 -start-7 flex size-6 items-center justify-center rounded-full border border-primary bg-card text-primary shadow-sm hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                          onClick={(e) => { e.stopPropagation(); setBoxCopy(boxCopy?.id === s.id ? null : s); }}
+                          className={cn(
+                            "absolute top-0 -start-5 flex size-4 items-center justify-center rounded-sm border border-primary/50 bg-card text-primary hover:border-primary focus-visible:outline-2 focus-visible:outline-ring",
+                            boxCopy?.id === s.id && "border-primary bg-primary text-primary-foreground",
+                          )}
                         >
-                          <Copy className="size-3.5" aria-hidden />
+                          <Copy className="size-2.5" aria-hidden />
                         </button>
                       )}
                       {active && (
@@ -752,11 +778,12 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <Button
               variant="outline"
               size="sm"
-              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
-              onClick={() => duplicateBox(selectedStamp)}
+              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). אחרי ההעתקה לוחצים במקום במסמך. Ctrl+D יוצר שדה חדש."
+              aria-pressed={boxCopy?.id === selectedStamp.id}
+              onClick={() => setBoxCopy(boxCopy?.id === selectedStamp.id ? null : selectedStamp)}
             >
               <Copy className="size-4" aria-hidden />
-              שכפול שדה
+              העתקת התיבה
             </Button>
             {(() => {
               // The field's last box on the document takes the field with it (the PDF and the form are one); a copy only goes itself.
