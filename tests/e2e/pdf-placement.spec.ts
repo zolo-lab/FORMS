@@ -129,15 +129,16 @@ test("copying a box adds nothing until a click on the document pastes it there, 
   expect(await mapping()).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toBeVisible();
   const area = (await pdfPage.boundingBox())!;
-  await page.mouse.click(area.x + 120, area.y + area.height - 120);
+  await pdfPage.click({ position: { x: 120, y: area.height - 120 } });
+  await expect.poll(async () => (await mapping()).length).toBe(2);
   const after = await mapping();
-  expect(after).toHaveLength(2);
   expect(after[1]!.fieldId).toBe(after[0]!.fieldId);
   expect(after[1]!.y).toBeLessThan(200); // pasted where clicked, near the bottom of the page
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
   // Esc cancels a copy.
   await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
   await page.keyboard.press("Escape");
-  await page.mouse.click(area.x + 300, area.y + 300);
+  await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
+  await pdfPage.click({ position: { x: 300, y: 300 } });
   expect(await mapping()).toHaveLength(2);
 });
