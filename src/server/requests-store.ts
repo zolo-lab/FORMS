@@ -7,7 +7,7 @@
 import { routeFor } from "@/lib/workflow/assignee";
 import { withOrgFields } from "@/lib/forms/prefill";
 import { afterResponse } from "./after";
-import { kickDelivery } from "./notifications";
+import { insertNotifications } from "./notifications";
 import { nearestDue } from "@/lib/requests/list";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -261,7 +261,7 @@ async function persist(
       };
       const msg = mail.render(key, vars);
       // Both channels when both are known: the e-mail and an SMS with the same link.
-      await db.insert(notifications).values(
+      await insertNotifications(
         targets.map((t) => ({
           organizationId: req.organizationId,
           requestId,
@@ -274,7 +274,6 @@ async function persist(
           html: t.channel === "email" ? msg.html : null,
         })),
       );
-      await kickDelivery();
     }
   }
 
@@ -380,13 +379,12 @@ async function notifySent(requestId: string, steps: EngineStep[]) {
   const waiting = steps
     .filter((s) => s.status === "active" || s.status === "in_progress")
     .map((s) => (s.role === "employee" ? `${ROLE_LABELS.employee} (${req.subjectName})` : (s.assigneeName ? `${ROLE_LABELS[s.role as StepRole]} (${s.assigneeName})` : ROLE_LABELS[s.role as StepRole])));
-  await db.insert(notifications).values(
+  await insertNotifications(
     to.map((p) => {
       const m = mail.render("sent_to_creator", { ...common, name: p.name, stepName: waiting.join(", ") || "—", link: `${appUrl()}/admin/requests/${requestId}` });
       return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: "sent_to_creator", subject: m.subject, body: m.text, html: m.html };
     }),
   );
-  await kickDelivery();
 }
 
 export async function getRequest(requestId: string) {
@@ -612,10 +610,7 @@ async function notifyStatus(requestId: string, evs: EngineEvent[], steps: Engine
       html: t.channel === "email" ? msg.html : null,
     }));
   });
-  if (rows.length) {
-    await db.insert(notifications).values(rows);
-    await kickDelivery();
-  }
+  if (rows.length) await insertNotifications(rows);
 }
 
 /** The package's fixed recipients (payroll, HR…) get the signed PDFs; attachments are added when the row is delivered. */
@@ -637,11 +632,10 @@ export async function enqueueCompletionDocs(requestId: string) {
   if (!targets.length) return;
   const already = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.requestId, requestId), eq(notifications.templateKey, COMPLETION_DOCS_KEY)));
   if (already.length) return;
-  await db.insert(notifications).values(
+  await insertNotifications(
     targets.map((p) => {
       const m = mail.render(COMPLETION_DOCS_KEY, { ...common, name: p.name, link: `${appUrl()}/admin/requests/${requestId}` });
       return { organizationId: req.organizationId, requestId, channel: "email" as const, to: p.email, templateKey: COMPLETION_DOCS_KEY, subject: m.subject, body: m.text, html: m.html };
     }),
   );
-  await kickDelivery();
 }

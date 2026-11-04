@@ -4,7 +4,8 @@ import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
 import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { canSendReminderNow, reminderDue } from "@/lib/workflow/reminders";
-import { DEFAULT_REMINDER_POLICY } from "@/lib/workflow/types";
+import { effectiveReminderPolicy, remindersEnabledFor } from "@/lib/notifications/user-prefs";
+import { contactKey, prefsByContact } from "@/server/user-notification-prefs";
 import { deliveryTargets } from "@/lib/notifications/channels";
 import { enqueue } from "./notifications";
 import { appUrl } from "./requests-store";
@@ -32,13 +33,19 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
     for (const n of past) if (n.stepId) sentByStep.set(n.stepId, [...(sentByStep.get(n.stepId) ?? []), n.createdAt]);
   }
 
+  // The personal settings of every waiting signer who is also a user of the system.
+  const prefs = await prefsByContact(open.flatMap((o) => [o.step.assigneeEmail, o.step.assigneePhone]));
+
   let queued = 0;
   const mailByOrg: Record<string, Triggers> = {};
   for (const { step, request, org, remindersEnabled } of open) {
-    if (!remindersEnabled || step.role === "requester" || !step.activatedAt) continue;
+    if (step.role === "requester" || !step.activatedAt) continue;
     const targets = deliveryTargets({ email: step.assigneeEmail, phone: step.assigneePhone });
     if (!targets.length) continue;
-    const policy = org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
+    // The person's own choice beats the form's switch and the organization's timing.
+    const mine = prefs.get(contactKey(step.assigneeEmail ?? "")) ?? prefs.get(contactKey(step.assigneePhone ?? ""));
+    if (!remindersEnabledFor(mine, remindersEnabled)) continue;
+    const policy = effectiveReminderPolicy(org.reminderPolicy, mine);
     const mail = (mailByOrg[org.id] ??= await triggersFor(org.id));
     if (!mail.trigger("reminder").enabled) continue;
 
@@ -88,7 +95,9 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
     .where(and(eq(signingSteps.requestId, requestId), inArray(signingSteps.status, ["active", "in_progress"]), inArray(requests.status, ["in_progress", "returned"])));
   const open = rows.filter((r) => r.step.role !== "requester");
   if (!open.length) return { ok: false, message: "אין שלב פתוח שממתין לתזכורת" };
-  const policy = open[0]!.org.reminderPolicy ?? DEFAULT_REMINDER_POLICY;
+  const prefs = await prefsByContact(open.flatMap((r) => [r.step.assigneeEmail, r.step.assigneePhone]));
+  const first = open[0]!;
+  const policy = effectiveReminderPolicy(first.org.reminderPolicy, prefs.get(contactKey(first.step.assigneeEmail ?? "")) ?? prefs.get(contactKey(first.step.assigneePhone ?? "")));
   if (!canSendReminderNow(now, policy)) return { ok: false, message: "עכשיו שעות שקט או שבת – התזכורת לא נשלחה" };
   const mail = await triggersFor(open[0]!.org.id);
   if (!mail.trigger("reminder").enabled) return { ok: false, message: "התזכורות כבויות בלוח הטריגרים של המיילים" };

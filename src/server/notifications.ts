@@ -10,6 +10,7 @@ import { MAX_ATTEMPTS, afterAttempt } from "@/lib/notifications/templates";
 import { getSmsProvider } from "@/server/sms/provider";
 import { getFile } from "@/server/storage";
 import { COMPLETION_DOCS_KEY, pickAttachments, uploadedFiles } from "@/lib/notifications/completion";
+import { keepWanted } from "@/server/user-notification-prefs";
 
 const { notifications, organizations, packageDocuments, formTemplateVersions, formTemplates } = schema;
 
@@ -25,13 +26,32 @@ export interface EnqueueInput {
   scheduledAt?: Date;
 }
 
-export async function enqueue(input: EnqueueInput & { channel?: "email" | "sms" }): Promise<string> {
+/** Queues one message, unless its recipient switched that kind of message off. Returns null when it was skipped. */
+export async function enqueue(input: EnqueueInput & { channel?: "email" | "sms" }): Promise<string | null> {
+  const channel = input.channel ?? "email";
+  const kept = await keepWanted([{ to: input.to, channel, templateKey: input.templateKey }]);
+  if (!kept.length) return null;
   const [row] = await db
     .insert(notifications)
-    .values({ ...input, channel: input.channel ?? "email" })
+    .values({ ...input, channel })
     .returning({ id: notifications.id });
   await kickDelivery();
   return row!.id;
+}
+
+type NotificationRow = typeof notifications.$inferInsert & { to: string; channel: "email" | "sms"; templateKey: string };
+
+/**
+ * Queues several messages at once, after dropping the ones their recipients asked not to get.
+ * Every place that writes to the outbox goes through here or through `enqueue`, so the personal settings
+ * cannot be bypassed by accident.
+ */
+export async function insertNotifications(rows: NotificationRow[]): Promise<number> {
+  const kept = await keepWanted(rows);
+  if (!kept.length) return 0;
+  await db.insert(notifications).values(kept);
+  await kickDelivery();
+  return kept.length;
 }
 
 /**
