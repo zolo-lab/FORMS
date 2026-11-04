@@ -5,6 +5,7 @@ import { db, schema } from "@/db";
 import { RETRY_DELAYS_MS, toWebhookEvent, type WebhookEvent } from "@/lib/webhooks/events";
 import { signFileLink, webhookHeaders } from "@/lib/webhooks/sign";
 import { appUrl } from "./requests-store";
+import { ownDocuments } from "./package-docs";
 
 const { webhooks, requests, organizations, packageDocuments, formTemplateVersions, formTemplates, events, signingSteps } = schema;
 
@@ -50,7 +51,7 @@ async function buildPayload(requestId: string, event: WebhookEvent, stepId: stri
       .from(packageDocuments)
       .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
       .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
-      .where(eq(packageDocuments.requestId, requestId))
+      .where(ownDocuments(requestId))
       .orderBy(asc(packageDocuments.order));
     payload.documents = docs.filter((d) => d.finalFileId).map((d) => ({ id: d.id, title: d.title, sha256: d.sha, pdfUrl: tempFileUrl(d.id), pdfUrlExpiresInSeconds: FILE_LINK_TTL_SEC }));
     payload.answers = await collected();
@@ -93,7 +94,7 @@ export async function emitWebhooks(requestId: string, engineEvents: EngineEventL
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) return 0;
   const [pkgDocFormIds, hooks] = await Promise.all([
-    db.select({ templateId: formTemplateVersions.templateId }).from(packageDocuments).innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId)).where(eq(packageDocuments.requestId, requestId)),
+    db.select({ templateId: formTemplateVersions.templateId }).from(packageDocuments).innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId)).where(ownDocuments(requestId)),
     db.select().from(webhooks).where(and(eq(webhooks.organizationId, req.organizationId), eq(webhooks.active, true))),
   ]);
   const formIds = new Set(pkgDocFormIds.map((d) => d.templateId));

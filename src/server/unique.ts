@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FieldErrors } from "@/lib/forms/validate";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
+import { ownDocuments } from "./package-docs";
 
 const { submissions, packageDocuments, formTemplateVersions, requests } = schema;
 
@@ -18,7 +19,7 @@ export async function duplicateErrors(requestId: string, definition: FormDefinit
     .select({ templateId: formTemplateVersions.templateId })
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
-    .where(eq(packageDocuments.requestId, requestId));
+    .where(ownDocuments(requestId));
   const templateIds = [...new Set(mine.map((m) => m.templateId))];
   if (templateIds.length === 0) return {};
 

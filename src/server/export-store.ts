@@ -8,6 +8,7 @@ import { REQUEST_STATUS_LABEL } from "@/lib/workflow/labels";
 import type { Answers } from "@/lib/forms/conditions";
 import { conditions, scopeCondition, type Scope } from "./dashboard-store";
 import { getFile } from "./storage";
+import { ownDocumentsIn } from "./package-docs";
 
 const { requests, organizations, packageTemplates, packageDocuments, formTemplateVersions, formTemplates, submissions } = schema;
 
@@ -46,7 +47,7 @@ export async function loadExport(sel: ExportSelection): Promise<ExportRequest[]>
       .select({ requestId: packageDocuments.requestId, order: packageDocuments.order, definition: formTemplateVersions.definition })
       .from(packageDocuments)
       .innerJoin(formTemplateVersions, eq(packageDocuments.templateVersionId, formTemplateVersions.id))
-      .where(inArray(packageDocuments.requestId, ids))
+      .where(ownDocumentsIn(ids))
       .orderBy(asc(packageDocuments.order)),
     db.select({ requestId: submissions.requestId, answers: submissions.answers }).from(submissions).where(inArray(submissions.requestId, ids)),
   ]);
@@ -91,7 +92,8 @@ export async function listFinalPdfs(sel: ExportSelection): Promise<{ name: strin
     .innerJoin(requests, eq(packageDocuments.requestId, requests.id))
     .innerJoin(formTemplateVersions, eq(packageDocuments.templateVersionId, formTemplateVersions.id))
     .innerJoin(formTemplates, eq(formTemplateVersions.templateId, formTemplates.id))
-    .where(inArray(packageDocuments.requestId, ids))
+    // Whole documents only: a part belongs to whoever "עיבוד טופס" sends it to, not in the bundle of everything.
+    .where(ownDocumentsIn(ids))
     .orderBy(asc(requests.subjectName), asc(packageDocuments.order));
   const used = new Set<string>();
   const out: { name: string; fileId: string }[] = [];

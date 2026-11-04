@@ -21,6 +21,7 @@ import { checkOtp, createOtp, OTP_COOKIE_TTL_MS, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS
 import { delegateError } from "@/lib/workflow/delegate";
 import { checkUpload } from "@/lib/forms/upload";
 import { runStepLabel } from "@/lib/workflow/labels";
+import { ownDocuments } from "./package-docs";
 
 const { stepTokens, signingSteps, requests, submissions, packageDocuments, formTemplateVersions, formTemplates, organizations, events, signatures, notifications } = schema;
 
@@ -61,7 +62,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
-    .where(eq(packageDocuments.requestId, request.id))
+    .where(ownDocuments(request.id))
     .orderBy(packageDocuments.order);
   const docs: PackageDoc[] = docRows.map((d) => ({ title: d.title, definition: d.definition }));
   const role = step.role as FillerRole;
