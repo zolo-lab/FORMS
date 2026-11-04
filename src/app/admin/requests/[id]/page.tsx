@@ -13,7 +13,7 @@ import { eventLabel } from "@/lib/requests/list";
 import { buildTimeline } from "@/lib/requests/timeline";
 import { RequestTimeline } from "@/components/requests/RequestTimeline";
 import { REQUEST_STATUS_LABEL, runStepLabel } from "@/lib/workflow/labels";
-import { requestDocumentView, uploadedFiles } from "@/server/dashboard-store";
+import { requestDocumentView, requestParts, uploadedFiles } from "@/server/dashboard-store";
 import { DocumentViewer } from "@/components/requests/DocumentViewer";
 import { getRequest } from "@/server/requests-store";
 import { FollowUpCard } from "@/components/requests/FollowUpCard";
@@ -36,6 +36,8 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const { request, steps, events, documents } = data;
   const docView = await requestDocumentView(id);
   const files = await uploadedFiles(id);
+  // Parts cut out of the signed documents ("עיבוד טופס"), shown under the document they came from.
+  const parts = await requestParts(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
   const openSteps = steps.filter((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
@@ -137,6 +139,27 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
                   </>
                 ) : (
                   <span className="text-muted-foreground">עדיין לא נוצר</span>
+                )}
+                {(parts.get(d.id) ?? []).length > 0 && (
+                  <ul className="basis-full space-y-1 border-t pt-2 ps-4">
+                    {(parts.get(d.id) ?? []).map((p) => (
+                      <li key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
+                        <span className="text-muted-foreground" aria-hidden>↳</span>
+                        <span className="font-medium">{p.partName}</span>
+                        <span className="text-xs text-muted-foreground">עמודים {p.pages}</span>
+                        {p.finalFileId && (
+                          <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/documents/${p.id}`} target="_blank" rel="noopener noreferrer">
+                            פתיחת החלק
+                          </a>
+                        )}
+                        {p.driveUrl && (
+                          <a className="text-primary hover:underline" href={p.driveUrl} target="_blank" rel="noopener noreferrer">
+                            בארכיון
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             ))}

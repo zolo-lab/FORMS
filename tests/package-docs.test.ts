@@ -69,3 +69,121 @@ describe.skipIf(!hasDb)("parts are not documents of the request (dev DB)", () =>
     expect(all.filter((d) => d.parentDocumentId === parent.id)).toHaveLength(1);
   });
 });
+
+describe.skipIf(!hasDb)("cutting a document into parts (dev DB)", () => {
+  const cleanup: (() => Promise<unknown>)[] = [];
+  afterAll(async () => {
+    for (const fn of cleanup.reverse()) await fn().catch(() => {});
+  });
+
+  it("stores each part as its own PDF holding exactly its pages", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const { PDFDocument } = await import("pdf-lib");
+    const { cutDocumentParts } = await import("@/server/processing");
+    const { getFile } = await import("@/server/storage");
+    const { partsOf } = await import("@/server/package-docs");
+
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const stamp = Date.now();
+    const [template] = await db.insert(schema.formTemplates).values({ title: `test-cut-${stamp}`, slug: `test-cut-${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.formTemplates).where(eq(schema.formTemplates.id, template!.id)));
+    const [version] = await db
+      .insert(schema.formTemplateVersions)
+      .values({ templateId: template!.id, version: 1, definition: { schemaVersion: 1 as const, title: template!.title, pages: [{ id: "p1", title: "עמוד 1", fields: [] }] } })
+      .returning();
+    const [pkg] = await db.insert(schema.packageTemplates).values({ name: `test-cut-pkg-${stamp}`, workflow: { steps: [{ order: 1, role: "requester", action: "fill" }] } }).returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const [request] = await db
+      .insert(schema.requests)
+      .values({ packageTemplateId: pkg!.id, organizationId: org!.id, subjectName: "עובד בדיקה", status: "completed" })
+      .returning();
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, request!.id)));
+    const [parent] = await db
+      .insert(schema.packageDocuments)
+      .values({ requestId: request!.id, templateVersionId: version!.id, order: 1 })
+      .returning();
+
+    // A 4-page document, pages sized so each one is identifiable after the cut.
+    const src = await PDFDocument.create();
+    for (let i = 0; i < 4; i++) src.addPage([200 + i, 400]);
+    const base = await src.save();
+
+    const run = () =>
+      cutDocumentParts({
+        requestId: request!.id,
+        parentDocumentId: parent!.id,
+        templateVersionId: version!.id,
+        order: 1,
+        title: template!.title,
+        base,
+        parts: [
+          { id: "a", name: "101", pages: "1-2" },
+          { id: "b", name: "הסכם", pages: "4" },
+        ],
+      });
+
+    const first = await run();
+    expect(first).toEqual({ created: 2, failed: [] });
+
+    const rows = await db.select().from(schema.packageDocuments).where(partsOf(request!.id));
+    expect(rows.map((r) => r.partName).sort()).toEqual(["101", "הסכם"]);
+
+    const part101 = rows.find((r) => r.partName === "101")!;
+    const file = await getFile(part101.finalFileId!);
+    const widths = (await PDFDocument.load(file!.bytes)).getPages().map((p) => Math.round(p.getWidth()));
+    expect(widths).toEqual([200, 201]);
+
+    // Re-running replaces the parts instead of piling up a second set.
+    const second = await run();
+    expect(second.created).toBe(2);
+    expect(await db.select().from(schema.packageDocuments).where(partsOf(request!.id))).toHaveLength(2);
+  });
+
+  it("reports a bad range and still files the parts that are fine", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const { PDFDocument } = await import("pdf-lib");
+    const { cutDocumentParts } = await import("@/server/processing");
+    const { partsOf } = await import("@/server/package-docs");
+
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const stamp = Date.now();
+    const [template] = await db.insert(schema.formTemplates).values({ title: `test-cut2-${stamp}`, slug: `test-cut2-${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.formTemplates).where(eq(schema.formTemplates.id, template!.id)));
+    const [version] = await db
+      .insert(schema.formTemplateVersions)
+      .values({ templateId: template!.id, version: 1, definition: { schemaVersion: 1 as const, title: template!.title, pages: [{ id: "p1", title: "עמוד 1", fields: [] }] } })
+      .returning();
+    const [pkg] = await db.insert(schema.packageTemplates).values({ name: `test-cut2-pkg-${stamp}`, workflow: { steps: [{ order: 1, role: "requester", action: "fill" }] } }).returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const [request] = await db
+      .insert(schema.requests)
+      .values({ packageTemplateId: pkg!.id, organizationId: org!.id, subjectName: "עובד בדיקה", status: "completed" })
+      .returning();
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, request!.id)));
+    const [parent] = await db.insert(schema.packageDocuments).values({ requestId: request!.id, templateVersionId: version!.id, order: 1 }).returning();
+
+    const doc = await PDFDocument.create();
+    doc.addPage([200, 400]);
+    doc.addPage([201, 400]);
+
+    const r = await cutDocumentParts({
+      requestId: request!.id,
+      parentDocumentId: parent!.id,
+      templateVersionId: version!.id,
+      order: 1,
+      title: template!.title,
+      base: await doc.save(),
+      parts: [
+        { id: "a", name: "טוב", pages: "1" },
+        { id: "b", name: "מחוץ לתחום", pages: "9" },
+      ],
+    });
+
+    expect(r.created).toBe(1);
+    expect(r.failed).toHaveLength(1);
+    expect(r.failed[0]!.part).toBe("מחוץ לתחום");
+    expect(await db.select().from(schema.packageDocuments).where(partsOf(request!.id))).toHaveLength(1);
+  });
+});

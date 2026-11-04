@@ -12,6 +12,7 @@ import {
   type ProcessingContext,
 } from "@/lib/processing/model";
 import { COMPLETION_DESTINATION_ID, type Destination, type Processing } from "@/lib/processing/types";
+import { partsForDocument } from "@/server/processing";
 
 const ctx: ProcessingContext = {
   parts: [{ id: "p1", name: "101", pages: "1-2" }],
@@ -177,5 +178,23 @@ describe("the save path (normalizeProcessing with keepCompletion)", () => {
 
   it("without keepCompletion the completion destination is dropped, so it can never be stored twice", () => {
     expect(normalizeProcessing({ destinations: [{ id: COMPLETION_DESTINATION_ID, kind: "email", to: [], items: [] }] }).destinations).toEqual([]);
+  });
+});
+
+describe("partsForDocument", () => {
+  const a = { id: "a", name: "101", pages: "1-2" };
+  const b = { id: "b", name: "הסכם", pages: "3", documentId: "tpl-2" };
+
+  it("gives a part with no document to the only document of the package", () => {
+    expect(partsForDocument([a], "tpl-1", 1)).toEqual([a]);
+  });
+
+  it("never spreads an unassigned part across several documents", () => {
+    expect(partsForDocument([a], "tpl-1", 3)).toEqual([]);
+  });
+
+  it("matches a part that names its document", () => {
+    expect(partsForDocument([a, b], "tpl-2", 2)).toEqual([b]);
+    expect(partsForDocument([a, b], "tpl-1", 2)).toEqual([]);
   });
 });
