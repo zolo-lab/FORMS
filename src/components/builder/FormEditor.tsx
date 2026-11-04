@@ -38,8 +38,12 @@ import { Palette } from "./Palette";
 import { FieldSettings, PageSettings } from "./SettingsPanel";
 import { FormTestFill } from "@/components/forms/FormTestFill";
 import { PdfTab, type PdfState } from "./PdfTab";
+import { ProcessingTab } from "@/components/processing/ProcessingTab";
+import { viewProcessing } from "@/lib/processing/model";
+import type { Processing } from "@/lib/processing/types";
+import type { Recipient } from "@/lib/requests/recipients";
 
-type TabId = "edit" | "preview" | "pdf" | "steps" | "json";
+type TabId = "edit" | "preview" | "pdf" | "steps" | "process" | "json";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
@@ -68,6 +72,10 @@ export interface FormEditorProps {
     saveOrgRoute?: (packageId: string, organizationId: string, drafts: StepDraft[] | null) => Promise<SaveStepsResult>;
     groups: { id: string; label: string }[];
     save: (packageId: string, drafts: StepDraft[]) => Promise<SaveStepsResult>;
+    /** "עיבוד טופס": what is stored in `packages.processing`, and the completion recipients it mirrors. */
+    processing?: unknown;
+    completionRecipients?: Recipient[];
+    saveProcessing?: (packageId: string, view: Processing) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
     sendSettings?: React.ReactNode;
     /** Open the sending settings (they were just saved, or failed). */
@@ -85,6 +93,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [stepWork, setStepWork] = useState<EditorDraft[]>(() => (flow?.drafts ?? []).map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role })));
   const [stepSaved, setStepSaved] = useState(stepWork);
   const [stepState, setStepState] = useState<StepsSaveState>({ kind: "idle" });
+  // "עיבוד טופס" — the completion destination is folded in from `completionRecipients`, so both screens show one value.
+  const [procWork, setProcWork] = useState<Processing>(() => viewProcessing(flow?.processing, flow?.completionRecipients));
+  const [procSaved, setProcSaved] = useState(procWork);
+  const [procState, setProcState] = useState<StepsSaveState>({ kind: "idle" });
   /** "שלבי הטופס" shows the general route ("") or one organization's. */
   const [routeOrg, setRouteOrg] = useState("");
   const [orgRoutes, setOrgRoutes] = useState<Record<string, StepDraft[]>>(flow?.orgRoutes ?? {});
@@ -99,6 +111,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     return { label: "המסלול הכללי", drafts: stepWork.map(stripDraft) };
   };
   const stepsDirty = JSON.stringify(stepWork.map(stripDraft)) !== JSON.stringify(stepSaved.map(stripDraft));
+  const procDirty = JSON.stringify(procWork) !== JSON.stringify(procSaved);
   const ctx = { contacts: flow?.contacts, groups: flow?.groups, fields: emailFieldsOf(def) };
   const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
   const stepRoles = (views ?? []).map((v) => v.role);
@@ -321,6 +334,15 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setStepState({ kind: "saved" });
   }
 
+  async function saveProcessing() {
+    if (!flow?.saveProcessing) return;
+    setProcState({ kind: "saving" });
+    const r = await flow.saveProcessing(flow.packageId, procWork);
+    if (!r.ok) { setProcState({ kind: "error", errors: r.errors }); return; }
+    setProcSaved(procWork);
+    setProcState({ kind: "saved" });
+  }
+
   /** A field renamed: a step sent to its email follows, saved right after the form itself is saved. */
   function followRename(pairs: [string, string][]) {
     const map = new Map(pairs);
@@ -372,6 +394,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             { id: "pdf", label: "PDF" },
             { id: "edit", label: "רספונסיבי" },
             ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
+            ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד טופס •" : "עיבוד טופס" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
           ]}
@@ -651,6 +674,24 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               </details>
             )}
           </div>
+        )}
+        {tab === "process" && flow?.saveProcessing && (
+          <ProcessingTab
+            value={procWork}
+            onChange={setProcWork}
+            ctx={{
+              parts: procWork.parts,
+              attachments: answerFields(def).filter((f) => f.type === "file_upload").map((f) => ({ id: f.id, label: f.label || f.id })),
+              steps: views ?? [],
+              emailFields: emailFieldsOf(def).map((f) => ({ id: f.id, label: f.label || f.id })),
+              users: flow.contacts,
+            }}
+            dirty={procDirty}
+            state={procState}
+            onSave={() => void saveProcessing()}
+            waitingForForm={save !== "saved"}
+            onEditSteps={() => setTab("steps")}
+          />
         )}
         {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} onSelectionChange={setPdfSelection} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
 
