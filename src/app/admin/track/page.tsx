@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
+import { requestLabel } from "@/lib/forms/highlights";
 import { Badge, Card } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -125,7 +126,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
                   const open = r.status === "in_progress" || r.status === "returned";
                   return (
                     <tr key={r.id}>
-                      <td className="px-3 py-2 font-medium">{r.subjectName}</td>
+                      <td className="px-3 py-2 font-medium">{requestLabel(r) || "—"}</td>
                       <td className="px-3 py-2">{r.packageName}</td>
                       <td className="px-3 py-2">{r.organizationName}</td>
                       <td className="px-3 py-2 align-top">{route(r)}</td>
@@ -136,7 +137,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
                       <td className="px-3 py-2">{fmt.format(r.createdAt)}</td>
                       <td className={`px-3 py-2 ${r.overdue ? "font-medium text-destructive" : ""}`}>{r.expiresAt ? fmt.format(r.expiresAt) : "ללא"}{r.overdue && <span className="ms-1 text-xs">(פג)</span>}</td>
                       <td className="px-3 py-2"><Badge tone={tone}>{label}</Badge></td>
-                      <td className="px-3 py-2">{open && <RemindButton requestId={r.id} subject={r.subjectName} />}</td>
+                      <td className="px-3 py-2">{open && <RemindButton requestId={r.id} subject={requestLabel(r) || r.subjectName} />}</td>
                     </tr>
                   );
                 })}
@@ -154,7 +155,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
                   <Card className="space-y-2 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="font-semibold">{r.subjectName}</p>
+                        <p className="font-semibold">{requestLabel(r) || "—"}</p>
                         <p className="text-xs text-muted-foreground">{r.packageName} · {r.organizationName}</p>
                       </div>
                       <Badge tone={tone}>{label}</Badge>
@@ -167,7 +168,7 @@ export default async function TrackPage({ searchParams }: { searchParams: SP }) 
                       <dt className="text-muted-foreground">בתוקף עד</dt>
                       <dd>{r.expiresAt ? fmt.format(r.expiresAt) : "ללא"}</dd>
                     </dl>
-                    {open && <RemindButton requestId={r.id} subject={r.subjectName} />}
+                    {open && <RemindButton requestId={r.id} subject={requestLabel(r) || r.subjectName} />}
                   </Card>
                 </li>
               );

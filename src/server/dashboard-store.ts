@@ -85,14 +85,15 @@ export function conditions(f: RequestFilters, now: Date, scope: Scope = null): S
   }
   if (f.q) {
     const like = `%${escapeLike(f.q)}%`;
-    c.push(or(ilike(requests.subjectName, like), ilike(requests.subjectIdNumber, like), ilike(requests.subjectEmail, like))!);
+    c.push(or(ilike(requests.subjectName, like), ilike(requests.subjectIdNumber, like), ilike(requests.subjectEmail, like), ilike(requests.identifierValue, like))!);
   }
   return c;
 }
 
 function orderFor(f: RequestFilters) {
   const col = {
-    name: requests.subjectName,
+    // "שדה מזהה" sorts by the form's own identifier, falling back to the name the request was opened with.
+    name: sql`coalesce(nullif(${requests.identifierValue}, ''), ${requests.subjectName})`,
     org: organizations.name,
     pkg: packageTemplates.name,
     status: requests.status,
@@ -107,6 +108,9 @@ function orderFor(f: RequestFilters) {
 export interface RequestRow {
   id: string;
   subjectName: string;
+  /** The value of the form's "שדה מזהה"; empty while nobody filled it. `null` = the form defines none. */
+  identifierValue: string | null;
+  identifierLabel: string | null;
   subjectEmail?: string | null;
   status: (typeof requests.$inferSelect)["status"];
   createdAt: Date;
@@ -131,6 +135,8 @@ export async function queryRequests(f: RequestFilters, now = new Date(), pageSiz
     .select({
       id: requests.id,
       subjectName: requests.subjectName,
+      identifierValue: requests.identifierValue,
+      identifierLabel: requests.identifierLabel,
       subjectEmail: requests.subjectEmail,
       status: requests.status,
       createdAt: requests.createdAt,

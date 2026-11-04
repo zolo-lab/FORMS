@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { RowActions } from "@/components/requests/RowActions";
 import { PageHeader } from "@/components/ui/page-header";
+import { requestLabel } from "@/lib/forms/highlights";
 import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -66,6 +67,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
     return `/admin/requests${qs ? `?${qs}` : ""}`;
   };
   const hasFilters = Object.keys(filters).some((k) => k !== "page" && k !== "sort" && k !== "dir");
+  // The fields' own labels when every row on the page comes from forms that identify a request the same way,
+  // and the general name otherwise (or when the labels together would be too long for a column heading).
+  const labels = [...new Set(result.rows.map((r) => r.identifierLabel).filter(Boolean))];
+  const identifierHeader = labels.length === 1 && labels[0]!.length <= 28 ? labels[0]! : "שדה מזהה";
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
@@ -221,7 +226,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
               <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
-              {([["שם", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["פעולות"]] as [string, SortKey?][]).map(([h, key]) => {
+              {([[identifierHeader, "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["פעולות"]] as [string, SortKey?][]).map(([h, key]) => {
                 if (!key) return <th key={h} scope="col" className="px-3 py-2 text-start font-medium">{h}</th>;
                 const state = ariaSort(filters, key);
                 return (
@@ -251,10 +256,11 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
               const [label, tone] = REQUEST_STATUS_LABEL[r.status];
               return (
                 <tr key={r.id}>
-                  <td className="px-3 py-2"><input type="checkbox" name="id" value={r.id} aria-label={`בחירת ${r.subjectName}`} className="size-4 accent-primary" /></td>
+                  <td className="px-3 py-2"><input type="checkbox" name="id" value={r.id} aria-label={`בחירת ${requestLabel(r) || r.subjectName}`} className="size-4 accent-primary" /></td>
                   <td className="px-3 py-2">
                     <Link href={`/admin/requests/${r.id}`} className="font-medium hover:underline">
-                      {r.subjectName}
+                      {/* The form's identifier; a form that defines none keeps showing the name the request was opened with. */}
+                      {requestLabel(r) || <span className="text-muted-foreground">—</span>}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{r.organizationName}</td>
@@ -270,7 +276,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <td className="px-2 py-1">
                     <RowActions
                       requestId={r.id}
-                      subject={r.subjectName}
+                      subject={requestLabel(r) || r.subjectName}
                       live={r.status === "in_progress" || r.status === "returned"}
                       waiting={r.waitingFor.length > 0}
                       canGoBack={r.progress.done > 0}

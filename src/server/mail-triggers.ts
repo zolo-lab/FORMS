@@ -105,14 +105,24 @@ export async function triggerCounts(organizationId: string | null, days = 30, no
 }
 
 /** Variables every request-based message can use: organization, form, the person, who sent it and the form's note. */
-export async function requestVars(req: { organizationId: string; packageTemplateId: string; createdBy: string | null; subjectName: string }): Promise<Record<string, string>> {
+export async function requestVars(req: {
+  organizationId: string;
+  packageTemplateId: string;
+  createdBy: string | null;
+  subjectName: string;
+  identifierValue?: string | null;
+  messageDetails?: { label: string; value: string }[] | null;
+}): Promise<Record<string, string>> {
   const [[org], [pkg], [creator]] = await Promise.all([
     db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.organizationId)),
     db.select({ name: packageTemplates.name, note: packageTemplates.mailNote }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId)),
     req.createdBy ? db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, req.createdBy)) : Promise.resolve([]),
   ]);
   const creatorEmail = creator && !creator.email.toLowerCase().endsWith("@users.invalid") ? creator.email : "";
-  return { org: org?.name ?? "", form: pkg?.name ?? "", subject: req.subjectName, creatorName: creator?.name ?? "", creatorEmail, note: pkg?.note ?? "" };
+  // The form's "שדה מזהה" names the request wherever {{subject}} is used; the details block is {{details}}.
+  const details = (req.messageDetails ?? []).filter((l) => l.value).map((l) => `${l.label}: ${l.value}`).join("\n");
+  const subject = req.identifierValue?.trim() || req.subjectName;
+  return { org: org?.name ?? "", form: pkg?.name ?? "", subject, creatorName: creator?.name ?? "", creatorEmail, note: pkg?.note ?? "", details };
 }
 
 /** Stores the text of one trigger for all organizations (null) or one organization. */

@@ -54,6 +54,7 @@ export const VAR_LABELS: Record<string, string> = {
   note: "הערה מהגדרות הטופס",
   count: "מספר הבקשות",
   items: "רשימת הבקשות",
+  details: "פרטי הבקשה (השדות שסומנו בטופס)",
 };
 
 /** Example values for the preview in the editor. */
@@ -71,19 +72,22 @@ export const SAMPLE_VARS: Record<string, string> = {
   note: "לא ניתן להתחיל עבודה בפועל ללא חתימה על הטפסים.",
   count: "2",
   items: "• דנה כהן – קליטת עובד – ממתין לעובד – 5 ימים\n• יוסי לוי – שינוי תנאים – ממתין למאשר – 4 ימים",
+  details: "שם העובד: דנה כהן\nתאריך תחילת עבודה: 1.12.2026",
 };
 
 const PERSON_VARS = ["name", "org", "form", "subject", "creatorName", "creatorEmail", "note"];
+/** The triggers that carry the form's own fields: {{details}} is in their default text and can be taken out of it. */
+const WITH_DETAILS = [...PERSON_VARS, "details"];
 
 export const TRIGGERS: TriggerDef[] = [
-  { key: "sent_to_creator", label: "אישור שליחה לשולח", when: "כשבקשה נשלחה לדרך, למי ששלח אותה (מה נשלח ולמי)", defaults: ["creator"], allowed: ["creator", "secretariat", "fixed"], vars: [...PERSON_VARS, "stepName", "link"] },
-  { key: "step_invite", label: "הזמנה למילוי וחתימה", when: "כשמגיע תורו של מישהו למלא או לחתום", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "dueDate"] },
-  { key: "reminder", label: "תזכורת", when: "לפי מדיניות התזכורות, למי שעוד לא מילא", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "dueDate"] },
+  { key: "sent_to_creator", label: "אישור שליחה לשולח", when: "כשבקשה נשלחה לדרך, למי ששלח אותה (מה נשלח ולמי)", defaults: ["creator"], allowed: ["creator", "secretariat", "fixed"], vars: [...WITH_DETAILS, "stepName", "link"] },
+  { key: "step_invite", label: "הזמנה למילוי וחתימה", when: "כשמגיע תורו של מישהו למלא או לחתום", defaults: ["signer"], allowed: ["signer"], vars: [...WITH_DETAILS, "link", "dueDate"] },
+  { key: "reminder", label: "תזכורת", when: "לפי מדיניות התזכורות, למי שעוד לא מילא", defaults: ["signer"], allowed: ["signer"], vars: [...WITH_DETAILS, "link", "dueDate"] },
   { key: "returned", label: "הוחזר לתיקון", when: "כשמישהו דוחה ומחזיר את הבקשה לשלב קודם", defaults: ["signer"], allowed: ["signer"], vars: [...PERSON_VARS, "link", "reason"] },
   { key: "step_done", label: "שלב הושלם", when: "כשמישהו סיים את השלב שלו והבקשה ממשיכה", defaults: ["creator", "trackers"], allowed: ["creator", "trackers", "secretariat", "fixed"], vars: [...PERSON_VARS, "stepName"] },
-  { key: "completed", label: "התהליך הושלם", when: "כשכל השלבים הסתיימו", defaults: ["employee", "creator"], allowed: ["employee", "creator", "secretariat", "bookkeeping", "fixed"], vars: PERSON_VARS },
+  { key: "completed", label: "התהליך הושלם", when: "כשכל השלבים הסתיימו", defaults: ["employee", "creator"], allowed: ["employee", "creator", "secretariat", "bookkeeping", "fixed"], vars: WITH_DETAILS },
   { key: "declined", label: "הבקשה נדחתה", when: "כשמישהו דוחה את הבקשה סופית", defaults: ["employee", "creator"], allowed: ["employee", "creator", "secretariat", "fixed"], vars: [...PERSON_VARS, "reason"] },
-  { key: "completion_docs", label: "המסמכים החתומים (PDF מצורף)", when: "בסיום התהליך, עם הקבצים החתומים", defaults: ["package"], allowed: ["package", "secretariat", "bookkeeping", "fixed"], vars: [...PERSON_VARS, "link"] },
+  { key: "completion_docs", label: "המסמכים החתומים (PDF מצורף)", when: "בסיום התהליך, עם הקבצים החתומים", defaults: ["package"], allowed: ["package", "secretariat", "bookkeeping", "fixed"], vars: [...WITH_DETAILS, "link"] },
   { key: "open_summary", label: "סיכום בקשות פתוחות למזכירות", when: "לפי התזמון: כל הבקשות של העמותה שעוד לא הסתיימו, עם למי הן ממתינות", defaults: ["secretariat"], allowed: ["secretariat", "managers", "fixed"], vars: ["org", "count", "items", "link"], periodic: true },
   { key: "weekly_digest", label: "סיכום שבועי של ממתינים", when: "ביום ראשון ב-08:00, בקשות שממתינות יותר מ-3 ימים", defaults: ["managers"], allowed: ["managers", "secretariat", "fixed"], vars: ["org", "count", "items", "link"] },
   { key: "otp", label: "קוד אימות", when: "כשמי שחותם מבקש קוד כניסה", defaults: ["signer"], allowed: ["signer"], locked: true, vars: [] },

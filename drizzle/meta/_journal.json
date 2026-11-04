@@ -169,6 +169,13 @@
       "when": 1793774182119,
       "tag": "0023_dark_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793774800000,
+      "tag": "0024_request_highlights",
+      "breakpoints": true
     }
   ]
 }

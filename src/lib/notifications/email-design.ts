@@ -18,6 +18,11 @@ interface Layout {
   after?: string[];
   /** A boxed block for a list ({{items}}): kept as written, line by line. */
   box?: string;
+  /**
+   * The details block of the form's fields ({{details}}): a light box above the button, dropped from the e-mail
+   * whenever no field marked "show in messages" is filled.
+   */
+  details?: boolean;
 }
 
 const P = (s: string) => `<p style="margin:0 0 12px;font-size:16px;line-height:1.6">${s}</p>`;
@@ -29,6 +34,9 @@ export function designedHtml(l: Layout): string {
 <p style="margin:0 0 16px;font-size:12px;color:#6b7280">אם הכפתור לא נפתח, אפשר להעתיק את הקישור: <a href="{{link}}" style="color:${BRAND};word-break:break-all">{{link}}</a></p>`
     : "";
   const box = l.box ? `<div style="margin:0 0 16px;padding:12px 16px;background:#f4f5f7;border-radius:8px;font-size:14px;line-height:1.7">${l.box}</div>` : "";
+  const details = l.details
+    ? optionalBlock("details", `<div style="margin:0 0 16px;padding:12px 16px;background:#f4f5f7;border-right:3px solid ${BRAND};border-radius:8px;font-size:14px;line-height:1.7">{{details}}</div>`)
+    : "";
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <body style="margin:0;padding:24px 12px;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#111827">
@@ -40,7 +48,7 @@ export function designedHtml(l: Layout): string {
 </td></tr>
 <tr><td style="padding:24px;text-align:right">
 ${l.lines.map(P).join("\n")}
-${box}${button}${(l.after ?? []).map(P).join("\n")}
+${details}${box}${button}${(l.after ?? []).map(P).join("\n")}
 </td></tr>
 <tr><td style="padding:12px 24px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:right">הודעה אוטומטית – נא לא להשיב למייל זה.</td></tr>
 </table>
@@ -49,16 +57,27 @@ ${box}${button}${(l.after ?? []).map(P).join("\n")}
 </html>`;
 }
 
+/**
+ * Wraps a block so it is dropped from the e-mail when its variable is empty. The markers are HTML comments, so a
+ * template edited by hand in the panel keeps working either way (an unremoved marker just shows nothing).
+ */
+export const optionalBlock = (name: string, html: string) => `<!--if:${name}-->${html}<!--/if:${name}-->`;
+
+/** Removes an optional block whose variable is empty, and the markers of the ones that stay. */
+export function applyOptionalBlocks(html: string, vars: Record<string, string | undefined>): string {
+  return html.replace(/<!--if:(\w+)-->([\s\S]*?)<!--\/if:\1-->/g, (_, name: string, inner: string) => (vars[name]?.trim() ? inner : ""));
+}
+
 /** The default design of every trigger. */
 export const DEFAULT_HTML: Record<string, string> = {
-  sent_to_creator: designedHtml({ title: "נשלח טופס", lines: ["שלום {{name}},", "הטופס \"{{form}}\" של {{subject}} נשלח לדרך.", "ממתין עכשיו ל: {{stepName}}"], button: "למעקב אחרי הבקשה" }),
-  step_invite: designedHtml({ title: "{{form}}", lines: ["שלום {{name}},", "ממתינים לך מסמכים למילוי וחתימה ב{{org}}."], button: "למילוי וחתימה", after: ["יש להשלים עד {{dueDate}}."] }),
-  reminder: designedHtml({ title: "תזכורת: {{form}}", lines: ["שלום {{name}},", "עדיין ממתינים לך מסמכים ב{{org}}."], button: "למילוי וחתימה", after: ["יש להשלים עד {{dueDate}}."] }),
+  sent_to_creator: designedHtml({ title: "נשלח טופס", lines: ["שלום {{name}},", "הטופס \"{{form}}\" של {{subject}} נשלח לדרך.", "ממתין עכשיו ל: {{stepName}}"], button: "למעקב אחרי הבקשה" , details: true }),
+  step_invite: designedHtml({ title: "{{form}}", lines: ["שלום {{name}},", "ממתינים לך מסמכים למילוי וחתימה ב{{org}}."], button: "למילוי וחתימה", after: ["יש להשלים עד {{dueDate}}."] , details: true }),
+  reminder: designedHtml({ title: "תזכורת: {{form}}", lines: ["שלום {{name}},", "עדיין ממתינים לך מסמכים ב{{org}}."], button: "למילוי וחתימה", after: ["יש להשלים עד {{dueDate}}."] , details: true }),
   returned: designedHtml({ title: "הוחזר לתיקון", lines: ["שלום {{name}},", "המסמכים של \"{{form}}\" הוחזרו לתיקון.", "סיבה: {{reason}}"], button: "לתיקון המסמכים" }),
   step_done: designedHtml({ title: "התקדמות בבקשה", lines: ["שלום {{name}},", "השלב \"{{stepName}}\" בבקשה של {{subject}} הושלם."] }),
-  completed: designedHtml({ title: "התהליך הושלם", lines: ["שלום {{name}},", "כל המסמכים נחתמו והתהליך הושלם{{subject}}. תודה!"] }),
+  completed: designedHtml({ title: "התהליך הושלם", lines: ["שלום {{name}},", "כל המסמכים נחתמו והתהליך הושלם{{subject}}. תודה!"] , details: true }),
   declined: designedHtml({ title: "הבקשה נדחתה", lines: ["שלום {{name}},", "המסמכים נדחו.", "סיבה: {{reason}}"] }),
-  completion_docs: designedHtml({ title: "מסמכים חתומים", lines: ["שלום {{name}},", "כל השלבים ב\"{{form}}\" של {{subject}} הושלמו. המסמכים החתומים מצורפים."], button: "לצפייה בבקשה" }),
+  completion_docs: designedHtml({ title: "מסמכים חתומים", lines: ["שלום {{name}},", "כל השלבים ב\"{{form}}\" של {{subject}} הושלמו. המסמכים החתומים מצורפים."], button: "לצפייה בבקשה" , details: true }),
   open_summary: designedHtml({ title: "{{count}} בקשות פתוחות", lines: ["שלום,", "אלה הבקשות של {{org}} שעוד לא הסתיימו:"], box: "{{items}}", button: "למסך המעקב" }),
   weekly_digest: designedHtml({ title: "{{count}} בקשות ממתינות", lines: ["שלום,", "אלה הבקשות של {{org}} שממתינות יותר מ-3 ימים:"], box: "{{items}}", button: "למסך המעקב" }),
 };
@@ -68,7 +87,7 @@ export const DEFAULT_HTML: Record<string, string> = {
  * Unknown variables become "".
  */
 export function renderHtml(html: string, vars: Record<string, string | undefined>): string {
-  return html.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => escapeHtml(vars[key] ?? "").replace(/\r?\n/g, "<br>"));
+  return applyOptionalBlocks(html, vars).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => escapeHtml(vars[key] ?? "").replace(/\r?\n/g, "<br>"));
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };

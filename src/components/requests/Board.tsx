@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { boardColumns } from "@/lib/requests/list";
+import { requestLabel } from "@/lib/forms/highlights";
 import type { RequestRow } from "@/server/dashboard-store";
 
 /**
@@ -23,7 +24,7 @@ export function Board({ rows, onOpen }: { rows: RequestRow[]; onOpen?: (fd: Form
             {c.rows.map((r) => (
               <li key={`${c.key}-${r.id}`} className="space-y-1">
                 <Link href={`/admin/requests/${r.id}`} className="block rounded-md border bg-card p-2 text-sm hover:border-primary">
-                  <span className="font-medium">{r.subjectName}</span>
+                  <span className="font-medium">{requestLabel(r) || "—"}</span>
                   <span className="block text-xs text-muted-foreground">{r.organizationName} · {r.packageName}</span>
                   <span className="mt-1 flex items-center justify-between text-xs">
                     <span>{r.progress.total ? `${r.progress.done}/${r.progress.total}` : ""}</span>
@@ -33,7 +34,7 @@ export function Board({ rows, onOpen }: { rows: RequestRow[]; onOpen?: (fd: Form
                 {onOpen && (
                   <form action={onOpen}>
                     <input type="hidden" name="requestId" value={r.id} />
-                    <SubmitButton size="sm" className="w-full" aria-label={`פתיחה וחתימה – ${r.subjectName}`}>פתיחה וחתימה</SubmitButton>
+                    <SubmitButton size="sm" className="w-full" aria-label={`פתיחה וחתימה – ${requestLabel(r) || r.subjectName}`}>פתיחה וחתימה</SubmitButton>
                   </form>
                 )}
               </li>
