@@ -28,11 +28,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!(await canSeeRequest(id))) return new Response("not found", { status: 404 });
   const [doc] = await db.select().from(schema.packageDocuments).where(eq(schema.packageDocuments.id, docId));
   if (!doc || doc.requestId !== id) return new Response("not found", { status: 404 });
-  const current = new URL(req.url).searchParams.get("current") === "1";
+  // A part cut by "עיבוד טופס" is only ever its own stored file: stamping the whole template for it
+  // would hand back the entire form instead of the pages the part holds.
+  const current = new URL(req.url).searchParams.get("current") === "1" && !doc.parentDocumentId;
   if (doc.finalFileId && !current) {
     const file = await getFile(doc.finalFileId);
     return file ? pdf(file.bytes, file.name) : new Response("not found", { status: 404 });
   }
+  if (doc.parentDocumentId) return new Response("not found", { status: 404 });
   const [version] = await db.select().from(schema.formTemplateVersions).where(eq(schema.formTemplateVersions.id, doc.templateVersionId));
   if (!version?.pdfFileId || !version.pdfMapping) return new Response("not found", { status: 404 });
   const [row] = await db.select().from(schema.pdfFiles).where(eq(schema.pdfFiles.id, version.pdfFileId));

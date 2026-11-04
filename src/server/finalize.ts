@@ -12,16 +12,20 @@ import { appendCertificate } from "@/lib/pdf/certificate";
 import { summaryItems, summaryPdf } from "@/lib/pdf/summary";
 import { archivePdf, driveEnabled } from "./drive";
 import { collectedAnswers } from "./requests-store";
+import { cutDocumentParts, partsForDocument, partsOfPackage } from "./processing";
 import { getFile, putFile, sha256Hex } from "./storage";
 import { ownDocuments } from "./package-docs";
 
-const { requests, packageDocuments, formTemplateVersions, formTemplates, signingSteps, organizations, pdfFiles } = schema;
+const { requests, packageDocuments, formTemplateVersions, formTemplates, signingSteps, organizations, pdfFiles, packageTemplates } = schema;
 
 export async function finalizeRequest(requestId: string, opts: { force?: boolean } = {}): Promise<{ generated: number; skipped: number }> {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) throw new Error("request not found");
   if (req.status !== "completed") throw new Error(`request is ${req.status}, not completed`);
   const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
+  // "עיבוד טופס": the parts each signed document is cut into, defined on the package.
+  const [pkg] = await db.select({ processing: packageTemplates.processing }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  const allParts = partsOfPackage(pkg?.processing);
   const steps = await db.select().from(signingSteps).where(eq(signingSteps.requestId, requestId)).orderBy(asc(signingSteps.order), asc(signingSteps.createdAt));
   // Parts cut by "עיבוד טופס" are finished files already: finalizing one would stamp it as a whole document.
   const docs = await db.select().from(packageDocuments).where(ownDocuments(requestId)).orderBy(asc(packageDocuments.order));
@@ -82,6 +86,13 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     const file = await putFile({ name: `${title}.pdf`, mime: "application/pdf", bytes });
     await db.update(packageDocuments).set({ finalFileId: file.id, finalSha256: file.sha256, generatedAt: new Date(), status: "completed" }).where(eq(packageDocuments.id, d.id));
     generated++;
+
+    // Parts are cut from `base` — the stamped PDF before the certificate page — so they come out clean.
+    const parts = partsForDocument(allParts, template?.id, docs.length);
+    if (parts.length) {
+      const cut = await cutDocumentParts({ requestId, parentDocumentId: d.id, templateVersionId: d.templateVersionId, order: d.order, title, base, parts });
+      if (cut.failed.length) console.error("some parts were not cut", { requestId, doc: d.id, failed: cut.failed });
+    }
 
     // Archive copy in Drive. Never blocks or fails the signing flow: the stored file above is the source of truth,
     // and a failed or unconfigured archive is simply retried the next time the request is finalized with `force`.

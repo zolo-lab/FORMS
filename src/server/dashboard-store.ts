@@ -4,7 +4,7 @@ import { and, asc, desc, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL 
 import { db, schema } from "@/db";
 import { PAGE_SIZE, daysSince, median, progress, type RequestFilters } from "@/lib/requests/list";
 import type { visibilityScope } from "@/lib/auth/permissions";
-import { ownDocuments } from "./package-docs";
+import { ownDocuments, partsOf } from "./package-docs";
 
 /** `null` = everything (admin / no sign-in); otherwise what `visibilityScope` allows. */
 export type Scope = ReturnType<typeof visibilityScope>;
@@ -351,4 +351,31 @@ export async function requestsInMyChain(email: string, limit = 100) {
     )
     .orderBy(desc(requests.createdAt))
     .limit(limit);
+}
+
+/**
+ * The parts cut out of this request's documents by "עיבוד טופס", keyed by the document they came from.
+ * Parts are deliberately kept out of every "documents of the request" query, so they are fetched on purpose.
+ */
+export async function requestParts(requestId: string): Promise<Map<string, { id: string; partName: string | null; pages: string | null; finalFileId: string | null; driveUrl: string | null }[]>> {
+  const rows = await db
+    .select({
+      id: schema.packageDocuments.id,
+      parentDocumentId: schema.packageDocuments.parentDocumentId,
+      partName: schema.packageDocuments.partName,
+      pages: schema.packageDocuments.pages,
+      finalFileId: schema.packageDocuments.finalFileId,
+      driveUrl: schema.packageDocuments.driveUrl,
+    })
+    .from(schema.packageDocuments)
+    .where(partsOf(requestId))
+    .orderBy(asc(schema.packageDocuments.order), asc(schema.packageDocuments.createdAt));
+  const out = new Map<string, { id: string; partName: string | null; pages: string | null; finalFileId: string | null; driveUrl: string | null }[]>();
+  for (const r of rows) {
+    if (!r.parentDocumentId) continue;
+    const list = out.get(r.parentDocumentId) ?? [];
+    list.push({ id: r.id, partName: r.partName, pages: r.pages, finalFileId: r.finalFileId, driveUrl: r.driveUrl });
+    out.set(r.parentDocumentId, list);
+  }
+  return out;
 }

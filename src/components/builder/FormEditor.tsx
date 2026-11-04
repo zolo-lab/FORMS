@@ -691,6 +691,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             onSave={() => void saveProcessing()}
             waitingForForm={save !== "saved"}
             onEditSteps={() => setTab("steps")}
+            pageCount={typeof pdf?.file.pages === "number" ? pdf.file.pages : (pdf?.file.pages?.length ?? 0)}
           />
         )}
         {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} onSelectionChange={setPdfSelection} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}

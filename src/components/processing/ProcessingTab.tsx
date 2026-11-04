@@ -4,9 +4,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { destinationProblems, newDestinationId, type ProcessingContext } from "@/lib/processing/model";
+import { parsePages } from "@/lib/processing/pages";
 import { COMPLETION_DESTINATION_ID, type Destination, type Processing } from "@/lib/processing/types";
 import type { StepsSaveState } from "@/components/packages/StepsEditor";
 import { DestinationCard } from "./DestinationCard";
+import { CutParts } from "./CutParts";
 
 /**
  * "עיבוד טופס": what happens to the signed documents once every step is done. The steps themselves are shown
@@ -14,7 +16,7 @@ import { DestinationCard } from "./DestinationCard";
  * renamed, moved or deleted there is reflected here before anything is saved.
  */
 export function ProcessingTab({
-  value, onChange, ctx, dirty, state, onSave, waitingForForm, onEditSteps,
+  value, onChange, ctx, dirty, state, onSave, waitingForForm, onEditSteps, pageCount = 0, documents,
 }: {
   value: Processing;
   onChange: (next: Processing) => void;
@@ -25,10 +27,17 @@ export function ProcessingTab({
   /** The form itself still has unsaved changes (its fields are read by the server when saving). */
   waitingForForm: boolean;
   onEditSteps: () => void;
+  /** Pages of the form's document; 0 when it has no PDF. */
+  pageCount?: number;
+  documents?: { id: string; title: string }[];
 }) {
   const [open, setOpen] = useState<string | null>(COMPLETION_DESTINATION_ID);
   const steps = ctx.steps ?? [];
-  const problems = value.destinations.flatMap((d) => destinationProblems(d, ctx));
+  const problems = [
+    ...value.parts.flatMap((p) => parsePages(p.pages, pageCount || undefined).errors.map((e) => `${p.name || "חלק"}: ${e}`)),
+    ...value.parts.filter((p) => !p.name.trim()).map(() => "לחלק חסר שם"),
+    ...value.destinations.flatMap((d) => destinationProblems(d, ctx)),
+  ];
 
   const patch = (id: string, next: Destination) => onChange({ ...value, destinations: value.destinations.map((d) => (d.id === id ? next : d)) });
   const addEmail = () => {
@@ -67,6 +76,13 @@ export function ProcessingTab({
         </div>
       </section>
 
+      <CutParts
+        parts={value.parts}
+        onChange={(parts) => onChange({ ...value, parts })}
+        pageCount={pageCount}
+        documents={documents}
+      />
+
       <section className="space-y-3" aria-labelledby="dest-h">
         <h3 id="dest-h" className="text-base font-semibold">לאן זה נשלח</h3>
         <ul className="space-y-2">
@@ -85,7 +101,7 @@ export function ProcessingTab({
         <Button type="button" variant="outline" onClick={addEmail}>
           <Plus className="size-4" aria-hidden /><Mail className="size-4" aria-hidden />הוספת יעד מייל
         </Button>
-        <p className="text-xs text-muted-foreground">תיוק בתיקיית דרייב, חיתוך המסמך לחלקים והעברת המסמכים הנלווים – בשלבים הבאים של הבנייה.</p>
+        <p className="text-xs text-muted-foreground">תיוק בתיקיית דרייב והעברת המסמכים הנלווים – בשלבים הבאים של הבנייה.</p>
       </section>
 
       <div className={cn("sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur")}>
@@ -97,7 +113,7 @@ export function ProcessingTab({
           {state.kind === "saved" && !dirty ? (
             <span role="status" className="inline-flex items-center gap-1 text-success"><Check className="size-4" aria-hidden />העיבוד נשמר</span>
           ) : problems.length > 0 ? (
-            <span className="text-destructive">יש {problems.length === 1 ? "פרט אחד" : `${problems.length} פרטים`} להשלים ביעדים</span>
+            <span className="text-destructive">יש {problems.length === 1 ? "פרט אחד" : `${problems.length} פרטים`} להשלים</span>
           ) : waitingForForm ? (
             <span className="text-muted-foreground">שומר את הטופס…</span>
           ) : dirty ? (
