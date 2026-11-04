@@ -6,7 +6,7 @@ import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components
 import { OrgRoutes } from "@/components/packages/OrgRoutes";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
-import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, withStep, type StepView } from "@/lib/workflow/step-fields";
+import { answerFields, comboKey, comboPatch, emailFieldsOf, fieldRole, stepCombo, stepComboOptions, stepViews, unassignedFields, withStep, type StepView } from "@/lib/workflow/step-fields";
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -140,7 +140,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [versionsOpen, setVersionsOpen] = useState(false);
   // The one step picker above the PDF: with boxes selected (and no step being marked) it shows and changes their step.
   const moveMode = tab === "pdf" && !focusRole && pdfSelection.length > 0;
-  const selectionRoles = new Set(answerFields(def).filter((f) => pdfSelection.includes(f.id)).map(fieldRole));
+  // The steps of the selected boxes' fields, as one choice ("שלבים 1 + 3"), when they all share them.
+  const selectionRoles = new Set(answerFields(def).filter((f) => pdfSelection.includes(f.id)).map((f) => comboKey(stepCombo(f, stepRoles)) || fieldRole(f)));
   const selectionRole = selectionRoles.size === 1 ? [...selectionRoles][0] : undefined;
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
@@ -462,13 +463,13 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 aria-label="העברת התיבות המסומנות לשלב"
                 value={selectionRole ?? ""}
                 onChange={(e) => {
-                  const r = e.target.value as FillerRole;
-                  if (!r) return;
-                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, { filledBy: r, alsoFilledBy: undefined }), def));
+                  const key = e.target.value;
+                  if (!key) return;
+                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, comboPatch(key)), def));
                 }}
               >
-                {!selectionRole && <option value="">כמה שלבים</option>}
-                {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+                {!selectionRole && <option value="">שלבים שונים</option>}
+                {stepComboOptions(def, views).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </Select>
               <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
             </label>

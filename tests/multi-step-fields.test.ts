@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fieldSteps, fillsIn, type FormDefinition } from "@/lib/forms/schema";
-import { unassignedFields, withStep } from "@/lib/workflow/step-fields";
+import { comboKey, comboPatch, stepCombo, stepComboOptions, unassignedFields, withStep } from "@/lib/workflow/step-fields";
 import { roleView } from "@/lib/forms/role-view";
 import { validateAnswers } from "@/lib/forms/validate";
 
@@ -49,5 +49,30 @@ describe("what each step gets", () => {
   it("the second step's correction is validated as its own", () => {
     expect(validateAnswers(def, { role: "", salary: "9000" }, { role: "approver" }).errors.role).toBeDefined();
     expect(validateAnswers(def, { role: "רכזת", salary: "9000" }, { role: "approver" }).ok).toBe(true);
+  });
+});
+
+describe("step combinations as choices", () => {
+  const views = [
+    { index: 0, role: "requester" as const, label: "שלב 1 · השולח" },
+    { index: 1, role: "employee" as const, label: "שלב 2 · העובד" },
+    { index: 2, role: "approver" as const, label: "שלב 3 · מזכירה" },
+  ];
+  const def = { pages: [{ id: "p", fields: [
+    { id: "a", type: "short_text", label: "א", filledBy: "requester", alsoFilledBy: ["approver"] },
+    { id: "b", type: "short_text", label: "ב", filledBy: "employee" },
+  ] }] } as unknown as FormDefinition;
+  it("lists every step, then each combination a field already uses", () => {
+    expect(stepComboOptions(def, views)).toEqual([
+      { key: "requester", label: "שלב 1 · השולח" },
+      { key: "employee", label: "שלב 2 · העובד" },
+      { key: "approver", label: "שלב 3 · מזכירה" },
+      { key: "requester+approver", label: "שלבים 1 + 3 · השולח + מזכירה" },
+    ]);
+  });
+  it("a combination puts a field in exactly those steps", () => {
+    expect(comboPatch("requester+approver")).toEqual({ filledBy: "requester", alsoFilledBy: ["approver"] });
+    expect(comboPatch("employee")).toEqual({ filledBy: "employee", alsoFilledBy: undefined });
+    expect(comboKey(stepCombo({ filledBy: "approver", alsoFilledBy: ["requester"] }, views.map((v) => v.role)))).toBe("requester+approver");
   });
 });

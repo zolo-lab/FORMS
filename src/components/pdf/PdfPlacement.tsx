@@ -1,9 +1,9 @@
 "use client";
 import type { PickMode } from "@/lib/forms/pick-mode";
 import type { FixResult } from "@/lib/forms/detect-fixes";
-import { StepChecks, StepSelect, type StepView } from "@/components/builder/StepSelect";
+import { StepChecks, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coor
 import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, fillsIn, type FormDefinition, type FormField } from "@/lib/forms/schema";
-import { withStep } from "@/lib/workflow/step-fields";
+import { comboKey, comboPatch, stepCombo, stepComboOptions, withStep } from "@/lib/workflow/step-fields";
 import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -156,6 +156,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
+  /** "שכפול שדה": one more box of the same field, a little below and to the side; it writes the same answer. */
+  const duplicateBox = (s: PdfStamp) => {
+    const pg = pages[s.page]!;
+    const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
+    const copy = { ...s, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+    setStamps([...mapping.stamps, copy]);
+    select(copy.id);
+    reveal(copy.id);
+  };
   /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
   const inViewStep = (s: PdfStamp): boolean => {
     if (!viewAs) return false;
@@ -543,16 +552,20 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <span className="font-medium">{group.length === 1 ? "תיבה אחת מסומנת" : `${group.length} תיבות מסומנות`}</span>
             <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
             <span>· העברה לשלב:</span>
-            <StepSelect
+            <Select
               className="h-9 w-64"
-              label="העברת התיבות המסומנות לשלב"
-              views={steps}
-              value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
-              onChange={(r) => {
+              aria-label="העברת התיבות המסומנות לשלב"
+              value={selectedStamp && fieldOf(selectedStamp) ? comboKey(stepCombo(fieldOf(selectedStamp)!, steps.map((v) => v.role))) : ""}
+              onChange={(e) => {
+                const key = e.target.value;
+                if (!key) return;
                 const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
+                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, comboPatch(key));
               }}
-            />
+            >
+              <option value="">בחרו שלב…</option>
+              {stepComboOptions(definition, steps).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </Select>
           </div>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -615,6 +628,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
                       <span className="pointer-events-none block truncate px-0.5 text-primary" title={chipOf(s)}>{chipOf(s)}</span>
+                      {active && !pick && (
+                        <button
+                          type="button"
+                          aria-label="שכפול שדה"
+                          title="שכפול שדה: תיבה נוספת עם אותה תשובה"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); duplicateBox(s); }}
+                          className="absolute -top-3 -start-3 flex size-6 items-center justify-center rounded-full border border-primary bg-card text-primary shadow-sm hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                        >
+                          <Copy className="size-3.5" aria-hidden />
+                        </button>
+                      )}
                       {active && (
                         <span
                           aria-label="שינוי גודל"
@@ -691,16 +716,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 {group.length <= 1 && fieldOf(selectedStamp) ? (
                   <StepChecks views={steps} field={fieldOf(selectedStamp)!} onChange={(patch) => onFieldPatch(fieldOf(selectedStamp)!.id, patch)} />
                 ) : (
-                <StepSelect
+                <Select
                   className="h-9"
-                  views={steps}
-                  value={roleOf(selectedStamp) === "none" ? undefined : (roleOf(selectedStamp) as FillerRole)}
-                  onChange={(r) => {
-                    // Every marked box (Shift/Ctrl+click) goes to the chosen step together.
+                  aria-label={`באיזה שלב (${group.length} תיבות מסומנות)`}
+                  value=""
+                  onChange={(e) => {
+                    // Every marked box (Shift/Ctrl+click) goes to the chosen step(s) together.
+                    const key = e.target.value;
+                    if (!key) return;
                     const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
+                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, comboPatch(key));
                   }}
-                />
+                >
+                  <option value="">בחרו שלבים לכולן…</option>
+                  {stepComboOptions(definition, steps).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </Select>
                 )}
               </div>
             )}
@@ -760,17 +790,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <Button
               variant="outline"
               size="sm"
-              title="אותה תשובה תיכתב במקום נוסף (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
-              onClick={() => {
-                const pg = pages[selectedStamp.page]!;
-                const c = clampBox({ ...selectedStamp, x: selectedStamp.x + 12, y: selectedStamp.y - 12 }, pg.width, pg.height);
-                const copy = { ...selectedStamp, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
-                setStamps([...mapping.stamps, copy]);
-                select(copy.id);
-                reveal(copy.id);
-              }}
+              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
+              onClick={() => duplicateBox(selectedStamp)}
             >
-              מופע נוסף של אותה תשובה
+              <Copy className="size-4" aria-hidden />
+              שכפול שדה
             </Button>
             {(() => {
               // The field's last box on the document takes the field with it (the PDF and the form are one); a copy only goes itself.
