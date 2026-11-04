@@ -7,10 +7,11 @@ import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { draftProblems, emailFieldsOf } from "@/lib/workflow/step-fields";
 import { getEditorData } from "@/server/forms-store";
-import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setOrgWorkflows, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
+import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setOrgWorkflows, setProcessing, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests/follow-up";
 import { parseRecipients } from "@/lib/requests/recipients";
+import { normalizeProcessing, splitProcessing } from "@/lib/processing/model";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 /** Back to where the edit came from: the form's "שלבי הטופס" page when it was opened there, else the package page. */
@@ -183,6 +184,23 @@ export async function saveOrgRouteAction(packageId: string, organizationId: stri
     routes[organizationId] = { steps };
   }
   await setOrgWorkflows(packageId, routes);
+  revalidatePath(`/admin/packages/${packageId}`);
+  revalidatePath("/admin/forms", "layout");
+  return { ok: true };
+}
+
+/**
+ * "עיבוד טופס": the whole tab in one save. The completion destination is split back out to
+ * `completionRecipients`, so editing it here is the same as editing it in the send settings.
+ */
+export async function saveProcessingAction(packageId: string, view: unknown): Promise<SaveStepsResult> {
+  await requireGrant("manageForms");
+  if (!UUID.test(packageId)) return { ok: false, errors: ["קלט לא תקין"] };
+  const data = await getPackage(packageId);
+  if (!data) return { ok: false, errors: ["הטופס לא נמצא"] };
+  const { processing, completionRecipients } = splitProcessing(normalizeProcessing(view, true));
+  if (processing.parts.length > 30 || processing.destinations.length > 30) return { ok: false, errors: ["יותר מדי חלקים או יעדים"] };
+  await setProcessing(packageId, processing, completionRecipients);
   revalidatePath(`/admin/packages/${packageId}`);
   revalidatePath("/admin/forms", "layout");
   return { ok: true };

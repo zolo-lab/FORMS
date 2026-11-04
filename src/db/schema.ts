@@ -29,6 +29,7 @@ import type { UserGrants } from "@/lib/auth/permissions";
 import type { ExpiryRule } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { RecipientKind } from "@/lib/notifications/triggers";
+import type { Processing } from "@/lib/processing/types";
 import type { SummarySchedule } from "@/lib/notifications/open-summary";
 import type { UserNotificationPrefs } from "@/lib/notifications/user-prefs";
 
@@ -269,6 +270,9 @@ export const packageTemplates = pgTable("package_templates", {
   expiryRule: jsonb("expiry_rule").$type<ExpiryRule>(),
   /** Fixed people who get the completion e-mail with the signed PDFs attached. */
   completionRecipients: jsonb("completion_recipients").$type<{ name: string; email: string }[]>().notNull().default([]),
+  /** "עיבוד טופס": cutting the signed documents and where each piece goes (src/lib/processing/types.ts).
+   * The completion e-mail recipients are NOT here — they stay in `completionRecipients`, which both screens edit. */
+  processing: jsonb("processing").$type<Processing>(),
   /** Handling steps after signing, ticked by staff (e.g. "עודכן בשכר"). */
   followUpStatuses: jsonb("follow_up_statuses").$type<FollowUpStatus[]>().notNull().default([]),
   remindersEnabled: boolean("reminders_enabled").notNull().default(true),

@@ -1,0 +1,1 @@
+ALTER TABLE "package_templates" ADD COLUMN IF NOT EXISTS "processing" jsonb;

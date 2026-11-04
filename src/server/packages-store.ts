@@ -7,6 +7,7 @@ import type { Workflow } from "@/lib/workflow/types";
 import { normalizeOrders } from "@/lib/workflow/validate-workflow";
 import type { ExpiryRule } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
+import type { Processing } from "@/lib/processing/types";
 
 const { packageTemplates, packageTemplateItems, formTemplates, formTemplateVersions } = schema;
 
@@ -123,6 +124,14 @@ export async function updatePackageSettings(id: string, patch: {
   mailNote: string | null;
 }) {
   await db.update(packageTemplates).set(patch).where(eq(packageTemplates.id, id));
+}
+
+/**
+ * "עיבוד טופס": the processing column and the completion recipients are written together, because the tab edits
+ * both ("מקבלי המסמכים החתומים בסיום" is the same value the send settings show).
+ */
+export async function setProcessing(id: string, processing: Processing, completionRecipients: { name: string; email: string }[]) {
+  await db.update(packageTemplates).set({ processing, completionRecipients }).where(eq(packageTemplates.id, id));
 }
 
 export async function setArchived(id: string, archived: boolean) {

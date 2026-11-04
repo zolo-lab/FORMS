@@ -153,7 +153,10 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
             <div className="space-y-1">
               <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
               <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
-              <p className="text-xs text-muted-foreground">שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.</p>
+              <p className="text-xs text-muted-foreground">
+                שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.
+                {formId && <> אותן כתובות מופיעות גם בלשונית <Link href={`/admin/forms/${formId}?tab=process`} className="underline">עיבוד טופס</Link>.</>}
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="pk-mail-note">הערה במיילים של הטופס</Label>
