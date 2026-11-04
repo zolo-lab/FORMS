@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { cancelRequestAction, changeAssigneeAction, extendExpiryAction } from "@/app/admin/requests/actions";
+import { cancelRequestAction, changeAssigneeAction, extendExpiryAction, returnStepAction, skipStepAction } from "@/app/admin/requests/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -15,9 +15,9 @@ export interface OpenStep {
   phone: string;
 }
 
-type Panel = "cancel" | "extend" | "assignee" | null;
+type Panel = "cancel" | "extend" | "assignee" | "skip" | "return" | null;
 
-export function RequestActions({ requestId, canExtend, canCancel, openSteps }: { requestId: string; canExtend: boolean; canCancel: boolean; openSteps: OpenStep[] }) {
+export function RequestActions({ requestId, canExtend, canCancel, openSteps, doneSteps = [] }: { requestId: string; canExtend: boolean; canCancel: boolean; openSteps: OpenStep[]; doneSteps?: { id: string; label: string }[] }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
@@ -27,6 +27,15 @@ export function RequestActions({ requestId, canExtend, canCancel, openSteps }: {
   const [stepId, setStepId] = useState(openSteps[0]?.id ?? "");
   const current = openSteps.find((s) => s.id === stepId);
   const [who, setWho] = useState({ name: current?.name ?? "", email: current?.email ?? "", phone: current?.phone ?? "" });
+  const [backTo, setBackTo] = useState(doneSteps[doneSteps.length - 1]?.id ?? "");
+  const stepPicker = openSteps.length > 1 && (
+    <div className="space-y-1">
+      <Label htmlFor="act-step">איזה שלב</Label>
+      <Select id="act-step" value={stepId} onChange={(e) => setStepId(e.target.value)}>
+        {openSteps.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+      </Select>
+    </div>
+  );
 
   function finish(r: { ok: boolean; message: string }) {
     setMessage({ ok: r.ok, text: r.message });
@@ -48,6 +57,16 @@ export function RequestActions({ requestId, canExtend, canCancel, openSteps }: {
         {openSteps.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => setPanel("assignee")}>
             החלפת נמען
+          </Button>
+        )}
+        {openSteps.length > 0 && (
+          <Button variant="outline" size="sm" onClick={() => { setReason(""); setPanel("skip"); }}>
+            דילוג על השלב
+          </Button>
+        )}
+        {openSteps.length > 0 && doneSteps.length > 0 && (
+          <Button variant="outline" size="sm" onClick={() => { setReason(""); setPanel("return"); }}>
+            החזרה לשלב קודם
           </Button>
         )}
         {canCancel && (
@@ -74,6 +93,36 @@ export function RequestActions({ requestId, canExtend, canCancel, openSteps }: {
           </Select>
           <Button disabled={pending} onClick={() => start(async () => finish(await extendExpiryAction(requestId, days)))}>
             אישור
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog open={panel === "skip"} onClose={() => setPanel(null)} title="דילוג על השלב" className="w-[min(92vw,28rem)]">
+        <div className="space-y-3">
+          {stepPicker}
+          <p className="text-sm">{current ? <>הבקשה תעבור לשלב הבא בלי <strong>{current.label}</strong>{current.name ? ` (${current.name})` : ""}.</> : null} הקישור של השלב יפסיק לעבוד.</p>
+          <Label htmlFor="skip-reason">סיבה (לא חובה)</Label>
+          <Textarea id="skip-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+          <Button disabled={pending || !stepId} onClick={() => start(async () => finish(await skipStepAction(requestId, stepId, reason)))}>
+            דילוג ומעבר לשלב הבא
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog open={panel === "return"} onClose={() => setPanel(null)} title="החזרה לשלב קודם" className="w-[min(92vw,28rem)]">
+        <div className="space-y-3">
+          {stepPicker}
+          <div className="space-y-1">
+            <Label htmlFor="back-to">להחזיר אל</Label>
+            <Select id="back-to" value={backTo} onChange={(e) => setBackTo(e.target.value)}>
+              {doneSteps.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </Select>
+          </div>
+          <Label htmlFor="return-reason">מה צריך לתקן</Label>
+          <Textarea id="return-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+          <p className="text-xs text-muted-foreground">השלב שנבחר יקבל קישור חדש, ואחריו הבקשה תמשיך שוב לפי הסדר.</p>
+          <Button disabled={pending || !stepId || !backTo || !reason.trim()} onClick={() => start(async () => finish(await returnStepAction(requestId, stepId, backTo, reason)))}>
+            החזרה
           </Button>
         </div>
       </Dialog>

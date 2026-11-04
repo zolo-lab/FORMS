@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RowActions } from "@/components/requests/RowActions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import { redirect } from "next/navigation";
 import { Board } from "@/components/requests/Board";
 import { SelectAll } from "@/components/requests/SelectAll";
 import { listOrganizations } from "@/server/requests-store";
-import { bulkCancelAction } from "./actions";
 import { listExportTemplates } from "@/server/export-templates-store";
 
 export const dynamic = "force-dynamic";
@@ -215,17 +215,13 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
               </Select>
             </span>
           )}
-          {canCancel && <span className="ms-auto flex items-center gap-2">
-            <Input name="reason" placeholder="סיבת ביטול" className="h-8 w-40" aria-label="סיבת ביטול" />
-            <Button type="submit" formAction={bulkCancelAction} formMethod="post" variant="destructive" size="sm">ביטול נבחרים</Button>
-          </span>}
         </div>
       <Card className="relative overflow-x-auto">
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
               <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
-              {([["עובד", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"]] as [string, SortKey?][]).map(([h, key]) => {
+              {([["שם", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["פעולות"]] as [string, SortKey?][]).map(([h, key]) => {
                 if (!key) return <th key={h} scope="col" className="px-3 py-2 text-start font-medium">{h}</th>;
                 const state = ariaSort(filters, key);
                 return (
@@ -246,7 +242,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <tbody className="divide-y">
             {result.rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                <td colSpan={10} className="p-6 text-center text-muted-foreground">
                   {hasFilters ? "לא נמצאו בקשות לפי הסינון." : "עדיין אין בקשות."}
                 </td>
               </tr>
@@ -271,6 +267,16 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <td className="px-3 py-2">{r.daysInStep ?? "—"}</td>
                   <td className="px-3 py-2">{r.progress.total ? `${r.progress.done}/${r.progress.total}` : "—"}</td>
                   <td className="px-3 py-2">{fmt.format(r.createdAt)}</td>
+                  <td className="px-2 py-1">
+                    <RowActions
+                      requestId={r.id}
+                      subject={r.subjectName}
+                      live={r.status === "in_progress" || r.status === "returned"}
+                      waiting={r.waitingFor.length > 0}
+                      canGoBack={r.progress.done > 0}
+                      canManage={canCancel}
+                    />
+                  </td>
                 </tr>
               );
             })}

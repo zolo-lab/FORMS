@@ -143,7 +143,7 @@ export function eventLabel(type: string, payload: Record<string, unknown> = {}):
     case "step_declined": return `שלב נדחה${reason}`;
     case "step_returned": return `הוחזר לתיקון${reason}`;
     case "step_delegated": return "השלב הועבר לאדם אחר";
-    case "step_skipped": return `שלב דולג${r ? ` · ${r}` : ""}`;
+    case "step_skipped": return `${payload.by === "admin" ? "מנהל דילג על שלב" : "שלב דולג"}${r ? ` · ${r}` : ""}${reason}`;
     case "step_expired": return "תוקף שלב פג";
     case "request_extended": return "תוקף הבקשה הוארך";
     case "step_assignee_changed": return `הוחלף נמען${r ? ` · ${r}` : ""}`;
