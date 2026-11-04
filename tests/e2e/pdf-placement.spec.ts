@@ -110,6 +110,8 @@ test("colours stamps by role and shows a legend", async ({ page }) => {
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
   await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 2 · העובד");
-  await page.getByLabel("באיזה שלב").selectOption("requester");
+  const steps = page.getByRole("group", { name: "באילו שלבים השדה פתוח לעריכה" });
+  await steps.getByRole("checkbox", { name: /השולח/ }).check();
+  await steps.getByRole("checkbox", { name: /העובד/ }).uncheck();
   await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 1 · השולח");
 });

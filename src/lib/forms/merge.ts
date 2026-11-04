@@ -3,7 +3,7 @@
  * documents are asked once; the answer is later spread to each document (splitAnswers).
  */
 import type { Answers } from "./conditions";
-import { allFields, type FillerRole, type FormDefinition, type FormPage } from "./schema";
+import { allFields, fillsIn, type FillerRole, type FormDefinition, type FormPage } from "./schema";
 import { stripInternalFields } from "./internal";
 
 export interface PackageDoc {
@@ -33,7 +33,7 @@ export function mergedDefinitionForStep(docsIn: PackageDoc[], role: FillerRole):
         title: docs.length > 1 ? `${d.title} – ${page.title}` : page.title,
         // Page ids are prefixed when several documents are merged, so jump targets must be too.
         ...(docs.length > 1 && page.nextPage ? { nextPage: page.nextPage.map((r) => ({ ...r, goTo: r.goTo === "end" ? "end" : `d${di}_${r.goTo}` })) } : {}),
-        fields: fields.map((f) => ((f.filledBy ?? "employee") !== role ? { ...f, readOnly: true } : f)),
+        fields: fields.map((f) => (!fillsIn(f, role) ? { ...f, readOnly: true } : f)),
       });
     }
   });
