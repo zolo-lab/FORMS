@@ -1,7 +1,7 @@
 "use client";
 import type { PickMode } from "@/lib/forms/pick-mode";
 import type { FixResult } from "@/lib/forms/detect-fixes";
-import { StepSelect, type StepView } from "@/components/builder/StepSelect";
+import { StepChecks, StepSelect, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -13,7 +13,8 @@ import { extractPageTexts } from "./extract-page-data";
 import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coords";
 import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
-import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { allFields, fillsIn, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { withStep } from "@/lib/workflow/step-fields";
 import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -155,6 +156,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
+  /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
+  const inViewStep = (s: PdfStamp): boolean => {
+    if (!viewAs) return false;
+    if (viewAs === "unassigned") return shownRole(s) === "unassigned";
+    const f = allFields(definition).find((x) => x.id === baseFieldId(s.fieldId));
+    return !!f && fillsIn(f, viewAs);
+  };
   const rolesUsed = [...new Set(mapping.stamps.map(shownRole))].filter((r): r is FillerRole => r !== "none");
   const roleName = (r: FillerRole) => steps.filter((v) => v.role === r).map((v) => v.label).join(" / ") || ROLE_LABELS[r];
   const labelOf = (s: PdfStamp) => items.find((i) => i.key === stampKey(s))?.label ?? s.fieldId;
@@ -268,8 +276,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     }
     // "סימון שדות לשלב": a click puts the box's field in the chosen step, or takes it out; nothing moves.
     if (mode === "move" && focusRole && focusRole !== "unassigned" && onFieldPatch) {
-      const r = roleOf(stamp);
-      if (r !== "none") onFieldPatch(baseFieldId(stamp.fieldId), { filledBy: r === focusRole ? "unassigned" : focusRole });
+      const f = allFields(definition).find((x) => x.id === baseFieldId(stamp.fieldId));
+      if (f) onFieldPatch(f.id, withStep(f, focusRole, !fillsIn(f, focusRole), steps.map((v) => v.role)));
       return;
     }
     if (mode === "move" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
@@ -542,7 +550,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
               onChange={(r) => {
                 const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r });
+                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
               }}
             />
           </div>
@@ -597,8 +605,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         inGroup ? ROLE_OVERLAY[shownRole(s)].boxActive : ROLE_OVERLAY[shownRole(s)].box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                         s.guessed && "border-dashed",
-                        viewAs && shownRole(s) !== "none" && shownRole(s) !== viewAs && !inGroup && "opacity-25",
-                        viewAs && shownRole(s) === viewAs && "ring-2 ring-primary ring-offset-1",
+                        viewAs && shownRole(s) !== "none" && !inViewStep(s) && !inGroup && "opacity-25",
+                        viewAs && inViewStep(s) && "ring-2 ring-primary ring-offset-1",
                         pick && baseFieldId(s.fieldId) === pick.sourceId && "cursor-default border-success bg-success/25 ring-2 ring-success ring-offset-1",
                         pick && pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer border-primary bg-primary/30 ring-2 ring-primary ring-offset-1",
                         pick && baseFieldId(s.fieldId) !== pick.sourceId && !pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer opacity-50 hover:opacity-100",
@@ -679,7 +687,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
-                <Label className="text-muted-foreground">{group.length > 1 ? `באיזה שלב (${group.length} תיבות מסומנות)` : "באיזה שלב"}</Label>
+                <Label className="text-muted-foreground">{group.length > 1 ? `באיזה שלב (${group.length} תיבות מסומנות)` : "באילו שלבים השדה פתוח לעריכה"}</Label>
+                {group.length <= 1 && fieldOf(selectedStamp) ? (
+                  <StepChecks views={steps} field={fieldOf(selectedStamp)!} onChange={(patch) => onFieldPatch(fieldOf(selectedStamp)!.id, patch)} />
+                ) : (
                 <StepSelect
                   className="h-9"
                   views={steps}
@@ -687,9 +698,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                   onChange={(r) => {
                     // Every marked box (Shift/Ctrl+click) goes to the chosen step together.
                     const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r });
+                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
                   }}
                 />
+                )}
               </div>
             )}
             {selectedStamp.kind === "stamp_image" && (

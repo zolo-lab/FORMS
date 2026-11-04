@@ -1,6 +1,6 @@
 /** Pure helpers for the multi-page fill flow (used by FormRenderer and tests). */
 import { evaluateCondition, type Answers } from "./conditions";
-import type { FillerRole, FormDefinition, FormField } from "./schema";
+import { fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
 import { validateAnswers, type FieldErrors } from "./validate";
 
 import { FIELD_TYPE_META } from "./field-types";
@@ -32,7 +32,7 @@ function pageNeedsAttention(form: FormDefinition, answers: Answers, index: numbe
   if (Object.keys(validatePage(form, answers, index, options)).length > 0) return true;
   return form.pages[index]!.fields.some((f) => {
     if (!FIELD_TYPE_META[f.type].hasAnswer || f.formula || f.type === "hidden") return false;
-    if (options.role && (f.filledBy ?? "employee") !== options.role) return false;
+    if (options.role && !fillsIn(f, options.role)) return false;
     if (f.visibleIf && !evaluateCondition(f.visibleIf, answers)) return false;
     const v = answers[f.id];
     return v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);

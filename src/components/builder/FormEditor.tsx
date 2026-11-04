@@ -6,7 +6,7 @@ import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components
 import { OrgRoutes } from "@/components/packages/OrgRoutes";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
-import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
+import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, withStep, type StepView } from "@/lib/workflow/step-fields";
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -30,7 +30,7 @@ import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/fiel
 import { buildXlsx } from "@/lib/export/xlsx";
 import type { Answers } from "@/lib/forms/conditions";
 import type { FieldType } from "@/lib/forms/field-types";
-import { findField, parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { fillsIn, findField, parseFormDefinition, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { Canvas, type Selection } from "./Canvas";
 import { FormSettings } from "./FormSettings";
 import { Palette } from "./Palette";
@@ -461,7 +461,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 onChange={(e) => {
                   const r = e.target.value as FillerRole;
                   if (!r) return;
-                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, { filledBy: r }), def));
+                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, { filledBy: r, alsoFilledBy: undefined }), def));
                 }}
               >
                 {!selectionRole && <option value="">כמה שלבים</option>}
@@ -481,7 +481,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           )}
           {focusRole && focusRole !== "unassigned" && (
             <span className="text-muted-foreground">
-              <strong className="text-foreground">{answerFields(def).filter((f) => fieldRole(f) === focusRole).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי להוסיף אותו לשלב, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מכניסה אותה לשלב או מוציאה ממנו."}
+              <strong className="text-foreground">{answerFields(def).filter((f) => fillsIn(f, focusRole)).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי שגם השלב הזה יוכל לערוך אותו, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מוסיפה אותה לשלב או מוציאה ממנו."} שדה יכול להיות בכמה שלבים: השלבים האחרים שלו נשמרים.
             </span>
           )}
           {focusRole === "unassigned" && (
@@ -527,6 +527,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 selection={selection}
                 onSelect={setSelection}
                 onPatchField={(id, patch) => commit(updateField(def, id, patch))}
+                onToggleStep={(id, role, on) => { const f = findField(def, id); if (f) commit(updateField(def, id, withStep(f, role, on, stepRoles))); }}
                 onDropAt={(page, index, data) => {
                   if (data.type) addAt(data.type, page, index);
                   else if (data.fieldId) commit(moveField(def, data.fieldId, { page, index }));
