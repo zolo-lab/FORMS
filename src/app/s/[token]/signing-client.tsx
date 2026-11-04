@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { OnDocumentFill, type OnDocPdf } from "@/components/pdf/OnDocumentFill";
+import { FilledDocument } from "@/components/pdf/FilledDocument";
 import { canFillOnDocument } from "@/lib/pdf/on-document";
 import { ViewToggle, useFillView } from "@/components/forms/ViewToggle";
 import type { Answers } from "@/lib/forms/conditions";
@@ -209,10 +210,17 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
       ) : hasForm ? (
         <FormRenderer definition={definition} pipeDefinition={pipeDefinition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={onSubmit} lookups={lookups} onUpload={upload} actions={stepActions} />
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="min-w-32" onClick={() => onSubmit({})}>{action === "approve" ? "אישור" : "המשך"}</Button>
-          {stepActions}
-        </div>
+        <>
+          {/* Nothing to fill in this step: look over the document as filled so far, and pass it on. */}
+          {pdfDocs.map((d) => <FilledDocument key={d.url} url={`${d.url}?filled=1`} title={d.title} />)}
+          <Card className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 p-3 shadow-lg">
+            <p className="w-full text-sm text-muted-foreground">
+              {action === "approve" ? "בשלב הזה אין מה למלא: עברו על המסמך, ואם הכל תקין – אשרו והוא יעבור לשלב הבא." : "אין בשלב הזה מה למלא."}
+            </p>
+            <Button className="min-w-40" onClick={() => onSubmit({})}>{action === "approve" ? "הכל תקין – אישור והעברה" : "המשך"}</Button>
+            {stepActions}
+          </Card>
+        </>
       )}
       {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
       <p className="text-xs text-muted-foreground" aria-live="polite">

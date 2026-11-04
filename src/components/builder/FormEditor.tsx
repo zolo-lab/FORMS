@@ -474,7 +474,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               <span className="font-medium">סימון שדות לשלב</span>
               <Select className="h-9 w-64" aria-label="סימון שדות לשלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
                 <option value="">— בחרו שלב —</option>
-                {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
+                {views.map((v) => <option key={v.index} value={v.role}>{v.label}{v.index > 0 && !answerFields(def).some((f) => fillsIn(f, v.role)) ? " (רק אישור)" : ""}</option>)}
                 {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
               </Select>
             </label>
@@ -640,6 +640,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 state={stepState}
                 onSave={() => void saveSteps()}
                 waitingForForm={save !== "saved"}
+                fieldCounts={Object.fromEntries(stepWork.map((d) => [d.role, answerFields(def).filter((f) => fillsIn(f, d.role)).length]))}
               />
               )}
             </section>
