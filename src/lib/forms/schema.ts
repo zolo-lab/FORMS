@@ -127,6 +127,13 @@ export interface FormField {
   mask?: string;
   /** No other request of the same templates may hold the same value (checked on the server at submit). */
   unique?: boolean;
+  /**
+   * The request's identifying value: shown in the "שדה מזהה" column of the requests table and used as the request's
+   * name in messages. One per form – the first one wins.
+   */
+  identifier?: boolean;
+  /** The field's label and value join the details block at the top of the messages ({{details}}). */
+  showInMessages?: boolean;
   /** Layout width hint on desktop. */
   width?: "full" | "half" | "third";
   /** Look of the label / text block (size, weight, color, alignment, highlight). */
@@ -160,6 +167,8 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     formula: z.string().optional(),
     mask: z.string().max(60).optional(),
     unique: z.boolean().optional(),
+    identifier: z.boolean().optional(),
+    showInMessages: z.boolean().optional(),
     width: z.enum(["full", "half", "third"]).optional(),
     style: fieldStyleSchema.optional(),
   }),

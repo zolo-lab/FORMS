@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { SWITCHABLE_TYPES, canSwitchType, newField, parseOptionsText, typeChangePatch } from "@/lib/forms/builder";
 import { FIELD_TYPES, FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { GRID_CELL_LABELS, GRID_CELL_TYPES, gridColumns, gridRows, type GridCellType, type GridColumn } from "@/lib/forms/grid";
-import { type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
+import { allFields, type FieldOption, type FieldValidation, type FormDefinition, type FormField } from "@/lib/forms/schema";
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
 import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
@@ -269,6 +269,7 @@ export function FieldSettings({
               <span className="block text-xs text-muted-foreground">ממלא הבקשה (או ה-API) ממלא אותו. החותמים האחרים לא רואים אותו, והוא לא מופיע ב-PDF ובמיילים. נשמר בנתונים ובייצוא.</span>
             </span>
           </label>
+          {!field.internal && <MessagesSection def={def} field={field} onPatch={onPatch} />}
         </>
       )}
 
@@ -461,6 +462,52 @@ export function FieldSettings({
 }
 
 /** "ערך ברירת מחדל": free text, one of the options, or for a date a fixed date / the date of filling. */
+export /**
+ * "שדה מזהה" and "להציג בהודעות": what identifies the request on the tracking screen and what the people who get
+ * the messages see at the top of them. One identifier per form – ticking a second one is refused with a hint.
+ */
+function MessagesSection({ def, field, onPatch }: { def: FormDefinition; field: FormField; onPatch: (patch: Partial<FormField>) => void }) {
+  const other = allFields(def).find((f) => f.identifier && f.id !== field.id);
+  const isId = !!field.identifier;
+  return (
+    <>
+      <label className="flex items-center gap-3 text-sm">
+        <Switch
+          checked={isId}
+          disabled={!isId && !!other}
+          // The identifier is what the request is called, so it is always one of the details of the message.
+          onCheckedChange={(c) => onPatch(c ? { identifier: true, showInMessages: true } : { identifier: undefined })}
+          label="שדה מזהה"
+        />
+        <span>
+          שדה מזהה של הבקשה
+          <span className="block text-xs text-muted-foreground">
+            {other
+              ? `כבר מוגדר שדה מזהה בטופס: "${other.label || other.id}". צריך לבטל אותו קודם.`
+              : "הערך שלו מופיע בעמודת \u201cשדה מזהה\u201d במסך היסטוריית הטפסים ומזהה את הבקשה בכותרת ההודעות."}
+          </span>
+        </span>
+      </label>
+      <label className="flex items-center gap-3 text-sm">
+        <Switch
+          checked={!!field.showInMessages}
+          disabled={isId}
+          onCheckedChange={(c) => onPatch({ showInMessages: c || undefined })}
+          label="להציג בהודעות"
+        />
+        <span>
+          להציג בהודעות
+          <span className="block text-xs text-muted-foreground">
+            {isId
+              ? "שדה מזהה תמיד מופיע בהודעות."
+              : "התווית והערך נוספים לפרטים שבראש המייל וה-SMS. אפשר להסיר אותם מתבנית מסוימת במרכז המיילים."}
+          </span>
+        </span>
+      </label>
+    </>
+  );
+}
+
 export function DefaultValueRow({ field, onPatch }: { field: FormField; onPatch: (p: Partial<FormField>) => void }) {
   const d = field.defaultValue;
   const text = d === undefined || d === null ? "" : String(d);

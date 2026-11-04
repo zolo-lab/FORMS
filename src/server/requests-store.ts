@@ -38,6 +38,8 @@ import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
 import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { addPeople } from "@/lib/notifications/triggers";
+import { detailsLines, highlightsOf, type Highlights } from "@/lib/forms/highlights";
+import type { FormDefinition } from "@/lib/forms/schema";
 import { COMPLETION_DOCS_KEY, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole, Workflow } from "@/lib/workflow/types";
@@ -161,6 +163,28 @@ export async function collectedAnswers(requestId: string, opts: { draftStepId?: 
   usable.sort((a, b) => (a.submittedAt ?? a.savedAt).getTime() - (b.submittedAt ?? b.savedAt).getTime());
   for (const s of usable) Object.assign(out, s.answers);
   return out;
+}
+
+/**
+ * Re-reads the request's "שדה מזהה" and its message details out of the answers given so far and stores them on the
+ * request, so the requests table and the messages need no submission join. Best-effort: a failure here must never
+ * break a signer's submit.
+ */
+export async function storeHighlights(requestId: string, defs: FormDefinition[], answers: Answers): Promise<Highlights> {
+  const h = highlightsOf(defs, answers);
+  await db
+    .update(requests)
+    .set({ identifierLabel: h.identifier?.label ?? null, identifierValue: h.identifier?.value ?? null, messageDetails: detailsLines(h) })
+    .where(eq(requests.id, requestId));
+  return h;
+}
+
+export async function refreshHighlights(requestId: string): Promise<Highlights> {
+  const docRows = await db.select({ v: packageDocuments.templateVersionId }).from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
+  const versions = docRows.length
+    ? await db.select({ definition: formTemplateVersions.definition }).from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.v)))
+    : [];
+  return storeHighlights(requestId, versions.map((v) => v.definition), await collectedAnswers(requestId));
 }
 
 /**
@@ -356,6 +380,8 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
     evs.push(...done.events);
   }
   const merged: EngineResult = { steps: result.steps, events: [{ type: "request_sent" }, ...evs] };
+  // Before persist: it is persist that writes the first invitations, and they already carry {{details}}.
+  await storeHighlights(requestId, versions.map((v) => v.definition), answers).catch((e) => console.error("[highlights] failed", requestId, e));
   const out = await persist(requestId, [], merged, actor);
   if (out.status !== "completed" && !opts.requesterByLink) {
     await notifySent(requestId, result.steps).catch((e) => console.error("[notifications] sent notice failed", e));
@@ -473,6 +499,12 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
         target: submissions.stepId,
         set: { status: "submitted", answers: action.answers, submittedAt: new Date(), savedAt: new Date() },
       });
+    // The identifier and the message details may have just been filled: the next invitation already carries them.
+    try {
+      await refreshHighlights(row.requestId);
+    } catch (e) {
+      console.error("[highlights] failed", row.requestId, e);
+    }
   }
   const out = await persist(row.requestId, before, result, actor, patch);
   try {

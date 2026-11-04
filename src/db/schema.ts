@@ -357,6 +357,13 @@ export const requests = pgTable(
     subjectPhone: text("subject_phone"),
     /** The employee record of the person the request is about (matched by ID number when created). */
     employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /**
+     * Denormalised from the answers so the requests table and the messages need no submission join:
+     * the value of the form's "שדה מזהה" and every field marked to show in the messages.
+     */
+    identifierLabel: text("identifier_label"),
+    identifierValue: text("identifier_value"),
+    messageDetails: jsonb("message_details").$type<{ label: string; value: string }[]>().notNull().default([]),
     /** Handling steps done after signing: key → when and by whom. */
     followUp: jsonb("follow_up").$type<Record<string, { at: string; byUserId?: string; byName?: string }>>().notNull().default({}),
     createdBy: uuid("created_by").references(() => users.id),
