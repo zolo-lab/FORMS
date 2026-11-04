@@ -5,13 +5,15 @@ export function Tabs<T extends string>({
   tabs,
   value,
   onChange,
+  className,
 }: {
   tabs: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
+  className?: string;
 }) {
   return (
-    <div role="tablist" className="flex gap-1 border-b">
+    <div role="tablist" className={cn("flex gap-1 border-b", className)}>
       {tabs.map((t) => (
         <button
           key={t.id}

@@ -10,10 +10,10 @@ import { answerFields, comboKey, comboPatch, emailFieldsOf, fieldRole, stepCombo
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, History, Redo2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, History, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
 import { Badge } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -363,20 +363,29 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         />
         <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
-        <Button variant="outline" size="sm" onClick={() => { setTab("edit"); setSelection(null); }}>הגדרות הטופס</Button>
         {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
-        <a
-          href={`/preview/form/${templateId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-primary hover:underline"
-        >
-          צפייה בטופס (בחלון חדש)
-        </a>
+        <Tabs<TabId>
+          className="-mb-2 self-end border-b-0"
+          value={tab}
+          onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
+          tabs={[
+            { id: "pdf", label: "PDF" },
+            { id: "edit", label: "רספונסיבי" },
+            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
+            { id: "preview", label: "תצוגה מקדימה" },
+            ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
+          ]}
+        />
         <div className="ms-auto flex flex-wrap items-center gap-1">
           <details className="relative">
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
             <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
+              <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("edit"); setSelection(null); }}>
+                <Settings2 className="size-4" />הגדרות הטופס
+              </Button>
+              <a href={`/preview/form/${templateId}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm", className: "justify-start" })}>
+                <ExternalLink className="size-4" />צפייה בטופס (בחלון חדש)
+              </a>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
                 <Sparkles className="size-4" />שמות מזהים לשדות
               </Button>
@@ -430,19 +439,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         </p>
       )}
 
-      <div className="flex flex-wrap items-end gap-x-4 px-4 pt-2">
-        <Tabs<TabId>
-          value={tab}
-          onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
-          tabs={[
-            { id: "pdf", label: "PDF" },
-            { id: "edit", label: "רספונסיבי" },
-            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
-            { id: "preview", label: "תצוגה מקדימה" },
-            ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
-          ]}
-        />
-      </div>
       {picking && pickSource && (tab === "edit" || tab === "pdf") && (
         <div role="region" aria-label="סימון שדות שנפתחים" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-primary/10 px-4 py-2 text-sm">
           <span>
