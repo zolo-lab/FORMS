@@ -76,6 +76,40 @@ export function withStep(f: Pick<FormField, "filledBy" | "alsoFilledBy">, role: 
   return { filledBy: ordered[0], alsoFilledBy: ordered.length > 1 ? ordered.slice(1) : undefined };
 }
 
+/** The steps of the form a field is in, in step order ([] = in none of them). */
+export function stepCombo(f: Pick<FormField, "filledBy" | "alsoFilledBy">, stepRoles: StepRole[]): StepRole[] {
+  const mine = fieldSteps(f);
+  return stepRoles.filter((r) => mine.includes(r));
+}
+
+export const comboKey = (roles: StepRole[]): string => roles.join("+");
+
+/** A key from comboKey back to the field's steps: the first is its own, the rest it shares. */
+export function comboPatch(key: string): Pick<FormField, "filledBy" | "alsoFilledBy"> {
+  const roles = key.split("+").filter(Boolean) as FillerRole[];
+  return { filledBy: roles[0] ?? "unassigned", alsoFilledBy: roles.length > 1 ? roles.slice(1) : undefined };
+}
+
+/**
+ * The choices of a "which step" picker: every step on its own, then every combination of steps some field of the
+ * form already uses ("שלבים 1 + 3 · השולח + מזכירה"), so more fields can be put in the same steps in one go.
+ */
+export function stepComboOptions(def: FormDefinition, views: StepView[]): { key: string; label: string }[] {
+  const roles = views.map((v) => v.role);
+  const name = (r: StepRole) => views.find((v) => v.role === r)!.label.replace(/^שלב \d+ · /, "");
+  const num = (r: StepRole) => views.findIndex((v) => v.role === r) + 1;
+  const combos = new Map<string, StepRole[]>();
+  for (const f of answerFields(def)) {
+    const c = stepCombo(f, roles);
+    if (c.length > 1) combos.set(comboKey(c), c);
+  }
+  const ordered = [...combos.values()].sort((a, b) => a.length - b.length || roles.indexOf(a[0]!) - roles.indexOf(b[0]!) || comboKey(a).localeCompare(comboKey(b)));
+  return [
+    ...views.map((v) => ({ key: v.role as string, label: v.label })),
+    ...ordered.map((c) => ({ key: comboKey(c), label: `שלבים ${c.map(num).join(" + ")} · ${c.map(name).join(" + ")}` })),
+  ];
+}
+
 /** Fields that someone answers. */
 export const answerFields = (def: FormDefinition) => allFields(def).filter((f) => FIELD_TYPE_META[f.type].hasAnswer && f.type !== "hidden");
 

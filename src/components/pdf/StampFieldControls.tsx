@@ -8,7 +8,8 @@ import { Switch } from "@/components/ui/checkbox";
 import { DEFAULT_TYPES, DefaultValueRow, ListTextarea } from "@/components/builder/SettingsPanel";
 import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
 import { FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
-import { SWITCHABLE_TYPES, canSwitchType, typeChangePatch } from "@/lib/forms/builder";
+import { SWITCHABLE_TYPES, canSwitchType, renameFieldId, typeChangePatch } from "@/lib/forms/builder";
+import { renameStamps } from "@/lib/forms/field-dictionary";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { boxSwitchTargets, moveOption, optionMoveTargets, switchBoxType, type FixResult } from "@/lib/forms/detect-fixes";
@@ -132,7 +133,14 @@ export function StampFieldControls({
           </Select>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">שם מזהה: <bdi dir="ltr" className="font-mono">{field.id}</bdi> (משנים בלשונית השאלות ← מתקדם)</p>
+      {onTransform ? (
+        <FieldIdInput key={field.id} id={field.id} onRename={(to) => onTransform((d, st) => {
+          const r = renameFieldId(d, field.id, to);
+          return r.error ? { error: r.error } : { def: r.def, stamps: renameStamps(st, field.id, to) };
+        })} />
+      ) : (
+        <p className="text-xs text-muted-foreground">שם מזהה: <bdi dir="ltr" className="font-mono">{field.id}</bdi></p>
+      )}
       {hasOptions && (
         <div className="space-y-1">
           <Label className="text-muted-foreground">אפשרויות (שורה לכל אפשרות)</Label>
@@ -182,6 +190,43 @@ function LengthInput({ label, value, onChange }: { label: string; value: number 
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? undefined : Math.max(0, Math.floor(Number(e.target.value))) || undefined)}
       />
+    </div>
+  );
+}
+
+const ID_HELP =
+  "השם הטכני של השדה, באנגלית: אותיות, ספרות וקו תחתון, מתחיל באות. משמש לתנאים, לייבוא מגיליון, ל-API ולייצוא (Priority/Make). " +
+  "שם כמו ב-iForms מאפשר לשלוח את אותם נתונים לשתי המערכות. עדיף לא לשנות אחרי שמתחילים למלא את הטופס.";
+
+/** "שם מזהה": the field's id, edited in place; the boxes on the document follow it. */
+function FieldIdInput({ id, onRename }: { id: string; onRename: (to: string) => string | undefined }) {
+  const [draft, setDraft] = useState(id);
+  const [error, setError] = useState<string | undefined>();
+  const save = () => {
+    const to = draft.trim();
+    if (!to || to === id) { setDraft(id); setError(undefined); return; }
+    const err = onRename(to);
+    setError(err);
+    if (err) setDraft(id);
+  };
+  return (
+    <div className="space-y-1">
+      <Label htmlFor="stamp-field-id" className="text-muted-foreground">
+        <span title={ID_HELP} className="cursor-help underline decoration-dotted underline-offset-2">שם מזהה</span>
+      </Label>
+      <Input
+        id="stamp-field-id"
+        dir="ltr"
+        className="h-9 font-mono text-start"
+        title={ID_HELP}
+        aria-describedby="stamp-field-id-help"
+        aria-invalid={!!error}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { setDraft(id); setError(undefined); } }}
+      />
+      <p id="stamp-field-id-help" className={error ? "text-xs text-destructive" : "sr-only"}>{error ?? ID_HELP}</p>
     </div>
   );
 }

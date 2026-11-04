@@ -105,13 +105,16 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
   expect(await mapping()).toHaveLength(4);
 });
 
-test("colours stamps by role and shows a legend", async ({ page }) => {
+test("all boxes share one colour; the step chosen to view stands out in green", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
-  await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 2 · העובד");
-  const steps = page.getByRole("group", { name: "באילו שלבים השדה פתוח לעריכה" });
-  await steps.getByRole("checkbox", { name: /השולח/ }).check();
-  await steps.getByRole("checkbox", { name: /העובד/ }).uncheck();
-  await expect(page.getByLabel("מקרא תפקידים")).toContainText("שלב 1 · השולח");
+  const box = page.locator("[data-stamp]").first();
+  await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
+  await expect(box).not.toHaveClass(/border-success/);
+  await page.getByLabel("צפה כתפקיד").selectOption("employee");
+  await expect(box).toHaveClass(/border-success/);
+  await expect(page.getByLabel("מקרא תפקידים")).toContainText("בשלב: שלב 2 · העובד");
+  await page.getByLabel("צפה כתפקיד").selectOption("requester");
+  await expect(box).not.toHaveClass(/border-success/);
 });

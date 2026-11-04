@@ -1,9 +1,9 @@
 "use client";
 import type { PickMode } from "@/lib/forms/pick-mode";
 import type { FixResult } from "@/lib/forms/detect-fixes";
-import { StepChecks, StepSelect, type StepView } from "@/components/builder/StepSelect";
+import { StepChecks, type StepView } from "@/components/builder/StepSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { clampBox, pdfBoxToScreen, round1, screenBoxToPdf } from "@/lib/pdf/coor
 import { DEFAULT_SIZE, guessRowPitch, orphanStamps, placeableItems, replicateTableRow, stampKey, tableCellOf, type PlaceableItem } from "@/lib/forms/pdf-items";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { allFields, fillsIn, type FormDefinition, type FormField } from "@/lib/forms/schema";
-import { withStep } from "@/lib/workflow/step-fields";
+import { comboKey, comboPatch, stepCombo, stepComboOptions, withStep } from "@/lib/workflow/step-fields";
 import { cn } from "@/lib/utils";
 import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -156,6 +156,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const stepRoles = new Set(steps.map((v) => v.role));
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
+  /** "שכפול שדה": one more box of the same field, a little below and to the side; it writes the same answer. */
+  const duplicateBox = (s: PdfStamp) => {
+    const pg = pages[s.page]!;
+    const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
+    const copy = { ...s, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
+    setStamps([...mapping.stamps, copy]);
+    select(copy.id);
+    reveal(copy.id);
+  };
   /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
   const inViewStep = (s: PdfStamp): boolean => {
     if (!viewAs) return false;
@@ -531,11 +540,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             })}
           </nav>
         )}
-        {rolesUsed.length > 0 && (
+        {viewAs && rolesUsed.length > 0 && (
           <ul aria-label="מקרא תפקידים" className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {rolesUsed.map((r) => (
-              <li key={r} className="flex items-center gap-1"><span className={cn("size-2.5 rounded-full", ROLE_OVERLAY[r].dot)} />{roleName(r)}</li>
-            ))}
+            <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-success" />{viewAs === "unassigned" ? "לא משויכים לשלב" : `בשלב: ${roleName(viewAs)}`}</li>
+            <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-primary/40" />בשלבים אחרים</li>
           </ul>
         )}
         {onFieldPatch && !onSelectionChange && !focusRole && group.some((id) => { const st = mapping.stamps.find((x) => x.id === id); return !!st && roleOf(st) !== "none"; }) && (
@@ -543,16 +551,20 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <span className="font-medium">{group.length === 1 ? "תיבה אחת מסומנת" : `${group.length} תיבות מסומנות`}</span>
             <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
             <span>· העברה לשלב:</span>
-            <StepSelect
+            <Select
               className="h-9 w-64"
-              label="העברת התיבות המסומנות לשלב"
-              views={steps}
-              value={selectedStamp && roleOf(selectedStamp) !== "none" ? (roleOf(selectedStamp) as FillerRole) : undefined}
-              onChange={(r) => {
+              aria-label="העברת התיבות המסומנות לשלב"
+              value={selectedStamp && fieldOf(selectedStamp) ? comboKey(stepCombo(fieldOf(selectedStamp)!, steps.map((v) => v.role))) : ""}
+              onChange={(e) => {
+                const key = e.target.value;
+                if (!key) return;
                 const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
+                for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, comboPatch(key));
               }}
-            />
+            >
+              <option value="">בחרו שלב…</option>
+              {stepComboOptions(definition, steps).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </Select>
           </div>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -602,11 +614,14 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       onPointerDown={(e) => startDrag(e, s, "move")}
                       className={cn(
                         "absolute cursor-move touch-none border-2 text-[10px] leading-none",
-                        inGroup ? ROLE_OVERLAY[shownRole(s)].boxActive : ROLE_OVERLAY[shownRole(s)].box,
+                        // One colour for every box; the step chosen above stands out in green, the rest fade.
+                        viewAs && inViewStep(s)
+                          ? (inGroup ? "border-success bg-success/30" : "border-success bg-success/15")
+                          : inGroup ? ROLE_OVERLAY.none.boxActive : ROLE_OVERLAY.none.box,
                         orphans.includes(s) && "border-destructive bg-destructive/15",
                         s.guessed && "border-dashed",
                         viewAs && shownRole(s) !== "none" && !inViewStep(s) && !inGroup && "opacity-25",
-                        viewAs && inViewStep(s) && "ring-2 ring-primary ring-offset-1",
+                        viewAs && inViewStep(s) && "ring-2 ring-success ring-offset-1",
                         pick && baseFieldId(s.fieldId) === pick.sourceId && "cursor-default border-success bg-success/25 ring-2 ring-success ring-offset-1",
                         pick && pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer border-primary bg-primary/30 ring-2 ring-primary ring-offset-1",
                         pick && baseFieldId(s.fieldId) !== pick.sourceId && !pick.ids.has(baseFieldId(s.fieldId)) && "cursor-pointer opacity-50 hover:opacity-100",
@@ -615,6 +630,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                       style={{ left: b.x, top: b.y, width: b.width, height: b.height }}
                     >
                       <span className="pointer-events-none block truncate px-0.5 text-primary" title={chipOf(s)}>{chipOf(s)}</span>
+                      {active && !pick && (
+                        <button
+                          type="button"
+                          aria-label="שכפול שדה"
+                          title="שכפול שדה: תיבה נוספת עם אותה תשובה"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); duplicateBox(s); }}
+                          className="absolute top-0 -start-7 flex size-6 items-center justify-center rounded-full border border-primary bg-card text-primary shadow-sm hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                        >
+                          <Copy className="size-3.5" aria-hidden />
+                        </button>
+                      )}
                       {active && (
                         <span
                           aria-label="שינוי גודל"
@@ -691,16 +718,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 {group.length <= 1 && fieldOf(selectedStamp) ? (
                   <StepChecks views={steps} field={fieldOf(selectedStamp)!} onChange={(patch) => onFieldPatch(fieldOf(selectedStamp)!.id, patch)} />
                 ) : (
-                <StepSelect
+                <Select
                   className="h-9"
-                  views={steps}
-                  value={roleOf(selectedStamp) === "none" ? undefined : (roleOf(selectedStamp) as FillerRole)}
-                  onChange={(r) => {
-                    // Every marked box (Shift/Ctrl+click) goes to the chosen step together.
+                  aria-label={`באיזה שלב (${group.length} תיבות מסומנות)`}
+                  value=""
+                  onChange={(e) => {
+                    // Every marked box (Shift/Ctrl+click) goes to the chosen step(s) together.
+                    const key = e.target.value;
+                    if (!key) return;
                     const ids = new Set(group.map((g) => mapping.stamps.find((x) => x.id === g)).filter((x): x is PdfStamp => !!x).map((x) => baseFieldId(x.fieldId)));
-                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, { filledBy: r, alsoFilledBy: undefined });
+                    for (const fid of ids) if (allFields(definition).some((f) => f.id === fid)) onFieldPatch(fid, comboPatch(key));
                   }}
-                />
+                >
+                  <option value="">בחרו שלבים לכולן…</option>
+                  {stepComboOptions(definition, steps).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </Select>
                 )}
               </div>
             )}
@@ -760,17 +792,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <Button
               variant="outline"
               size="sm"
-              title="אותה תשובה תיכתב במקום נוסף (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
-              onClick={() => {
-                const pg = pages[selectedStamp.page]!;
-                const c = clampBox({ ...selectedStamp, x: selectedStamp.x + 12, y: selectedStamp.y - 12 }, pg.width, pg.height);
-                const copy = { ...selectedStamp, id: nanoid(8), x: round1(c.x), y: round1(c.y) };
-                setStamps([...mapping.stamps, copy]);
-                select(copy.id);
-                reveal(copy.id);
-              }}
+              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). Ctrl+D יוצר שדה חדש."
+              onClick={() => duplicateBox(selectedStamp)}
             >
-              מופע נוסף של אותה תשובה
+              <Copy className="size-4" aria-hidden />
+              שכפול שדה
             </Button>
             {(() => {
               // The field's last box on the document takes the field with it (the PDF and the form are one); a copy only goes itself.
