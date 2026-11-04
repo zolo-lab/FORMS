@@ -16,14 +16,14 @@ _Last updated: 2026-10-13 (end of phase 4, by Claude Sonnet)._
 
 ## 2. Environment quirks (important)
 
-The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubusercontent, Actions logs/artifacts or `*.vercel.run`**. It can reach GitHub via `git` and `gh api`. Therefore:
+**Updated 4.11.2026: npm IS reachable now.** `pnpm install --no-frozen-lockfile` succeeds in the Claude cloud workspace, which changes the loop completely — run `pnpm exec vitest run`, `pnpm exec tsc --noEmit`, `pnpm exec eslint` and `pnpm exec next build` **locally before every push** instead of discovering failures in CI. `pnpm exec drizzle-kit generate` works too (see §3). Re-check per session: if an install fails, fall back to the older workflow below. The rest of the old restriction still looked true on 4.11 (Actions logs/artifacts, `*.vercel.run`); GitHub works via `git` and `gh api`.
 
-- **Installing packages:** don't run `pnpm install` locally — it will fail. Add the dependency to `package.json` with an **exact version**. To find the latest version use the Vercel sandbox (Vercel MCP `create_sandboxes_v4` with `projectId: prj_B2JeTYwLWRYxu6DyhqwdOMvwb0JS`, then `run_session_command` → `npm view <pkg> version`). The sandbox has full internet but **cannot push to GitHub**, and command output is truncated at ~2.5k chars.
-- **No lockfile yet.** CI and Vercel run `pnpm install --no-frozen-lockfile`. Versions are pinned in package.json.
-- **Running tests:** push a branch / PR. Workflow `ci` runs typecheck → lint → vitest → Hebrew PDF sample.
+- **Don't commit `pnpm-lock.yaml`.** A local install creates one; the project deliberately has no lockfile (versions are pinned in `package.json`, CI and Vercel run `--no-frozen-lockfile`). Delete it before committing, or the build setup changes without anyone deciding to.
+- **Installing packages:** add the dependency to `package.json` with an **exact version**. If npm is unreachable in your session, find the latest version with the Vercel sandbox (Vercel MCP `create_sandboxes_v4` with `projectId: prj_B2JeTYwLWRYxu6DyhqwdOMvwb0JS`, then `run_session_command` → `npm view <pkg> version`); the sandbox has full internet but **cannot push to GitHub**, and output is truncated at ~2.5k chars.
+- **Running tests:** locally as above. In CI, workflow `ci` runs typecheck → lint → vitest → Hebrew PDF sample.
   Read results without logs:
   ```bash
-  R=zolo0548152101-afk/FORMS
+  R=zolo-lab/forms
   gh run list -R $R --limit 3
   gh run watch <run-id> -R $R --interval 15 >/dev/null
   gh api repos/$R/actions/runs/<run-id>/jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
@@ -39,6 +39,8 @@ The Claude cloud workspace **cannot reach npm, unpkg, jsdelivr, raw.githubuserco
 
 - Schema: `src/db/schema.ts` (Drizzle). Client: `src/db/index.ts` (`neon-http`).
 - On push to `main` that changes the schema, workflow `db-generate` runs `drizzle-kit generate` (offline) and commits SQL into `drizzle/`.
+- **Generate the migration yourself, in the PR** (`pnpm exec drizzle-kit generate`), and commit the `.sql` **together with** `drizzle/meta/`. Writing the SQL by hand without the meta snapshot is what caused the duplicate migration in #234: the bot still saw a schema diff on merge and generated the same columns again. Adding `IF NOT EXISTS` to `ADD COLUMN` lines is cheap insurance on top.
+- **`AUTO_MIGRATE=1` is set for production only.** Preview builds do NOT apply migrations, so a PR that adds a column leaves the dev DB without it — the preview 500s and the DB-backed vitest/e2e jobs fail with `column ... does not exist` (seen on PR #237, 4.11.2026). Apply to dev yourself before asking anyone to look at the preview, then re-run the failed CI jobs.
 - **Applying** migrations is manual through the Neon MCP:
   1. `git pull`, read the new `drizzle/NNNN_*.sql`.
   2. Apply to **dev** with `run_sql_transaction` (project `damp-wildflower-79510538`, branch `br-wild-violet-b9p5v309`, database `forms`). Statements are separated by `--> statement-breakpoint`.
