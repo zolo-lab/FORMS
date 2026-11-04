@@ -42,9 +42,7 @@ export function PdfTab({
   focusRole,
   pick,
   onDefinitionAndPdf,
-  onSelectionChange,
 }: {
-  onSelectionChange?: (fieldIds: string[]) => void;
   pick?: PickMode;
   /** Change the form and its boxes in one step (one undo). */
   onDefinitionAndPdf?: (d: FormDefinition, p: PdfState) => void;
@@ -259,7 +257,6 @@ export function PdfTab({
           steps={steps}
           focusRole={pick ? undefined : focusRole}
           pick={pick}
-          onSelectionChange={onSelectionChange}
           onTransform={onDefinitionAndPdf ? (fix) => {
             const r = fix(defRef.current, pdf.mapping.stamps);
             if (!r.def) return r.error;
