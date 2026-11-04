@@ -635,7 +635,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                           title="שכפול שדה: תיבה נוספת עם אותה תשובה"
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); duplicateBox(s); }}
-                          className="absolute -top-3 -start-3 flex size-6 items-center justify-center rounded-full border border-primary bg-card text-primary shadow-sm hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                          className="absolute top-0 -start-7 flex size-6 items-center justify-center rounded-full border border-primary bg-card text-primary shadow-sm hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-ring"
                         >
                           <Copy className="size-3.5" aria-hidden />
                         </button>
