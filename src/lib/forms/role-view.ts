@@ -2,7 +2,7 @@
 import type { Answers } from "./conditions";
 import { FIELD_TYPE_META } from "./field-types";
 import { formatAnswer } from "./format";
-import type { FillerRole, FormDefinition } from "./schema";
+import { fillsIn, type FillerRole, type FormDefinition } from "./schema";
 
 export interface FilledItem {
   id: string;
@@ -17,7 +17,7 @@ export function roleView(def: FormDefinition, answers: Answers, role: FillerRole
       ...page,
       fields: page.fields.filter((f) => {
         if (!FIELD_TYPE_META[f.type].hasAnswer) return true; // layout blocks stay
-        if ((f.filledBy ?? "employee") === role) return true;
+        if (fillsIn(f, role)) return true;
         const text = formatAnswer(f, answers[f.id]);
         if (text) filled.push({ id: f.id, label: f.label, text });
         return false;

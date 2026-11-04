@@ -2,7 +2,8 @@
 
 import { Select } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { FillerRole } from "@/lib/forms/schema";
+import { fillsIn, type FillerRole, type FormField } from "@/lib/forms/schema";
+import { withStep } from "@/lib/workflow/step-fields";
 import type { StepView } from "@/lib/workflow/step-fields";
 
 export type { StepView };
@@ -25,5 +26,26 @@ export function StepSelect({ views, value, onChange, className, id, label = "ב�
       {!inStep && <option value="">לא משויך לשלב – בחרו שלב</option>}
       {views.map((v) => <option key={v.index} value={v.role}>{v.label}</option>)}
     </Select>
+  );
+}
+
+/**
+ * "באילו שלבים השדה פתוח לעריכה": a box per step of the form. A field may be in several steps (the employee fills it,
+ * the secretary can still correct it); its earliest step is its own. With none ticked it is "לא משויך לשלב".
+ */
+export function StepChecks({ views, field, onChange }: { views: StepView[]; field: Pick<FormField, "filledBy" | "alsoFilledBy">; onChange: (patch: Pick<FormField, "filledBy" | "alsoFilledBy">) => void }) {
+  const roles = views.map((v) => v.role);
+  const none = !roles.some((r) => fillsIn(field, r));
+  return (
+    <fieldset className="space-y-1">
+      <legend className="sr-only">באילו שלבים השדה פתוח לעריכה</legend>
+      {views.map((v) => (
+        <label key={v.index} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1 hover:bg-accent">
+          <input type="checkbox" className="size-4 accent-primary" checked={fillsIn(field, v.role)} onChange={(e) => onChange(withStep(field, v.role, e.target.checked, roles))} />
+          <span className="text-sm">{v.label}</span>
+        </label>
+      ))}
+      {none && <p className="text-xs text-destructive">לא משויך לשלב: אף אחד לא יראה את השדה. סמנו לפחות שלב אחד.</p>}
+    </fieldset>
   );
 }

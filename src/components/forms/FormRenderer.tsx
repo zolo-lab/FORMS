@@ -7,7 +7,7 @@ import { computeFormulas } from "@/lib/forms/compute";
 import { withCopies } from "@/lib/forms/copy";
 import { withDefaults } from "@/lib/forms/defaults";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
-import type { FillerRole, FormDefinition } from "@/lib/forms/schema";
+import { fillsIn, type FillerRole, type FormDefinition } from "@/lib/forms/schema";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { nextPageIndex, prevPageIndex, reachedPageIndexes, resumePageIndex, validatePage, visiblePageIndexes } from "@/lib/forms/wizard";
 import { evaluateCondition } from "@/lib/forms/conditions";
@@ -69,7 +69,7 @@ export function FormRenderer({
     errors,
     readonlyAll: readonly,
     pipe: (text, scope) => pipeText(text, { ...answers, ...scope }, pipeDefinition ? { ...definition, pages: [...definition.pages, ...pipeDefinition.pages] } : definition),
-    roleReadOnly: (f) => !!f.formula || (!!f.disabledIf && evaluateCondition(f.disabledIf, answers)) || (!!role && (f.filledBy ?? "employee") !== role),
+    roleReadOnly: (f) => !!f.formula || (!!f.disabledIf && evaluateCondition(f.disabledIf, answers)) || (!!role && !fillsIn(f, role)),
   };
 
   const setField = (id: string, v: unknown) => {
