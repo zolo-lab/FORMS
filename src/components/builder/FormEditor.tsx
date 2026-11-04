@@ -6,11 +6,11 @@ import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components
 import { OrgRoutes } from "@/components/packages/OrgRoutes";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
-import { answerFields, comboKey, comboPatch, emailFieldsOf, fieldRole, stepCombo, stepComboOptions, stepViews, unassignedFields, withStep, type StepView } from "@/lib/workflow/step-fields";
+import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, ExternalLink, History, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, History, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -103,10 +103,10 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
   const stepRoles = (views ?? []).map((v) => v.role);
   const unassigned = flow ? unassignedFields(def, stepRoles) : [];
-  // "סימון שדות לשלב": the fields of one step are marked, in the responsive form and on the PDF.
+  // "הצגת שלב": the fields of one step stand out, in the responsive form and on the PDF. Only shows; changes nothing.
   const [focusRole, setFocusRole] = useState<FillerRole | "">("");
-  // Fields of the boxes selected on the PDF: the step picker above then moves them instead of marking a step.
-  const [pdfSelection, setPdfSelection] = useState<string[]>([]);
+  // "עריכת שלבים": fields are marked by clicking them, then a step chosen above becomes theirs.
+  const [stepEdit, setStepEdit] = useState<Set<string> | null>(null);
   // "סימון בטופס": the fields a source field opens, marked by clicking them in the form or on the PDF, then saved.
   const [picking, setPicking] = useState<{ sourceId: string; ids: Set<string> } | null>(null);
   const pick: PickMode | undefined = picking
@@ -121,7 +121,31 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           return { ...cur, ids };
         }),
       }
-    : undefined;
+    : stepEdit
+      ? {
+          ids: stepEdit,
+          checkLabel: "מסומן להעברה לשלב",
+          answersOnly: true,
+          onToggle: (id) => setStepEdit((cur) => {
+            if (!cur || !answerFields(def).some((f) => f.id === id)) return cur;
+            const ids = new Set(cur);
+            if (ids.has(id)) ids.delete(id);
+            else ids.add(id);
+            return ids;
+          }),
+        }
+      : undefined;
+  /** "עריכת שלבים": the marked fields get exactly the chosen step(s); the marks clear and that step is shown. */
+  function moveMarkedToStep(key: string) {
+    if (!stepEdit || !key) return;
+    const ids = answerFields(def).map((f) => f.id).filter((id) => stepEdit.has(id));
+    if (!ids.length) return;
+    commit(ids.reduce((d, id) => updateField(d, id, comboPatch(key)), def));
+    setIssues([]);
+    const label = stepComboOptions(def, views ?? []).find((o) => o.key === key)?.label ?? key;
+    setNote(`${ids.length} שדות הועברו ל${label}.`);
+    setStepEdit(new Set());
+  }
   const pickSource = picking ? findField(def, picking.sourceId) : undefined;
   function savePick() {
     if (!picking) return;
@@ -138,11 +162,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
   const [tab, setTab] = useState<TabId>(initialTab);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  // The one step picker above the PDF: with boxes selected (and no step being marked) it shows and changes their step.
-  const moveMode = tab === "pdf" && !focusRole && pdfSelection.length > 0;
-  // The steps of the selected boxes' fields, as one choice ("שלבים 1 + 3"), when they all share them.
-  const selectionRoles = new Set(answerFields(def).filter((f) => pdfSelection.includes(f.id)).map((f) => comboKey(stepCombo(f, stepRoles)) || fieldRole(f)));
-  const selectionRole = selectionRoles.size === 1 ? [...selectionRoles][0] : undefined;
   const [save, setSave] = useState<SaveState>("saved");
   const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
@@ -451,40 +470,41 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       )}
       {!picking && views && (tab === "edit" || tab === "pdf") && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-muted/40 px-4 py-2 text-sm">
-          {moveMode ? (
-            <label className="flex items-center gap-2">
-              <span className="font-medium">{pdfSelection.length === 1 ? "השלב של התיבה המסומנת" : `השלב של ${pdfSelection.length} התיבות המסומנות`}</span>
-              <Select
-                className="h-9 w-64"
-                aria-label="העברת התיבות המסומנות לשלב"
-                value={selectionRole ?? ""}
-                onChange={(e) => {
-                  const key = e.target.value;
-                  if (!key) return;
-                  commit(pdfSelection.filter((id) => answerFields(def).some((f) => f.id === id)).reduce((d, id) => updateField(d, id, comboPatch(key)), def));
-                }}
-              >
-                {!selectionRole && <option value="">שלבים שונים</option>}
+          {stepEdit ? (
+            <>
+              <span className="font-medium">עריכת שלבים:</span>
+              <span>
+                {tab === "pdf" ? "לחצו על התיבות במסמך" : "סמנו שדות ברשימה"} ובחרו לאיזה שלב הם עוברים.
+                {" "}<strong>{stepEdit.size}</strong> מסומנים.
+              </span>
+              <Select className="h-9 w-64" aria-label="העברת השדות המסומנים לשלב" value="" disabled={stepEdit.size === 0} onChange={(e) => moveMarkedToStep(e.target.value)}>
+                <option value="">{stepEdit.size === 0 ? "קודם סמנו שדות" : "העברה לשלב…"}</option>
                 {stepComboOptions(def, views).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </Select>
-              <span className="text-muted-foreground">(Shift+לחיצה מוסיפה עוד)</span>
-            </label>
+              {stepEdit.size > 0 && <Button variant="ghost" size="sm" onClick={() => setStepEdit(new Set())}>ניקוי הסימון</Button>}
+              <Button size="sm" onClick={() => setStepEdit(null)}>סיום עריכה</Button>
+            </>
           ) : (
-            <label className="flex items-center gap-2">
-              <span className="font-medium">סימון שדות לשלב</span>
-              <Select className="h-9 w-64" aria-label="סימון שדות לשלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
-                <option value="">— בחרו שלב —</option>
-                {views.map((v) => <option key={v.index} value={v.role}>{v.label}{v.index > 0 && !answerFields(def).some((f) => fillsIn(f, v.role)) ? " (רק אישור)" : ""}</option>)}
-                {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
-              </Select>
-            </label>
+            <>
+              <label className="flex items-center gap-2">
+                <span className="font-medium">הצגת שלב</span>
+                <Select className="h-9 w-64" aria-label="הצגת שלב" value={focusRole} onChange={(e) => setFocusRole(e.target.value as FillerRole | "")}>
+                  <option value="">— כל השלבים —</option>
+                  {views.map((v) => <option key={v.index} value={v.role}>{v.label}{v.index > 0 && !answerFields(def).some((f) => fillsIn(f, v.role)) ? " (רק אישור)" : ""}</option>)}
+                  {unassigned.length > 0 && <option value="unassigned">שדות שלא משויכים לשלב ({unassigned.length})</option>}
+                </Select>
+              </label>
+              <Button variant="outline" size="sm" onClick={() => { setStepEdit(new Set()); setFocusRole(""); }} title="מסמנים שדות ובוחרים לאיזה שלב הם עוברים">
+                <Pencil className="size-4" />עריכת שלבים
+              </Button>
+            </>
           )}
-          {focusRole && focusRole !== "unassigned" && (
+          {!stepEdit && focusRole && focusRole !== "unassigned" && (
             <span className="text-muted-foreground">
-              <strong className="text-foreground">{answerFields(def).filter((f) => fillsIn(f, focusRole)).length}</strong> שדות בשלב הזה. {tab === "edit" ? "סמנו שדה כדי שגם השלב הזה יוכל לערוך אותו, או בטלו סימון כדי להוציא." : "לחיצה על תיבה מוסיפה אותה לשלב או מוציאה ממנו."} שדה יכול להיות בכמה שלבים: השלבים האחרים שלו נשמרים.
+              <strong className="text-foreground">{answerFields(def).filter((f) => fillsIn(f, focusRole)).length}</strong> שדות בשלב הזה, מודגשים{tab === "pdf" ? " בירוק" : ""}. כדי לשנות, לחצו על &quot;עריכת שלבים&quot;.
             </span>
           )}
-          {focusRole === "unassigned" && (
+          {!stepEdit && focusRole === "unassigned" && (
             <span className="flex flex-wrap items-center gap-2">
               <span className="text-destructive">השדות המודגשים לא שייכים לאף שלב.</span>
               <label className="flex items-center gap-2">
@@ -496,8 +516,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               </label>
             </span>
           )}
-          {focusRole && <Button variant="ghost" size="sm" onClick={() => setFocusRole("")}>סיום</Button>}
-          {!focusRole && unassigned.length > 0 && (
+          {!stepEdit && focusRole && <Button variant="ghost" size="sm" onClick={() => setFocusRole("")}>ניקוי</Button>}
+          {!stepEdit && !focusRole && unassigned.length > 0 && (
             <span className="flex flex-wrap items-center gap-2 text-destructive">
               {unassigned.length} שדות לא משויכים לאף שלב.
               <Button variant="outline" size="sm" onClick={() => setFocusRole("unassigned")}>הצגה</Button>
@@ -527,7 +547,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 selection={selection}
                 onSelect={setSelection}
                 onPatchField={(id, patch) => commit(updateField(def, id, patch))}
-                onToggleStep={(id, role, on) => { const f = findField(def, id); if (f) commit(updateField(def, id, withStep(f, role, on, stepRoles))); }}
                 onDropAt={(page, index, data) => {
                   if (data.type) addAt(data.type, page, index);
                   else if (data.fieldId) commit(moveField(def, data.fieldId, { page, index }));
@@ -652,7 +671,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             )}
           </div>
         )}
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} onSelectionChange={setPdfSelection} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

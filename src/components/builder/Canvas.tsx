@@ -38,7 +38,6 @@ export interface CanvasProps {
   /** "סימון בטופס": tick the fields the source field opens. */
   pick?: PickMode;
   /** "סימון שדות לשלב": tick = the field is also edited in that step, untick = not in it (its other steps stay). */
-  onToggleStep?: (id: string, role: FillerRole, on: boolean) => void;
 }
 
 function readDrop(e: React.DragEvent): { type?: FieldType; fieldId?: string } {
@@ -92,9 +91,8 @@ export function Canvas(p: CanvasProps) {
                 const matches = p.focusRole === "unassigned" ? noStep : !!p.focusRole && fillsIn(f, p.focusRole);
                 const inFocus = !!p.focusRole && answers && matches;
                 const outOfFocus = !!p.focusRole && answers && !matches;
-                const assigning = !p.pick && !!p.focusRole && p.focusRole !== "unassigned" && answers;
                 const isSource = !!p.pick && p.pick.sourceId === f.id;
-                const picking = !!p.pick && !isSource && f.type !== "hidden";
+                const picking = !!p.pick && !isSource && f.type !== "hidden" && (!p.pick.answersOnly || answers);
                 const picked = picking && p.pick!.ids.has(f.id);
                 return (
                   <div key={f.id}>
@@ -118,19 +116,10 @@ export function Canvas(p: CanvasProps) {
                           className="size-5 shrink-0 accent-primary"
                           checked={picked}
                           onChange={() => p.pick!.onToggle(f.id)}
-                          aria-label={`${f.label || "השדה"} נפתח מהשדה המסומן`}
+                          aria-label={`${f.label || "השדה"} ${p.pick!.checkLabel ?? "נפתח מהשדה המסומן"}`}
                         />
                       )}
                       {isSource && <span className="shrink-0 rounded bg-success/20 px-1.5 py-0.5 text-xs font-medium text-success">המקור</span>}
-                      {assigning && (
-                        <input
-                          type="checkbox"
-                          className="size-5 shrink-0 accent-primary"
-                          checked={matches}
-                          onChange={(e) => (p.onToggleStep ? p.onToggleStep(f.id, p.focusRole as FillerRole, e.target.checked) : p.onPatchField(f.id, { filledBy: e.target.checked ? p.focusRole : "unassigned" }))}
-                          aria-label={`${f.label || "השדה"} בשלב הזה`}
-                        />
-                      )}
                       <button type="button" onClick={() => p.onSelect({ kind: "field", id: f.id })} className="flex min-w-0 flex-1 items-center gap-2 text-start" aria-pressed={selected}>
                         <FieldIcon type={f.type} className="size-4 shrink-0 text-muted-foreground" />
                         <span className="min-w-0">
