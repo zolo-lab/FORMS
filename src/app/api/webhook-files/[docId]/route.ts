@@ -15,6 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ docId: s
   if (!/^[0-9a-f-]{36}$/i.test(docId) || !/^[0-9a-f]{64}$/.test(sig) || !verifyFileLink(process.env.SESSION_SECRET ?? "", docId, exp, sig)) {
     return NextResponse.json({ error: "invalid or expired link" }, { status: 403 });
   }
+  // Looked up by its own id, so a part cut by "עיבוד טופס" is served here like any other document.
   const [doc] = await db.select().from(schema.packageDocuments).where(eq(schema.packageDocuments.id, docId));
   if (!doc?.finalFileId) return NextResponse.json({ error: "not found" }, { status: 404 });
   const file = await getFile(doc.finalFileId);

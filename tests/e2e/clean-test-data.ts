@@ -37,11 +37,16 @@ export async function cleanTestData(sql: NeonQueryFunction<false, false>): Promi
     sql`delete from contacts where organization_id in (select id from del_o) or email like 'e2e-%@example.test'`,
     sql`update users set organization_id = null where organization_id in (select id from del_o)`,
     sql`delete from users where email like 'e2e-%@example.test'`,
+    // Per-organization trigger settings, written whenever a test touches the mail panel. Without this the
+    // organization delete below fails on its foreign key and the whole teardown throws.
+    sql`delete from mail_triggers where organization_id in (select id from del_o)`,
     sql`delete from organizations where id in (select id from del_o) returning id`,
     // Sample e-mails sent from the triggers panel by e2e.
     sql`delete from notifications where template_key = 'test' and "to" like '%@e2e.test'`,
     // Projects added by the organizations e2e (deleted there unless the test failed half-way).
     sql`delete from projects where name like 'פרויקט בדיקה %'`,
   ]);
-  return { forms: (r[11] as unknown[]).length, orgs: (r[19] as unknown[]).length };
+  // Positional: r[11] is the form_templates delete and r[20] the organizations delete, both "returning id".
+  // Adding a statement before either one shifts these.
+  return { forms: (r[11] as unknown[]).length, orgs: (r[20] as unknown[]).length };
 }
