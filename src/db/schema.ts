@@ -30,6 +30,7 @@ import type { ExpiryRule } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { RecipientKind } from "@/lib/notifications/triggers";
 import type { SummarySchedule } from "@/lib/notifications/open-summary";
+import type { UserNotificationPrefs } from "@/lib/notifications/user-prefs";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -581,6 +582,23 @@ export const mailTriggers = pgTable(
   },
   (t) => [unique("mail_triggers_org_key_uq").on(t.organizationId, t.key).nullsNotDistinct()],
 );
+
+/**
+ * What one signed-in user chose for themselves: which messages reach them, on which channel, and the reminder
+ * timing they prefer. Beats the form's and the organization's settings (`src/lib/notifications/user-prefs.ts`).
+ */
+export const userNotificationPrefs = pgTable("user_notification_prefs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Per group (my_turn, reminder, progress, finished, summaries): switch and channels. */
+  groups: jsonb("groups").$type<UserNotificationPrefs["groups"]>().notNull().default({}),
+  /** Only the parts of the reminder policy this person set; the rest stays the organization's. */
+  reminderTiming: jsonb("reminder_timing").$type<UserNotificationPrefs["reminderTiming"]>().notNull().default({}),
+  ...timestamps,
+});
 
 export const webhooks = pgTable("webhooks", {
   id: uuid("id").primaryKey().defaultRandom(),

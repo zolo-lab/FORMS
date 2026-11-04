@@ -39,7 +39,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
-          settings={admin ? [
+          settings={[
+            // Everyone has their own notification settings, admin or not.
+            { title: "אישי", items: [{ href: "/admin/notifications", label: "ההתראות שלי" }] },
+            ...(admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },
             ] },
@@ -51,7 +54,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               { href: "/admin/mail", label: "מרכז מיילים" },
               ...(devLoginEnabled() ? [{ href: "/dev-login", label: "כניסה כמשתמש לבדיקה" }] : []),
             ] },
-          ] : []}
+            ] : []),
+          ]}
         />
         {authDisabled() ? (
           <span className="ms-auto flex shrink-0 items-center gap-2">
