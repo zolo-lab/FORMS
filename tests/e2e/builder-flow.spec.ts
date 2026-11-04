@@ -94,7 +94,8 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
 
-  // "סימון שדות לשלב": each step separately; ticking a field puts it in the step, unticking leaves it in no step.
+  // "סימון שדות לשלב": each step separately; ticking adds the step to the field (its other steps stay), unticking
+  // takes out only that step; with no step left the field is in no step.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
   const pick = page.getByLabel("סימון שדות לשלב");
   await expect(pick.locator("option")).toHaveText(["— בחרו שלב —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test (רק אישור)"]);
@@ -103,6 +104,11 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await expect(notes).not.toBeChecked();
   await notes.check();
   await expect(page.locator("span", { hasText: "שדות בשלב הזה" })).toContainText("1 שדות בשלב הזה");
+  await expect(page.locator("span.block.truncate.text-xs").filter({ hasText: "+ 3 · payroll@example.test" }).first()).toBeVisible();
+  await notes.uncheck();
+  // Still the employee's: take it out there too, and it is in no step.
+  await pick.selectOption({ label: "שלב 2 · העובד" });
+  await expect(notes).toBeChecked();
   await notes.uncheck();
   await page.getByRole("button", { name: "סיום" }).click();
   await expect(page.getByText("שדות לא משויכים לאף שלב").first()).toBeVisible();
