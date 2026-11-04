@@ -176,6 +176,13 @@
       "when": 1793774800000,
       "tag": "0024_request_highlights",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793779986157,
+      "tag": "0025_amused_texas_twister",
+      "breakpoints": true
     }
   ]
 }
