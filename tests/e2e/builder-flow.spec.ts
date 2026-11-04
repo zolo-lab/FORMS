@@ -94,23 +94,25 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
 
-  // "סימון שדות לשלב": each step separately; ticking adds the step to the field (its other steps stay), unticking
-  // takes out only that step; with no step left the field is in no step.
+  // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
-  const pick = page.getByLabel("סימון שדות לשלב");
-  await expect(pick.locator("option")).toHaveText(["— בחרו שלב —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test (רק אישור)"]);
-  await pick.selectOption({ label: "שלב 3 · payroll@example.test (רק אישור)" });
-  const notes = page.getByLabel("הערות בשלב הזה");
-  await expect(notes).not.toBeChecked();
-  await notes.check();
-  await expect(page.locator("span", { hasText: "שדות בשלב הזה" })).toContainText("1 שדות בשלב הזה");
-  await expect(page.locator("span.block.truncate.text-xs").filter({ hasText: "+ 3 · payroll@example.test" }).first()).toBeVisible();
-  await notes.uncheck();
-  // Still the employee's: take it out there too, and it is in no step.
-  await pick.selectOption({ label: "שלב 2 · העובד" });
-  await expect(notes).toBeChecked();
-  await notes.uncheck();
-  await page.getByRole("button", { name: "סיום" }).click();
+  const show = page.getByLabel("הצגת שלב");
+  await expect(show.locator("option")).toHaveText(["— כל השלבים —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test (רק אישור)"]);
+  await show.selectOption({ label: "שלב 2 · העובד" });
+  await expect(page.locator("span", { hasText: "שדות בשלב הזה" })).toBeVisible();
+  await expect(page.getByLabel("הערות מסומן להעברה לשלב")).toHaveCount(0); // showing changes nothing
+  await page.getByRole("button", { name: "עריכת שלבים" }).click();
+  const move = page.getByLabel("העברת השדות המסומנים לשלב");
+  await expect(move).toBeDisabled();
+  await page.getByLabel("הערות מסומן להעברה לשלב").check();
+  await move.selectOption({ label: "שלב 3 · payroll@example.test" });
+  await expect(page.getByRole("status").filter({ hasText: "1 שדות הועברו לשלב 3" })).toBeVisible();
+  await expect(page.locator("span.block.truncate.text-xs").filter({ hasText: "שלב 3 · payroll@example.test" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "סיום עריכה" }).click();
+  // A field can be left in no step (here: through its settings), and the bar says so.
+  await page.getByRole("button", { name: /^הערות/ }).first().click();
+  const steps = page.getByRole("group", { name: "באילו שלבים השדה פתוח לעריכה" });
+  await steps.getByRole("checkbox", { checked: true }).uncheck();
   await expect(page.getByText("שדות לא משויכים לאף שלב").first()).toBeVisible();
   // A field in no step blocks publishing; one click puts all such fields in step 1.
   await page.getByRole("button", { name: "פרסום" }).click();

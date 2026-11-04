@@ -13,7 +13,7 @@ import { Dialog } from "@/components/ui/dialog";
 import type { Answers } from "@/lib/forms/conditions";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { type FillerRole, type FormDefinition, type FormField } from "@/lib/forms/schema";
-import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
+import { REQUIRED_MESSAGE as REQUIRED, validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
@@ -75,6 +75,24 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
   // Formula fields are shown computed (the server recomputes them on submit).
   const shown = useMemo(() => computeFormulas(rest.definition, withCopies(rest.definition, rest.answers), today), [rest.definition, rest.answers, today]);
   const errorFields = new Set(Object.keys(rest.errors).map((k) => k.split(".")[0]));
+
+  /** The shown errors of this page's boxes: one message per field, under its first box, for errors other than "missing". */
+  function problemsOn(pageIdx: number): { stamp: PdfStamp; message: string }[] {
+    const seen = new Set<string>();
+    const out: { stamp: PdfStamp; message: string }[] = [];
+    for (const s of stamps) {
+      if (s.page !== pageIdx) continue;
+      const cell = cellRef(s.fieldId);
+      const key = cell ? `${cell.table}.${cell.row}.${cell.col}` : Object.keys(rest.errors).find((k) => k === s.fieldId || k.startsWith(`${s.fieldId}.`));
+      const message = key ? rest.errors[key] : undefined;
+      if (!key || !message || message === REQUIRED || seen.has(key)) continue;
+      const field = stampField(rest.definition, s);
+      if (!field || !evaluateCondition(field.visibleIf, shown)) continue;
+      seen.add(key);
+      out.push({ stamp: s, message });
+    }
+    return out;
+  }
 
   function setField(stamp: { fieldId: string }, v: unknown) {
     rest.onChange(setStampValue(rest.answers, stamp, v));
@@ -156,10 +174,10 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                     const comb = s.kind === "comb" ? { maxLength: s.comb?.cells, className: "tracking-[0.35em] text-center" } : { maxLength: undefined, className: "" };
                     const title = s.kind === "initials" ? `${label} (יוצג כראשי תיבות)` : label;
                     return s.multiline ? (
-                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} dir={attrs.dir} className={cn(ring, "resize-none p-0.5 text-start")} style={style}
+                      <textarea key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} aria-invalid={invalid || undefined} aria-describedby={invalid ? `od-err-${s.fieldId}` : undefined} disabled={locked} dir={attrs.dir} className={cn(ring, "resize-none p-0.5 text-start")} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     ) : (
-                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5 text-start", narrow, comb.className)} style={style}
+                      <input key={s.id} id={`od-${s.id}`} data-field-id={s.fieldId} aria-label={title} aria-invalid={invalid || undefined} aria-describedby={invalid ? `od-err-${s.fieldId}` : undefined} disabled={locked} {...attrs} maxLength={comb.maxLength} className={cn(ring, "px-0.5 text-start", narrow, comb.className)} style={style}
                         value={readText(field, value, s)} onChange={(e) => setField(s, writeText(field, value, s, e.target.value))} />
                     );
                   }
@@ -181,6 +199,20 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
                     </button>
                   );
                 })}
+              {/* Why a box is red, right under it: a wrong value is not "missing", so say what is wrong with it. */}
+              {problemsOn(pageIdx).map(({ stamp: s, message }) => {
+                const b = pdfBoxToScreen(s, pg.height, scale);
+                return (
+                  <p
+                    key={`err-${s.id}`}
+                    id={`od-err-${s.fieldId}`}
+                    className="pointer-events-none absolute z-10 w-max max-w-56 rounded-sm border border-destructive bg-card px-1 text-xs leading-5 text-destructive shadow-sm"
+                    style={{ right: pg.width * scale - (b.x + b.width), top: b.y + b.height + 2 }}
+                  >
+                    {message}
+                  </p>
+                );
+              })}
             </div>
           );
         })}
@@ -198,6 +230,13 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
   const answers = useMemo(() => withCopies(definition, withDefaults(definition, rawAnswers, today)), [definition, rawAnswers, today]);
   const result = useMemo(() => validateAnswers(definition, answers, { role }), [definition, answers, role]);
   const remaining = Object.keys(result.errors).length;
+  // The first thing still in the way, by its label: a value that is wrong says why, not just "missing".
+  const first = useMemo(() => {
+    const key = Object.keys(result.errors)[0];
+    if (!key) return null;
+    const field = definition.pages.flatMap((p) => p.fields).find((f) => f.id === key.split(".")[0]);
+    return { label: field?.label || "שדה", message: result.errors[key]! };
+  }, [result.errors, definition]);
   // Fields with no place on the document (e.g. "צילום ת.ז."): asked in a list after the pages, same answers.
   const extra = useMemo(() => {
     const offEach = pdfs.map((p) => new Set(offDocumentFields(p.mapping, definition).map((f) => f.id)));
@@ -230,7 +269,7 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
   return (
     <div className="space-y-4">
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b bg-background/95 py-2 backdrop-blur" role="status">
-        <span className="text-sm font-medium">{remaining === 0 ? "כל השדות מולאו" : `נותרו ${remaining} שדות`}</span>
+        <span className="text-sm font-medium">{remaining === 0 ? "כל השדות מולאו" : first && first.message !== REQUIRED && remaining === 1 ? `צריך לתקן: ${first.label}` : `נותרו ${remaining} שדות`}</span>
         {remaining > 0 && <Button variant="outline" size="sm" onClick={goNext}>הבא</Button>}
       </div>
       {pdfs.map((p) => (
@@ -249,7 +288,13 @@ export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t bg-background/95 py-3 backdrop-blur">
         <Button className="min-w-32" disabled={busy} aria-busy={busy || undefined} onClick={submit}>{busy ? "שולח…" : "שליחה"}</Button>
         {actions}
-        {remaining > 0 && <span className="text-sm text-muted-foreground">נותרו {remaining} שדות – &quot;שליחה&quot; תעביר לראשון שחסר</span>}
+        {first && (
+          <span className="text-sm text-muted-foreground">
+            {first.message === REQUIRED
+              ? <>נותרו {remaining} שדות – &quot;שליחה&quot; תעביר לראשון שחסר</>
+              : <><bdi className="font-medium text-destructive">{first.label}</bdi>: <span className="text-destructive">{first.message}</span>{remaining > 1 ? ` (ועוד ${remaining - 1})` : ""} – &quot;שליחה&quot; תעביר אליו</>}
+          </span>
+        )}
       </div>
     </div>
   );

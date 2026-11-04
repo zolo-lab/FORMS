@@ -39,8 +39,11 @@ export interface ValidateOptions {
 const SIGNATURE_IMAGE = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/;
 const SIGNATURE_MAX_CHARS = 700_000;
 
+/** The message of an empty required field; any other message means the value itself is wrong. */
+export const REQUIRED_MESSAGE = "שדה חובה";
+
 const MSG = {
-  required: "שדה חובה",
+  required: REQUIRED_MESSAGE,
   number: "יש להזין מספר",
   min: (n: number) => `ערך מינימלי: ${n}`,
   max: (n: number) => `ערך מקסימלי: ${n}`,
