@@ -218,28 +218,53 @@ export async function listPackages() {
   return db.select({ id: packageTemplates.id, name: packageTemplates.name }).from(packageTemplates).where(inArray(packageTemplates.id, withForm)).orderBy(asc(packageTemplates.name));
 }
 
-/** Label → text of every answer collected so far, across the request's (pinned) documents. */
-export async function requestAnswerItems(requestId: string): Promise<{ label: string; text: string }[]> {
+export interface DocFieldView {
+  label: string;
+  /** The answer as text; null while nobody has filled it yet. */
+  text: string | null;
+  role: string;
+}
+
+/**
+ * Every document of a request as it stands: each page's fields with what was filled and what is still waiting
+ * (and for which step), plus whether there is a PDF to show. Fields hidden by a condition are left out.
+ */
+export async function requestDocumentView(requestId: string) {
   const { collectedAnswers } = await import("./requests-store");
-  const { summaryItems } = await import("@/lib/pdf/summary");
+  const { FIELD_TYPE_META } = await import("@/lib/forms/field-types");
+  const { formatAnswer } = await import("@/lib/forms/format");
+  const { evaluateCondition } = await import("@/lib/forms/conditions");
   const answers = await collectedAnswers(requestId);
   const docs = await db
-    .select({ definition: schema.formTemplateVersions.definition })
+    .select({
+      id: schema.packageDocuments.id,
+      finalFileId: schema.packageDocuments.finalFileId,
+      definition: schema.formTemplateVersions.definition,
+      pdfFileId: schema.formTemplateVersions.pdfFileId,
+    })
     .from(schema.packageDocuments)
     .innerJoin(schema.formTemplateVersions, eq(schema.packageDocuments.templateVersionId, schema.formTemplateVersions.id))
     .where(eq(schema.packageDocuments.requestId, requestId))
     .orderBy(asc(schema.packageDocuments.order));
-  const seen = new Set<string>();
-  const out: { label: string; text: string }[] = [];
-  for (const d of docs) {
-    for (const it of summaryItems(d.definition, answers)) {
-      const key = `${it.label}|${it.text}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(it);
-    }
-  }
-  return out;
+  return docs.map((d) => ({
+    id: d.id,
+    title: d.definition.title,
+    hasPdf: !!d.pdfFileId || !!d.finalFileId,
+    final: !!d.finalFileId,
+    pages: d.definition.pages
+      .map((p, i) => ({
+        title: p.title || `עמוד ${i + 1}`,
+        fields: p.fields
+          .filter((f) => FIELD_TYPE_META[f.type].hasAnswer && (!f.visibleIf || evaluateCondition(f.visibleIf, answers)))
+          .map((f): DocFieldView => {
+            const v = answers[f.id];
+            const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+            const text = empty ? null : f.type === "signature" ? "חתום" : formatAnswer(f, v) || null;
+            return { label: f.label || f.id, text, role: f.filledBy ?? "employee" };
+          }),
+      }))
+      .filter((p) => p.fields.length > 0),
+  }));
 }
 
 /** Files the signers uploaded (answers whose value is a list of `{ url, name }` pointing into our file store). */

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RemindButton } from "@/components/requests/RemindButton";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -225,7 +226,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <thead>
             <tr className="border-b text-start text-xs text-muted-foreground">
               <th scope="col" className="w-8 px-3 py-2"><span className="sr-only">בחירה</span><SelectAll formId="bulk" /></th>
-              {([["עובד", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"]] as [string, SortKey?][]).map(([h, key]) => {
+              {([["שם", "name"], ["ארגון", "org"], ["טופס", "pkg"], ["סטטוס", "status"], ["ממתין ל"], ["ימים בשלב"], ["התקדמות"], ["נוצרה", "created"], ["פעולות"]] as [string, SortKey?][]).map(([h, key]) => {
                 if (!key) return <th key={h} scope="col" className="px-3 py-2 text-start font-medium">{h}</th>;
                 const state = ariaSort(filters, key);
                 return (
@@ -246,7 +247,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
           <tbody className="divide-y">
             {result.rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                <td colSpan={10} className="p-6 text-center text-muted-foreground">
                   {hasFilters ? "לא נמצאו בקשות לפי הסינון." : "עדיין אין בקשות."}
                 </td>
               </tr>
@@ -271,6 +272,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
                   <td className="px-3 py-2">{r.daysInStep ?? "—"}</td>
                   <td className="px-3 py-2">{r.progress.total ? `${r.progress.done}/${r.progress.total}` : "—"}</td>
                   <td className="px-3 py-2">{fmt.format(r.createdAt)}</td>
+                  <td className="px-3 py-1">{(r.status === "in_progress" || r.status === "returned") && r.waitingFor.length > 0 && <RemindButton requestId={r.id} subject={r.subjectName} />}</td>
                 </tr>
               );
             })}

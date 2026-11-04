@@ -25,6 +25,7 @@ import {
   planSteps,
   requestStatus,
   returnTo,
+  skipStep,
   type EngineEvent,
   type EngineResult,
   type EngineStep,
@@ -420,7 +421,8 @@ export type StepAction =
   | { type: "submit"; answers: Answers }
   | { type: "decline"; reason: string }
   | { type: "return"; toStepId: string; reason: string }
-  | { type: "delegate"; assignee: { name?: string; email?: string; phone?: string } };
+  | { type: "delegate"; assignee: { name?: string; email?: string; phone?: string } }
+  | { type: "skip"; reason?: string };
 
 export async function applyStepAction(stepId: string, action: StepAction, actor: { type: "signer" | "user" | "api"; id?: string } = { type: "signer" }) {
   const [row] = await db.select().from(signingSteps).where(eq(signingSteps.id, stepId));
@@ -452,6 +454,11 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     case "delegate":
       result = delegate(steps, stepId, action.assignee);
       break;
+    case "skip": {
+      const contacts = Object.fromEntries((await listContacts()).map((c) => [c.id, { id: c.id, name: c.name, email: c.email ?? undefined, phone: c.phone ?? undefined }]));
+      result = skipStep(steps, stepId, answers, action.reason ?? "", contacts);
+      break;
+    }
   }
   // The new step gets its own token + invite when persist sees the activation event.
   if (action.type === "delegate") {
