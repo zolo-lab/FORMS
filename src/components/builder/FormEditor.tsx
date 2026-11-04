@@ -406,7 +406,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
         <Tabs<TabId>
-          className="-mb-2 self-end border-b-0"
+          // Five tabs are wider than a phone: the strip scrolls sideways instead of overflowing the header,
+          // which on a 390px screen pushed the builder's layout out from under the pointer.
+          className="-mb-2 max-w-full self-end overflow-x-auto border-b-0 [&>button]:shrink-0"
           value={tab}
           onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
           tabs={[
