@@ -41,6 +41,7 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await page.getByText("כלים", { exact: true }).click();
   await page.getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");
