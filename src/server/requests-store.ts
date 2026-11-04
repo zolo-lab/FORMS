@@ -530,6 +530,12 @@ export async function cancelRequest(requestId: string, reason: string, actor: { 
 }
 
 /** Cron: expire requests whose deadline passed. */
+/** Removes a request and everything under it (steps, links, answers, signatures, documents, events). Cannot be undone. */
+export async function deleteRequest(requestId: string) {
+  const gone = await db.delete(requests).where(eq(requests.id, requestId)).returning({ id: requests.id });
+  if (!gone.length) throw new Error("request not found");
+}
+
 export async function expireOverdue(now = new Date()) {
   const open = await db.select().from(requests).where(inArray(requests.status, ["in_progress", "returned"]));
   let n = 0;

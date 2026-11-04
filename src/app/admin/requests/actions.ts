@@ -15,7 +15,7 @@ import type { Workflow } from "@/lib/workflow/types";
 import { canSeeRequest, currentUser, viewer } from "@/server/users-store";
 import { mayGrant, requireGrant, requireRequest } from "@/server/guards";
 import { listProjects } from "@/server/orgs-store";
-import { appUrl, applyStepAction, cancelRequest, changeAssignee, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
+import { appUrl, applyStepAction, cancelRequest, changeAssignee, deleteRequest, createRequest, extendExpiry, getRequest, issueLink, listOrganizations, sendRequest } from "@/server/requests-store";
 
 export interface ShareLink {
   stepId: string;
@@ -205,6 +205,39 @@ export async function returnStepAction(requestId: string, fromStepId: string, to
   if (!from || !to) return { ok: false, message: "השלב לא נמצא בבקשה" };
   if (to.status !== "completed" || to.order >= from.order) return { ok: false, message: "אפשר להחזיר רק לשלב קודם שכבר הושלם" };
   return run(requestId, "הבקשה הוחזרה לשלב הקודם", () => applyStepAction(fromStepId, { type: "return", toStepId, reason: reason.trim() }, { type: "user" }));
+}
+
+/** The step now waiting (the first open one that is not the sender's own). */
+async function waitingStep(requestId: string) {
+  const data = await getRequest(requestId);
+  const steps = [...(data?.steps ?? [])].sort((a, b) => a.order - b.order);
+  const open = steps.filter((s) => s.status === "active" || s.status === "in_progress");
+  return { steps, current: open.find((s) => s.role !== "requester") ?? open[0] };
+}
+
+/** From the table: send the request one step back (to the last step that was done before the waiting one), to fix something. */
+export async function returnOneStepAction(requestId: string, reason: string): Promise<ActionResult> {
+  if (!reason.trim()) return { ok: false, message: "נדרשת סיבה" };
+  const { steps, current } = await waitingStep(requestId);
+  if (!current) return { ok: false, message: "הבקשה לא ממתינה לאף שלב" };
+  const back = steps.filter((s) => s.status === "completed" && s.order < current.order).at(-1);
+  if (!back) return { ok: false, message: "אין שלב קודם להחזיר אליו" };
+  return run(requestId, "הבקשה הוחזרה שלב אחד אחורה", () => applyStepAction(current.id, { type: "return", toStepId: back.id, reason: reason.trim() }, { type: "user" }));
+}
+
+/** From the table: the admin declines the request (it stops; nobody else is asked). */
+export async function declineRequestAction(requestId: string, reason: string): Promise<ActionResult> {
+  if (!reason.trim()) return { ok: false, message: "נדרשת סיבה" };
+  if (!(await mayGrant("cancel"))) return { ok: false, message: "אין לך הרשאה לדחות בקשות" };
+  const { current } = await waitingStep(requestId);
+  if (!current) return { ok: false, message: "הבקשה לא ממתינה לאף שלב" };
+  return run(requestId, "הבקשה נדחתה", () => applyStepAction(current.id, { type: "decline", reason: reason.trim() }, { type: "user" }));
+}
+
+/** From the table: delete the request for good. */
+export async function deleteRequestAction(requestId: string): Promise<ActionResult> {
+  if (!(await mayGrant("cancel"))) return { ok: false, message: "אין לך הרשאה למחוק בקשות" };
+  return run(requestId, "הבקשה נמחקה", () => deleteRequest(requestId));
 }
 
 /** Cancel several requests at once from the dashboard. Requests that are already finished are skipped. */
