@@ -118,3 +118,27 @@ test("all boxes share one colour; the step chosen to view stands out in green", 
   await page.getByLabel("צפה כתפקיד").selectOption("requester");
   await expect(box).not.toHaveClass(/border-success/);
 });
+
+test("copying a box adds nothing until a click on the document pastes it there, same field", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; x: number; y: number }[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
+  expect(await mapping()).toHaveLength(1);
+  await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toBeVisible();
+  const area = (await pdfPage.boundingBox())!;
+  await pdfPage.click({ position: { x: 120, y: area.height - 120 } });
+  await expect.poll(async () => (await mapping()).length).toBe(2);
+  const after = await mapping();
+  expect(after[1]!.fieldId).toBe(after[0]!.fieldId);
+  expect(after[1]!.y).toBeLessThan(200); // pasted where clicked, near the bottom of the page
+  await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
+  // Esc cancels a copy.
+  await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
+  await pdfPage.click({ position: { x: 300, y: 300 } });
+  expect(await mapping()).toHaveLength(2);
+});
