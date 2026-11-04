@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detailsText, highlightsOf, identifierValue } from "@/lib/forms/highlights";
+import { detailsText, highlightsOf, identifierOf, identifierValue } from "@/lib/forms/highlights";
 import type { FormDefinition } from "@/lib/forms/schema";
 import { renderTemplate } from "@/lib/notifications/templates";
 import { DEFAULT_HTML, renderHtml } from "@/lib/notifications/email-design";
@@ -17,37 +17,52 @@ const form = def([
 describe("highlights", () => {
   it("reads the identifier and the message details, skipping internal fields", () => {
     const h = highlightsOf(form, { supplier: "אלקטרה", amount: 1200, note: "לא רלוונטי", cost: "100" });
-    expect(h.identifier).toEqual({ label: "שם הספק", value: "אלקטרה" });
+    expect(identifierOf(h)).toEqual({ label: "שם הספק", value: "אלקטרה" });
     expect(h.lines.map((l) => l.label)).toEqual(["שם הספק", "סכום"]);
     expect(detailsText(h)).toBe("שם הספק: אלקטרה\nסכום: 1,200");
   });
 
   it("an identifier not filled yet is empty, not the name from the wizard", () => {
     const h = highlightsOf(form, {});
-    expect(h.identifier).toEqual({ label: "שם הספק", value: "" });
+    expect(identifierOf(h)).toEqual({ label: "שם הספק", value: "" });
     expect(identifierValue(h, "ישראל ישראלי")).toBe("");
     expect(detailsText(h)).toBe("");
   });
 
   it("a form without an identifier falls back to the name the request was opened with", () => {
     const h = highlightsOf(def([{ id: "a", type: "short_text", label: "א" }]), {});
-    expect(h.identifier).toBe(null);
+    expect(identifierOf(h)).toBe(null);
     expect(identifierValue(h, "ישראל ישראלי")).toBe("ישראל ישראלי");
   });
 
-  it("over several forms of one package the first identifier wins and a field is taken once", () => {
+  it("over several forms of one package a field is taken once, in the order of the forms", () => {
     const a = def([{ id: "x", type: "short_text", label: "ראשון", identifier: true }]);
     const b = def([
       { id: "x", type: "short_text", label: "ראשון שוב", identifier: true },
       { id: "y", type: "short_text", label: "שני", identifier: true, showInMessages: true },
     ]);
     const h = highlightsOf([a, b], { x: "1", y: "2" });
-    expect(h.identifier).toEqual({ label: "ראשון", value: "1" });
+    expect(identifierOf(h)).toEqual({ label: "ראשון · שני", value: "1 · 2" });
     expect(h.lines.map((l) => l.label)).toEqual(["ראשון", "שני"]);
   });
 
+  it("several identifying fields name the request together, skipping the ones not filled yet", () => {
+    const many = def([
+      { id: "first", type: "short_text", label: "שם", identifier: true },
+      { id: "start", type: "date", label: "תחילת עבודה", identifier: true },
+      { id: "x", type: "short_text", label: "אחר" },
+    ]);
+    expect(identifierOf(highlightsOf(many, { first: "דנה", start: "2026-12-01" }))).toEqual({
+      label: "שם · תחילת עבודה",
+      value: "דנה · 01/12/2026",
+    });
+    // Only one of them filled: no stray separator.
+    expect(identifierValue(highlightsOf(many, { first: "דנה" }), "גיבוי")).toBe("דנה");
+    expect(identifierValue(highlightsOf(many, {}), "גיבוי")).toBe("");
+  });
+
   it("no definitions at all is empty, not a crash", () => {
-    expect(highlightsOf([], { a: 1 })).toEqual({ identifier: null, lines: [] });
+    expect(highlightsOf([], { a: 1 })).toEqual({ identifiers: [], lines: [] });
   });
 
   it("an option field shows its label, not its stored value", () => {
@@ -55,7 +70,7 @@ describe("highlights", () => {
       def([{ id: "kind", type: "dropdown", label: "סוג", identifier: true, options: [{ value: "a", label: "חוזה" }] }]),
       { kind: "a" },
     );
-    expect(h.identifier?.value).toBe("חוזה");
+    expect(identifierOf(h)?.value).toBe("חוזה");
   });
 });
 

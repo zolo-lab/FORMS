@@ -39,7 +39,7 @@ import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
 import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { addPeople } from "@/lib/notifications/triggers";
-import { detailsLines, highlightsOf, type Highlights } from "@/lib/forms/highlights";
+import { detailsLines, highlightsOf, identifierOf, type Highlights } from "@/lib/forms/highlights";
 import type { FormDefinition } from "@/lib/forms/schema";
 import { COMPLETION_DOCS_KEY, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -175,7 +175,7 @@ export async function storeHighlights(requestId: string, defs: FormDefinition[],
   const h = highlightsOf(defs, answers);
   await db
     .update(requests)
-    .set({ identifierLabel: h.identifier?.label ?? null, identifierValue: h.identifier?.value ?? null, messageDetails: detailsLines(h) })
+    .set({ identifierLabel: identifierOf(h)?.label ?? null, identifierValue: identifierOf(h)?.value ?? null, messageDetails: detailsLines(h) })
     .where(eq(requests.id, requestId));
   return h;
 }

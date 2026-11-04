@@ -67,9 +67,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
     return `/admin/requests${qs ? `?${qs}` : ""}`;
   };
   const hasFilters = Object.keys(filters).some((k) => k !== "page" && k !== "sort" && k !== "dir");
-  // One label when every row on the page comes from forms with the same identifier, the general name otherwise.
+  // The fields' own labels when every row on the page comes from forms that identify a request the same way,
+  // and the general name otherwise (or when the labels together would be too long for a column heading).
   const labels = [...new Set(result.rows.map((r) => r.identifierLabel).filter(Boolean))];
-  const identifierHeader = labels.length === 1 ? labels[0]! : "שדה מזהה";
+  const identifierHeader = labels.length === 1 && labels[0]!.length <= 28 ? labels[0]! : "שדה מזהה";
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">

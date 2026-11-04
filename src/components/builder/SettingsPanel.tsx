@@ -463,28 +463,27 @@ export function FieldSettings({
 
 /** "ערך ברירת מחדל": free text, one of the options, or for a date a fixed date / the date of filling. */
 export /**
- * "שדה מזהה" and "להציג בהודעות": what identifies the request on the tracking screen and what the people who get
- * the messages see at the top of them. One identifier per form – ticking a second one is refused with a hint.
+ * "שדה מזהה" and "להציג בהודעות": what identifies the request on the tracking screens and what the people who get
+ * the messages see at the top of them. Several fields may identify a request together (first name + start date…);
+ * they are shown one after the other in the order of the form.
  */
 function MessagesSection({ def, field, onPatch }: { def: FormDefinition; field: FormField; onPatch: (patch: Partial<FormField>) => void }) {
-  const other = allFields(def).find((f) => f.identifier && f.id !== field.id);
+  const others = allFields(def).filter((f) => f.identifier && f.id !== field.id);
   const isId = !!field.identifier;
   return (
     <>
       <label className="flex items-center gap-3 text-sm">
         <Switch
           checked={isId}
-          disabled={!isId && !!other}
-          // The identifier is what the request is called, so it is always one of the details of the message.
+          // An identifying field is what the request is called, so it is always one of the details of the message.
           onCheckedChange={(c) => onPatch(c ? { identifier: true, showInMessages: true } : { identifier: undefined })}
           label="שדה מזהה"
         />
         <span>
           שדה מזהה של הבקשה
           <span className="block text-xs text-muted-foreground">
-            {other
-              ? `כבר מוגדר שדה מזהה בטופס: "${other.label || other.id}". צריך לבטל אותו קודם.`
-              : "הערך שלו מופיע בעמודת \u201cשדה מזהה\u201d במסך היסטוריית הטפסים ומזהה את הבקשה בכותרת ההודעות."}
+            הערך שלו מופיע בעמודת &quot;שדה מזהה&quot; במסכי המעקב ומזהה את הבקשה בהודעות.
+            {others.length > 0 && ` יחד עם: ${others.map((f) => f.label || f.id).join(", ")}.`}
           </span>
         </span>
       </label>

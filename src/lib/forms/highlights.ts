@@ -18,13 +18,16 @@ export interface HighlightLine {
 }
 
 export interface Highlights {
-  /** The identifying field of the form: its label, and its value so far ("" until it is filled). */
-  identifier: HighlightLine | null;
-  /** The identifier plus every field marked "show in messages", in the order of the form. */
+  /** The identifying fields of the form, in its own order; empty = the form defines none. */
+  identifiers: HighlightLine[];
+  /** The identifiers plus every field marked "show in messages", in the order of the form. */
   lines: HighlightLine[];
 }
 
-const EMPTY: Highlights = { identifier: null, lines: [] };
+const EMPTY: Highlights = { identifiers: [], lines: [] };
+
+/** What separates several identifying fields wherever they are shown as one value. */
+export const IDENTIFIER_SEPARATOR = " · ";
 
 const labelOf = (f: FormField) => f.label?.trim() || f.id;
 
@@ -36,27 +39,37 @@ function valueOf(field: FormField, answers: Answers): string {
 }
 
 /**
- * Reads the identifier and the message details out of one or more form definitions (a package has several) and
- * the answers collected so far. The first field marked `identifier` wins, so a package cannot have two.
+ * Reads the identifying fields and the message details out of one or more form definitions (a package has several)
+ * and the answers collected so far. A form may mark several fields as identifying: together they name the request,
+ * in the order of the form. A field that appears in two forms of the same package is taken once.
  */
 export function highlightsOf(defs: FormDefinition | FormDefinition[], answers: Answers): Highlights {
   const all = Array.isArray(defs) ? defs : [defs];
   if (!all.length) return EMPTY;
-  let identifier: HighlightLine | null = null;
+  const identifiers: HighlightLine[] = [];
   const lines: HighlightLine[] = [];
   const seen = new Set<string>();
   for (const def of all) {
     for (const f of allFields(def)) {
       if (f.internal || seen.has(f.id)) continue;
-      const wanted = f.identifier === true || f.showInMessages === true;
-      if (!wanted) continue;
+      if (f.identifier !== true && f.showInMessages !== true) continue;
       seen.add(f.id);
       const line = { label: labelOf(f), value: valueOf(f, answers) };
-      if (f.identifier === true && !identifier) identifier = line;
+      if (f.identifier === true) identifiers.push(line);
       lines.push(line);
     }
   }
-  return { identifier, lines };
+  return { identifiers, lines };
+}
+
+/** The identifying fields as one label and one value, the way the requests table and the messages show them. */
+export function identifierOf(h: Highlights): HighlightLine | null {
+  if (!h.identifiers.length) return null;
+  return {
+    label: h.identifiers.map((l) => l.label).join(IDENTIFIER_SEPARATOR),
+    // Only the ones filled so far, so a half-filled request still reads well.
+    value: h.identifiers.map((l) => l.value).filter(Boolean).join(IDENTIFIER_SEPARATOR),
+  };
 }
 
 /** The details block of a message: one "label: value" per line. Fields not filled yet are left out. */
@@ -75,8 +88,8 @@ export const detailsLines = (h: Highlights): HighlightLine[] => h.lines.filter((
  * defines no identifier at all – the name typed when the request was opened, so the column is never useless.
  */
 export function identifierValue(h: Highlights, fallback: string): string {
-  if (!h.identifier) return fallback;
-  return h.identifier.value;
+  const id = identifierOf(h);
+  return id ? id.value : fallback;
 }
 
 /**
