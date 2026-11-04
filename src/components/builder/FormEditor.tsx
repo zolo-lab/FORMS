@@ -10,7 +10,8 @@ import { answerFields, emailFieldsOf, fieldRole, stepViews, unassignedFields, wi
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, Redo2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, History, Redo2, Undo2, Sparkles } from "lucide-react";
+import { VersionsDialog } from "./VersionsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
@@ -136,6 +137,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [future, setFuture] = useState<HistoryEntry[]>([]);
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
   const [tab, setTab] = useState<TabId>(initialTab);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   // The one step picker above the PDF: with boxes selected (and no step being marked) it shows and changes their step.
   const moveMode = tab === "pdf" && !focusRole && pdfSelection.length > 0;
   const selectionRoles = new Set(answerFields(def).filter((f) => pdfSelection.includes(f.id)).map(fieldRole));
@@ -386,6 +388,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               {pdf && pdf.mapping.stamps.some((st) => st.kind === "check") && (
                 <Button variant="ghost" size="sm" className="justify-start" onClick={suggestLinks} title="שדות שיושבים ליד תיבת סימון במסמך יוצגו רק כשמסמנים אותה">שדות לפי תיבות סימון</Button>
               )}
+              <Button variant="ghost" size="sm" className="justify-start" onClick={() => setVersionsOpen(true)}>
+                <History className="size-4" />גרסאות קודמות
+              </Button>
               <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("json"); setJsonText(exportJson); setJsonError(null); }}>JSON (גיבוי והעברה)</Button>
             </div>
           </details>
@@ -395,6 +400,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         </div>
       </div>
 
+      <VersionsDialog templateId={templateId} open={versionsOpen} onClose={() => setVersionsOpen(false)} />
       <CheckboxLinksDialog
         suggestions={links}
         onClose={() => setLinks(null)}
@@ -421,9 +427,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           הטופס עדיין בלי מסמך, ואי אפשר לפרסם אותו עד שמעלים PDF.
           <Button variant="outline" size="sm" onClick={() => setTab("pdf")}>להעלאת המסמך</Button>
         </p>
-      )}
-      {published && (
-        <p className="border-b bg-muted px-4 py-1.5 text-xs text-muted-foreground">גרסה {version} נעולה. כל שינוי ייצור אוטומטית גרסה {version + 1} כטיוטה.</p>
       )}
 
       <div className="flex flex-wrap items-end gap-x-4 px-4 pt-2">

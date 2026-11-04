@@ -4,7 +4,7 @@ import { AdminNav } from "@/components/admin/AdminNav";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { devLoginEnabled } from "@/lib/auth/dev-login";
-import { canTrack, isAdmin, isTrackOnly } from "@/lib/auth/permissions";
+import { isAdmin, isTrackOnly } from "@/lib/auth/permissions";
 import { currentUser, viewerFormAccess } from "@/server/users-store";
 import { queryRequests } from "@/server/dashboard-store";
 import { cookies } from "next/headers";
@@ -17,7 +17,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const forms = await viewerFormAccess();
   const builds = forms.allowed;
   const tracker = isTrackOnly(user);
-  const tracks = canTrack(user);
   let pending = 0;
   if (user) {
     try { pending = (await queryRequests({ assigneeEmail: user.email, page: 1 }, new Date(), 1)).total; } catch { pending = 0; }
@@ -32,8 +31,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           items={tracker ? [{ href: "/admin/track", label: "מעקב חתימות" }] : [
             { href: "/admin/inbox", label: "לטיפולי", badge: pending },
             { href: "/admin/requests", label: "היסטוריית טפסים" },
-            ...(tracks ? [{ href: "/admin/track", label: "מעקב" }] : []),
-            { href: "/admin/employees", label: "עובדים" },
             { href: "/admin/campaigns", label: "קמפיינים" },
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
             ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
