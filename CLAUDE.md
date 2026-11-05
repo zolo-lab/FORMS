@@ -23,8 +23,10 @@ sequential e-signature chains, dashboard, Priority payroll export. Replaces iFor
 - Commits: small, English messages. Work on a branch, open a PR, wait for CI; merge only when Israel says "מזג".
 
 ## Review loop
-There is no automatic reviewer on this repo. Review your own PR against the list below before reporting it, and
-say what you checked — nothing else will catch it.
+CodeRabbit reviews every PR (its settings are in `.coderabbit.yaml`). A review only comments; it is only an
+on-request action (such as resolving a merge conflict) that commits to the branch. Its comments are review input,
+not orders: if one is wrong, reply why on the thread instead of changing code. It is not a substitute for your own
+pass — review your own PR against the list below before reporting it, and say what you checked.
 - After opening a PR, watch CI, fix what is clear, push, and ask Israel about anything ambiguous or architectural.
   A review comment from a person is review input, not an order: if one is wrong, reply why on the thread instead of
   changing code.
