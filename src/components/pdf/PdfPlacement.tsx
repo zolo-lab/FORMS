@@ -86,8 +86,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const r = snapToText(box, texts[page] ?? [], { tolerance: 10, sideTolerance: 40 });
     return { ...box, x: r.x, y: r.y };
   };
-  // Undo on the PDF: the boxes, plus the form as it was (a paste also adds fields), so both come back together.
-  type Snapshot = { mapping: PdfMapping; definition: FormDefinition };
+  // Undo on the PDF: the boxes, plus the form only for actions that changed it too (a paste adds fields), so both
+  // come back together and an undo of a box move never rolls back a field edited since.
+  type Snapshot = { mapping: PdfMapping; definition?: FormDefinition };
   const history = useRef<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -131,8 +132,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
   const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
   const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
-  const pushHistory = () => {
-    history.current.past = [...history.current.past.slice(-49), now()];
+  const pushHistory = (withDefinition = false) => {
+    history.current.past = [...history.current.past.slice(-49), now(withDefinition)];
     history.current.future = [];
   };
   /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
@@ -170,7 +171,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     if (onTransform) {
       let added = copies;
       // Ctrl+Z here restores the boxes; the editor then drops the copied field, which has no box left.
-      pushHistory();
+      pushHistory(true);
       onTransform((def, stamps) => {
         const { def: d, out } = cloneAll(def);
         added = out;
@@ -380,7 +381,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const latest = useRef(mapping);
   const latestDef = useRef(definition);
   useEffect(() => { latest.current = mapping; latestDef.current = definition; });
-  const now = (): Snapshot => ({ mapping: latest.current, definition: latestDef.current });
+  const now = (withDefinition: boolean): Snapshot => ({ mapping: latest.current, ...(withDefinition ? { definition: latestDef.current } : {}) });
   const textsRef = useRef(texts);
   useEffect(() => { textsRef.current = texts; });
 
@@ -393,7 +394,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
   /** Go back (or forward) to a snapshot: the form too when it changed since, as one editor step. */
   function restore(to: Snapshot) {
-    if (onTransform && to.definition !== latestDef.current) onTransform(() => ({ def: to.definition, stamps: to.mapping.stamps }));
+    if (onTransform && to.definition) { const def = to.definition; onTransform(() => ({ def, stamps: to.mapping.stamps })); }
     else onMappingChange(to.mapping);
   }
   function undo() {
@@ -401,7 +402,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const prev = h.past.at(-1);
     if (!prev) return;
     h.past = h.past.slice(0, -1);
-    h.future = [now(), ...h.future];
+    h.future = [now(!!prev.definition), ...h.future];
     restore(prev);
     select(null);
   }
@@ -410,7 +411,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const next = h.future[0];
     if (!next) return;
     h.future = h.future.slice(1);
-    h.past = [...h.past, now()];
+    h.past = [...h.past, now(!!next.definition)];
     restore(next);
   }
   function paste() {

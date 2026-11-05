@@ -165,3 +165,22 @@ test("a pasted box undoes and redoes together with its new field", async ({ page
   await expect.poll(async () => (await stamps()).length).toBe(2);
   expect(await fieldIds()).toContain(copied); // the box never points at a field that is gone
 });
+
+test("undoing a box move keeps a field edited after it", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { x: number }[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  const box = page.locator("[data-stamp]").first();
+  const x0 = (await stamps())[0]!.x;
+  await box.click();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0 - 10, 1);
+  const label = page.getByRole("region", { name: "הגדרות השדה" }).getByLabel("שם השדה (מה שהממלא רואה)");
+  await label.fill("שם שנערך");
+  await box.click();
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0, 1); // the move is undone
+  await expect(label).toHaveValue("שם שנערך"); // the label edited after it stays
+});
