@@ -81,6 +81,22 @@ export const organizations = pgTable("organizations", {
   /** Secretariat and bookkeeping addresses: recipients the e-mail triggers can choose (see triggers.ts). */
   secretariatEmails: jsonb("secretariat_emails").$type<string[]>().notNull().default([]),
   bookkeepingEmails: jsonb("bookkeeping_emails").$type<string[]>().notNull().default([]),
+  /** This organization's value for each field of `organizationFieldDefs`, by key. A key with no value is blank. */
+  fieldValues: jsonb("field_values").$type<Record<string, string>>().notNull().default({}),
+  ...timestamps,
+});
+
+/**
+ * The organizations' own identifying fields ("מספר תיק ניכויים", "מספר חוזה"…): one definition for the whole
+ * system, so a form can carry the field whichever organization starts the route, and every organization fills in
+ * its own value (`organizations.fieldValues`). A form field pre-filled from `org.fields.<key>` shows it read-only.
+ */
+export const organizationFieldDefs = pgTable("organization_field_defs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Stable key used in the forms (`org.fields.<key>`); never changes once forms point at it. */
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  order: integer("order").notNull().default(0),
   ...timestamps,
 });
 

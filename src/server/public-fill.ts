@@ -23,7 +23,7 @@ import { submit } from "./signing";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-export type PublicOrg = { id: string; name: string; slug: string | null; registrationNumber: string; primaryColor: string | null; logoFileId: string | null };
+export type PublicOrg = { id: string; name: string; slug: string | null; registrationNumber: string; primaryColor: string | null; logoFileId: string | null; fieldValues: Record<string, string> };
 
 export type PublicForm =
   | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; project: { id: string; name: string } | null; initialAnswers: Answers }
@@ -57,13 +57,13 @@ export async function publicForm(formId: string, orgSlug?: string | null, projec
   const start = publicStart(route.steps);
   if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
   const o = which.org;
-  const org: PublicOrg = { id: o.id, name: o.name, slug: o.slug, registrationNumber: o.registrationNumber, primaryColor: o.primaryColor, logoFileId: o.logoFileId };
+  const org: PublicOrg = { id: o.id, name: o.name, slug: o.slug, registrationNumber: o.registrationNumber, primaryColor: o.primaryColor, logoFileId: o.logoFileId, fieldValues: o.fieldValues ?? {} };
   const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
   const role = publicRole(route.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
   const definition = lockOrgFields(viewFor(role));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
-  const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber }, {});
+  const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, {});
   return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, project, initialAnswers };
 }
 
@@ -87,7 +87,7 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
   if (!view.ok) return { ok: false, error: view.reason };
   const org = view.org;
   // The organization comes from the link, never from what was sent.
-  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber }, rawInput);
+  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, rawInput);
   // Check before anything is created, so a form with mistakes leaves nothing behind.
   const check = validateAnswers(view.definition, input, { role: view.role });
   if (!check.ok) return { ok: false, errors: check.errors };

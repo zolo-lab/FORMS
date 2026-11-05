@@ -60,6 +60,8 @@ export interface FormEditorProps {
   needsPdf?: boolean;
   /** Saved groups, offered as an option source for dropdowns ("the requester picks the approver"). */
   groups?: { id: string; name: string }[];
+  /** The organizations' own fields, offered in "מילוי אוטומטי" (filled from the request's organization). */
+  orgFields?: { key: string; label: string }[];
   /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
   flow?: {
     packageId: string;
@@ -86,7 +88,7 @@ export interface FormEditorProps {
 /** A draft as the server takes it (without the editor's own keys). */
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], flow, linkOrgs = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -592,6 +594,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   field={selectedField}
                   stamps={pdf?.mapping.stamps}
                   groups={groups}
+                  orgFields={orgFields}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onDefChange={(d) => commit(d)}

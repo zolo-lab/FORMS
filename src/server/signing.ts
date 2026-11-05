@@ -140,7 +140,7 @@ export async function submit(token: string, input: Answers, cookieHeader: string
   if (ctx.state !== "ok") return { ok: false, state: ctx.state };
   if (!otpPassed(ctx, cookieHeader)) return { ok: false, state: "otp_required" };
   // The organization's fields carry the request's organization, whatever the browser sent.
-  const mine = withOrgFields(ctx.definition, { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber }, ownAnswers(ctx.definition, input));
+  const mine = withOrgFields(ctx.definition, { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber, fields: ctx.org.fieldValues }, ownAnswers(ctx.definition, input));
   // Conditions may depend on earlier steps' answers, so validate against everything known.
   const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role });
   if (!result.ok) return { ok: false, errors: result.errors };
