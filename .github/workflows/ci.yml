@@ -9,7 +9,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     env:
-      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_API_KEY: ${{ secrets.NEON }}
       NEON_PROJECT_ID: damp-wildflower-79510538
       NEON_BRANCH: ci-${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
@@ -25,7 +25,7 @@ jobs:
       # No lockfile is committed yet (dev environment has no npm access); versions are pinned in package.json.
       - run: pnpm install --no-frozen-lockfile
       # Isolated database for this run: a Neon branch copied from dev, shared by the unit tests and e2e of this run
-      # and deleted by the `db-cleanup` job. Without the NEON_API_KEY secret, both jobs fall back to the shared dev DB.
+      # and deleted by the `db-cleanup` job. Without the NEON secret, both jobs fall back to the shared dev DB.
       - name: Branch expiry (safety net if cleanup never runs)
         if: env.NEON_API_KEY != ''
         id: expiry
@@ -78,7 +78,7 @@ jobs:
       group: ${{ needs.check.outputs.isolated == 'true' && format('e2e-{0}-{1}', github.run_id, github.run_attempt) || 'e2e-dev-db' }}
       cancel-in-progress: false
     env:
-      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_API_KEY: ${{ secrets.NEON }}
       NEON_PROJECT_ID: damp-wildflower-79510538
       NEON_BRANCH: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -123,7 +123,7 @@ jobs:
     steps:
       - uses: neondatabase/delete-branch-action@v3
         with:
-          api_key: ${{ secrets.NEON_API_KEY }}
+          api_key: ${{ secrets.NEON }}
           project_id: damp-wildflower-79510538
           branch: ci-${{ github.run_id }}-${{ github.run_attempt }}
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
