@@ -14,22 +14,13 @@ import { currentUser, listAllOrgAccess, listAllPermissions, listAllProjectAccess
 import { impersonateAction } from "@/app/admin/settings/users/actions";
 import { saveUserAction } from "../actions";
 import { RoleFields } from "./RoleFields";
+import { UserForm } from "./UserForm";
 
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = {
-  name: "יש להזין שם",
-  email: "כתובת המייל לא תקינה",
-  phone: "מספר הטלפון לא תקין",
-  exists: "כבר יש משתמש עם המייל הזה",
-  self: "אי אפשר להוריד מעצמך את סוג אדמין או להפוך את עצמך ללא פעיל",
-  orgs: "בחרת \"רק המסומנים\" בלי לסמן אף עמותה או עסק",
-  input: "קלט לא תקין",
-};
-
-export default async function UserPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
+export default async function UserPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved } = await searchParams;
   const me = await currentUser();
   if (!isAdmin(me)) redirect("/admin/inbox");
   const isNew = id === "new";
@@ -54,9 +45,7 @@ export default async function UserPage({ params, searchParams }: { params: Promi
         <Link href="/admin/users" className="text-sm text-muted-foreground hover:text-foreground">→ כל המשתמשים</Link>
         <h1 className="text-2xl font-bold tracking-tight">{isNew ? "משתמש חדש" : user!.name}</h1>
       </div>
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? ERRORS.input}</p>}
-
-      <form action={saveUserAction} className="space-y-5">
+      <UserForm action={saveUserAction} saved={!!saved} submitLabel={isNew ? "יצירת המשתמש" : "שמירה"}>
         <input type="hidden" name="id" value={isNew ? "" : id} />
         <Card className="space-y-4 p-4 sm:p-6">
           <h2 className="text-lg font-semibold">פרטים</h2>
@@ -155,11 +144,7 @@ export default async function UserPage({ params, searchParams }: { params: Promi
           </Card>
         </RoleFields>
 
-        <div className="sticky bottom-0 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur">
-          <SubmitButton saved={!!saved}>{isNew ? "יצירת המשתמש" : "שמירה"}</SubmitButton>
-          <Link href="/admin/users" className="inline-flex h-10 items-center px-4 text-sm text-muted-foreground hover:text-foreground">ביטול</Link>
-        </div>
-      </form>
+      </UserForm>
 
       {user && user.active && user.id !== me?.id && (
         <form action={impersonateAction} className="border-t pt-4">
