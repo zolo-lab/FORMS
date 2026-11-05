@@ -1,7 +1,7 @@
 "use client";
 import type { PickMode } from "@/lib/forms/pick-mode";
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FieldType } from "@/lib/forms/field-types";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -48,12 +48,18 @@ function readDrop(e: React.DragEvent): { type?: FieldType; fieldId?: string } {
 
 export function Canvas(p: CanvasProps) {
   const [over, setOver] = useState<string | null>(null);
+  // Dragging a field (or a new type from the palette) over a row: a line shows where it will land, above or below it.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ page: number; index: number } | null>(null);
+  const endDrag = () => { setDragging(null); setDropAt(null); setOver(null); };
+  const line = (page: number, index: number) =>
+    dropAt?.page === page && dropAt.index === index ? <div aria-hidden className="pointer-events-none my-0.5 h-1 rounded-full bg-primary" /> : <div className="h-1.5" />;
   const zone = (page: number, index: number, key: string, children?: React.ReactNode) => (
     <div
       key={key}
-      onDragOver={(e) => { e.preventDefault(); setOver(key); }}
+      onDragOver={(e) => { e.preventDefault(); setOver(key); setDropAt(null); }}
       onDragLeave={() => setOver((o) => (o === key ? null : o))}
-      onDrop={(e) => { e.preventDefault(); setOver(null); p.onDropAt(page, index, readDrop(e)); }}
+      onDrop={(e) => { e.preventDefault(); endDrag(); p.onDropAt(page, index, readDrop(e)); }}
       className={cn("rounded-md transition-colors", over === key ? "bg-primary/15 ring-2 ring-primary" : "")}
     >
       {children}
@@ -96,12 +102,26 @@ export function Canvas(p: CanvasProps) {
                 const picked = picking && p.pick!.ids.has(f.id);
                 return (
                   <div key={f.id}>
-                    {zone(pi, fi, `before-${f.id}`, <div className="h-2" />)}
+                    {line(pi, fi)}
                     <div
-                      draggable={!selected}
-                      onDragStart={(e) => { e.dataTransfer.setData(DRAG_FIELD, f.id); e.dataTransfer.effectAllowed = "move"; }}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData(DRAG_FIELD, f.id); e.dataTransfer.effectAllowed = "move"; setDragging(f.id); }}
+                      onDragEnd={endDrag}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        const index = e.clientY < r.top + r.height / 2 ? fi : fi + 1;
+                        if (dropAt?.page !== pi || dropAt.index !== index) setDropAt({ page: pi, index });
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const at = dropAt;
+                        endDrag();
+                        if (at) p.onDropAt(at.page, at.index, readDrop(e));
+                      }}
                       className={cn(
                         "flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity",
+                        dragging === f.id && "opacity-40",
                         selected && !p.pick && "border-primary ring-2 ring-primary/40",
                         !p.pick && inFocus && "border-2 border-primary bg-primary/10",
                         !p.pick && outOfFocus && "opacity-40 hover:opacity-100",
@@ -119,6 +139,9 @@ export function Canvas(p: CanvasProps) {
                           aria-label={`${f.label || "השדה"} ${p.pick!.checkLabel ?? "נפתח מהשדה המסומן"}`}
                         />
                       )}
+                      <span title="גררו כדי להזיז (או בחצים)" className="flex h-9 w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing">
+                        <GripVertical className="size-4" aria-hidden />
+                      </span>
                       {isSource && <span className="shrink-0 rounded bg-success/20 px-1.5 py-0.5 text-xs font-medium text-success">המקור</span>}
                       <button type="button" onClick={() => p.onSelect({ kind: "field", id: f.id })} className="flex min-w-0 flex-1 items-center gap-2 text-start" aria-pressed={selected}>
                         <FieldIcon type={f.type} className="size-4 shrink-0 text-muted-foreground" />
@@ -162,6 +185,7 @@ export function Canvas(p: CanvasProps) {
                   </div>
                 );
               })}
+              {page.fields.length > 0 && line(pi, page.fields.length)}
               {page.fields.length > 0 && zone(pi, page.fields.length, `end-${pi}`, <div className="h-6" />)}
             </div>
           </section>

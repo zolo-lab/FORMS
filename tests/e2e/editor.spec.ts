@@ -55,3 +55,22 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await page.getByRole("button", { name: "לסיכום" }).click();
   await expect(page.getByRole("heading", { name: "בדקו את התשובות" })).toBeVisible();
 });
+
+test("fields are reordered by dragging a row onto another", async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page, "/admin/forms");
+  await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
+  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openPalette(page);
+  for (const label of ["ראשון", "שני", "שלישי"]) {
+    await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
+    await page.locator('[aria-label="עריכה מהירה"]').getByLabel("תווית השדה").fill(label);
+  }
+  const rows = page.locator("[draggable=true]");
+  const labels = async () => (await rows.locator("span.block.truncate.text-sm").allTextContents()).map((t) => t.replace("*", "").trim());
+  await expect.poll(labels).toEqual(["ראשון", "שני", "שלישי"]);
+  // Drop "שלישי" on the upper half of "ראשון": it goes first.
+  const first = rows.filter({ hasText: "ראשון" });
+  await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 4 } });
+  await expect.poll(labels).toEqual(["שלישי", "ראשון", "שני"]);
+});
