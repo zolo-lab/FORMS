@@ -39,6 +39,7 @@ import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
 import { requestVars, triggersFor, type Triggers } from "./mail-triggers";
 import { addPeople } from "@/lib/notifications/triggers";
+import { deleteStoredFiles, fileIdsOfRequests } from "./request-files";
 import { detailsLines, highlightsOf, identifierOf, type Highlights } from "@/lib/forms/highlights";
 import type { FormDefinition } from "@/lib/forms/schema";
 import { COMPLETION_DOCS_KEY, completionTargets } from "@/lib/notifications/completion";
@@ -570,10 +571,16 @@ export async function cancelRequest(requestId: string, reason: string, actor: { 
 }
 
 /** Cron: expire requests whose deadline passed. */
-/** Removes a request and everything under it (steps, links, answers, signatures, documents, events). Cannot be undone. */
+/**
+ * Removes a request and everything under it (steps, links, answers, signatures, documents, events), and the
+ * stored files it owns — those are referenced by plain id, so nothing in the database would take them along.
+ * Cannot be undone.
+ */
 export async function deleteRequest(requestId: string) {
+  const fileIds = await fileIdsOfRequests([requestId]);
   const gone = await db.delete(requests).where(eq(requests.id, requestId)).returning({ id: requests.id });
   if (!gone.length) throw new Error("request not found");
+  await deleteStoredFiles(fileIds);
 }
 
 export async function expireOverdue(now = new Date()) {
