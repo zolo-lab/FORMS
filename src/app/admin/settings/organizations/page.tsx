@@ -11,7 +11,7 @@ import { OrgTheme } from "@/components/branding";
 import { normalizeHex } from "@/lib/branding";
 import { listOrgFieldDefs, listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
 import { ORG_ERRORS } from "@/lib/orgs/input";
-import { createOrgAction, createOrgFieldAction, createProjectAction, deleteOrgFieldAction, deleteProjectAction, renameOrgFieldAction, saveOrgFieldValuesAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
+import { createOrgAction, createOrgFieldAction, createProjectAction, deleteOrgFieldAction, deleteProjectAction, saveOrgFieldsAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
 import { OrgsTable } from "./OrgsTable";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       </div>
       {errorText && !edit && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
       {saved === "bulk" && <p role="status" className="text-sm text-success">נשמר.</p>}
+      {saved === "orgfields" && <p role="status" className="text-sm text-success">שדות העמותה נשמרו.</p>}
 
       <OrgsTable rows={rows} editing={edit} />
 
@@ -151,59 +152,58 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                   בבונה הטפסים אפשר לבחור אותו ב&quot;מילוי מראש&quot;: הוא יוצג לקריאה בלבד ויתמלא לפי העמותה שממנה יצאה הבקשה.
                 </p>
               </div>
-              {orgFields.length > 0 && (
-                <div className="overflow-hidden rounded-lg border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-xs text-muted-foreground">
-                      <tr>
-                        <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה (בכל העמותות)</th>
-                        <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
-                        <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orgFields.map((f) => (
-                        <tr key={f.id} className="border-t">
-                          <td className="px-3 py-1.5">
-                            <AutoSaveForm action={renameOrgFieldAction} errors={ERRORS}>
-                              <input type="hidden" name="id" value={f.id} />
-                              <Input name="label" defaultValue={f.label} required maxLength={120} aria-label={`שם השדה – ${f.label}`} className="h-9" />
-                            </AutoSaveForm>
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <Input
-                              form={`orgfields-${o.id}`}
-                              name={`f.${f.key}`}
-                              defaultValue={(o.fieldValues ?? {})[f.key] ?? ""}
-                              maxLength={200}
-                              aria-label={`${f.label} – ${o.name}`}
-                              className="h-9"
-                            />
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <form action={deleteOrgFieldAction}>
-                              <input type="hidden" name="id" value={f.id} />
-                              <input type="hidden" name="org" value={o.id} />
-                              <SubmitButton size="icon" variant="ghost" className="text-destructive" aria-label={`מחיקת השדה ${f.label} מכל העמותות`} title="מחיקה מכל העמותות">
+              {/* One explicit save for the whole section: nothing here is written until the admin asks for it. */}
+              <form action={saveOrgFieldsAction} id={`orgfields-${o.id}`} className="space-y-3">
+                <input type="hidden" name="id" value={o.id} />
+                {orgFields.length > 0 && (
+                  <div className="overflow-hidden rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה (בכל העמותות)</th>
+                          <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
+                          <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orgFields.map((f) => (
+                          <tr key={f.id} className="border-t">
+                            <td className="px-3 py-1.5">
+                              <Input name={`label.${f.id}`} defaultValue={f.label} required maxLength={120} aria-label={`שם השדה – ${f.label}`} className="h-9" />
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <Input name={`f.${f.key}`} defaultValue={(o.fieldValues ?? {})[f.key] ?? ""} maxLength={200} aria-label={`${f.label} – ${o.name}`} className="h-9" />
+                            </td>
+                            <td className="px-3 py-1.5">
+                              {/* Its own form: deleting must not go through the save button. */}
+                              <SubmitButton
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive"
+                                formAction={deleteOrgFieldAction}
+                                formNoValidate
+                                name="delete"
+                                value={f.id}
+                                aria-label={`מחיקת השדה ${f.label} מכל העמותות`}
+                                title="מחיקה מכל העמותות"
+                              >
                                 <Trash2 className="size-4" aria-hidden />
                               </SubmitButton>
-                            </form>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {/* The values of this organization save together, as the projects table does. */}
-              <AutoSaveForm id={`orgfields-${o.id}`} action={saveOrgFieldValuesAction} errors={ERRORS}>
-                <input type="hidden" name="id" value={o.id} />
-              </AutoSaveForm>
-              {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
+                {orgFields.length > 0 && <SubmitButton>שמירת השדות וסגירה</SubmitButton>}
+              </form>
+
               <form action={createOrgFieldAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="org" value={o.id} />
-                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor="new-orgfield">
-                  <Input id="new-orgfield" name="label" required maxLength={120} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
+                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
+                  <Input id={`new-orgfield-${o.id}`} name="label" required maxLength={120} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
                 </Field>
                 <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספת שדה</SubmitButton>
               </form>
