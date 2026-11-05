@@ -56,6 +56,10 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await expect(page.getByRole("heading", { name: "בדקו את התשובות" })).toBeVisible();
 });
 
+// Dragging is a desktop gesture (phones keep the up/down arrows), so this one runs on a desktop screen.
+test.describe("drag on desktop", () => {
+  test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false });
+
 test("fields are reordered by dragging a row onto another", async ({ page }) => {
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
@@ -73,4 +77,5 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   const first = rows.filter({ hasText: "ראשון" });
   await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 8 } });
   await expect.poll(labels).toEqual(["שלישי", "ראשון", "שני"]);
+});
 });
