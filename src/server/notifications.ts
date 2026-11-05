@@ -176,7 +176,17 @@ export async function deliverQueued(limit = 20, now = new Date()): Promise<{ sen
         let body = n.body;
         let html = n.html;
         let attachments: Attachment[] = [];
-        if (n.templateKey === COMPLETION_DOCS_KEY && n.requestId) {
+        // "עיבוד טופס" mails carry the files their destination chose, named on the row itself.
+        if (n.attachFileIds?.length) {
+          const loaded: { filename: string; bytes: Uint8Array; size: number }[] = [];
+          for (const id of n.attachFileIds) {
+            const f = await getFile(id);
+            if (f) loaded.push({ filename: safeFileName(f.name), bytes: f.bytes, size: f.bytes.length });
+          }
+          const picked = pickAttachments(loaded);
+          attachments = picked.attached.map((f) => ({ filename: f.filename, content: Buffer.from(f.bytes).toString("base64") }));
+          if (picked.skipped) body += `\n(${picked.skipped} קבצים גדולים מדי לצירוף – אפשר להוריד אותם מהמערכת.)`;
+        } else if (n.templateKey === COMPLETION_DOCS_KEY && n.requestId) {
           const a = await completionAttachments(n.requestId);
           attachments = a.files;
           if (a.skipped) {

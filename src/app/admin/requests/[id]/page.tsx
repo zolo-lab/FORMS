@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { canSeeRequest, currentUser } from "@/server/users-store";
 import { hasGrant } from "@/lib/auth/permissions";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
+import { RetryDelivery } from "@/components/requests/RetryDelivery";
+import { requestDeliveries } from "@/server/deliver";
 import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
@@ -38,6 +40,8 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const files = await uploadedFiles(id);
   // Parts cut out of the signed documents ("עיבוד טופס"), shown under the document they came from.
   const parts = await requestParts(id);
+  // Where each document and part was sent ("עיבוד טופס").
+  const deliveries = await requestDeliveries(id);
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
   const openSteps = steps.filter((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
@@ -169,6 +173,29 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             <p className="text-xs text-muted-foreground">ארכיון Drive כבוי: {driveProblem()}.</p>
           )}
           {driveEnabled() && documents.every((d) => d.finalFileId) && documents.some((d) => !d.driveUrl) && <FinalizeButton requestId={request.id} label="העלאה לארכיון ב-Drive" />}
+
+          {deliveries.length > 0 && (
+            <section className="space-y-2" aria-labelledby="deliveries-h">
+              <h3 id="deliveries-h" className="font-semibold">עיבוד: לאן נשלח</h3>
+              <Card className="divide-y">
+                {deliveries.map((d) => (
+                  <div key={d.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                    <span className={d.status === "failed" ? "text-destructive" : "text-success"} aria-hidden>{d.status === "failed" ? "✕" : "✓"}</span>
+                    <span className="font-medium">{d.target}</span>
+                    <span className="text-xs text-muted-foreground">{d.documentIds.length} קבצים</span>
+                    {d.url && <a className="text-primary hover:underline" href={d.url} target="_blank" rel="noopener noreferrer">פתיחה</a>}
+                    <span className="text-xs text-muted-foreground">{fmt.format(d.createdAt)}</span>
+                    {d.status === "failed" && (
+                      <>
+                        <span className="text-xs text-destructive">{d.error}</span>
+                        <span className="ms-auto"><RetryDelivery requestId={request.id} destinationId={d.destinationId} /></span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </Card>
+            </section>
+          )}
         </section>
       )}
 
