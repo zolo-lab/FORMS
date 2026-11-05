@@ -205,7 +205,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor="new-orgfield">
                   <Input id="new-orgfield" name="label" required maxLength={120} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
                 </Field>
-                <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספה</SubmitButton>
+                <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספת שדה</SubmitButton>
               </form>
             </section>
 
