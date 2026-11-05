@@ -23,7 +23,6 @@ export async function canReadFile(fileId: string): Promise<boolean> {
   if (isTrackOnly(user)) return false;
   const scope = await viewerScope();
   const tied = or(
-    // Parts are intentionally NOT excluded here: a file cut out by "עיבוד טופס" belongs to the request too.
     exists(db.select({ one: sql`1` }).from(packageDocuments).where(and(eq(packageDocuments.requestId, requests.id), eq(packageDocuments.finalFileId, fileId)))),
     exists(
       db

@@ -4,7 +4,6 @@ import { and, asc, desc, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL 
 import { db, schema } from "@/db";
 import { PAGE_SIZE, daysSince, median, progress, type RequestFilters } from "@/lib/requests/list";
 import type { visibilityScope } from "@/lib/auth/permissions";
-import { ownDocuments } from "./package-docs";
 
 /** `null` = everything (admin / no sign-in); otherwise what `visibilityScope` allows. */
 export type Scope = ReturnType<typeof visibilityScope>;
@@ -251,7 +250,7 @@ export async function requestDocumentView(requestId: string) {
     })
     .from(schema.packageDocuments)
     .innerJoin(schema.formTemplateVersions, eq(schema.packageDocuments.templateVersionId, schema.formTemplateVersions.id))
-    .where(ownDocuments(requestId))
+    .where(eq(schema.packageDocuments.requestId, requestId))
     .orderBy(asc(schema.packageDocuments.order));
   return docs.map((d) => ({
     id: d.id,

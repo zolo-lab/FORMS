@@ -170,7 +170,6 @@ export async function getPdfFile(id: string | null) {
 /** Requests that used any version of each form (a request is counted once per form). */
 export async function requestCountsByTemplate(): Promise<Map<string, number>> {
   const rows = await db
-    // A part shares its parent's version and request, so selectDistinct already collapses it: no filter needed.
     .selectDistinct({ templateId: formTemplateVersions.templateId, requestId: packageDocuments.requestId })
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(packageDocuments.templateVersionId, formTemplateVersions.id));

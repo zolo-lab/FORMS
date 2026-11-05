@@ -17,7 +17,6 @@ import { summaryItems, summaryPdf } from "@/lib/pdf/summary";
 import { archivePdf, driveEnabled } from "./drive";
 import { collectedAnswers } from "./requests-store";
 import { getFile, putFile, sha256Hex } from "./storage";
-import { ownDocuments } from "./package-docs";
 
 const { requests, packageDocuments, formTemplateVersions, formTemplates, signingSteps, organizations, pdfFiles } = schema;
 
@@ -27,8 +26,7 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
   if (req.status !== "completed") throw new Error(`request is ${req.status}, not completed`);
   const [org] = await db.select().from(organizations).where(eq(organizations.id, req.organizationId));
   const steps = await db.select().from(signingSteps).where(eq(signingSteps.requestId, requestId)).orderBy(asc(signingSteps.order), asc(signingSteps.createdAt));
-  // Parts cut by "עיבוד טופס" are finished files already: finalizing one would stamp it as a whole document.
-  const docs = await db.select().from(packageDocuments).where(ownDocuments(requestId)).orderBy(asc(packageDocuments.order));
+  const docs = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId)).orderBy(asc(packageDocuments.order));
   const answers = await collectedAnswers(requestId);
   const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
   const signedAt = times.length ? new Date(Math.max(...times)) : new Date();

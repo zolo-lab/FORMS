@@ -11,7 +11,6 @@ import { getSmsProvider } from "@/server/sms/provider";
 import { getFile } from "@/server/storage";
 import { COMPLETION_DOCS_KEY, pickAttachments, uploadedFiles } from "@/lib/notifications/completion";
 import { keepWanted } from "@/server/user-notification-prefs";
-import { ownDocuments } from "./package-docs";
 
 const { notifications, organizations, packageDocuments, formTemplateVersions, formTemplates } = schema;
 
@@ -110,7 +109,7 @@ async function completionAttachments(requestId: string): Promise<{ files: Attach
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
-    .where(ownDocuments(requestId))
+    .where(eq(packageDocuments.requestId, requestId))
     .orderBy(asc(packageDocuments.order));
   const loaded: { filename: string; bytes: Uint8Array; size: number }[] = [];
   for (const d of docs) {

@@ -15,7 +15,6 @@ import { describeTarget, filesForDestination, recipientsFor, skipReason, type Pe
 import type { CutPart, Destination } from "@/lib/processing/types";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
-import { ownDocuments } from "./package-docs";
 import { triggersFor } from "./mail-triggers";
 import { driveProblem, uploadToFolders } from "./drive";
 import { resolveFileName, resolvePath, type PathContext } from "@/lib/processing/path";
@@ -61,7 +60,7 @@ async function requestFiles(requestId: string, answers: Answers, parts: CutPart[
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
     .leftJoin(schema.pdfFiles, eq(schema.pdfFiles.id, formTemplateVersions.pdfFileId))
-    .where(ownDocuments(requestId))
+    .where(eq(packageDocuments.requestId, requestId))
     .orderBy(asc(packageDocuments.order));
 
   // A part is not a document of the request: it is a cut of one, made on the way out and never stored as a row.
