@@ -6,6 +6,8 @@ import { allFields, parseFormDefinition, type FormDefinition } from "@/lib/forms
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { formPackageId, getPackage, syncFormPackage } from "./packages-store";
 import { unassignedFields } from "@/lib/workflow/step-fields";
+import { deleteStoredFiles, fileIdsOfRequests } from "./request-files";
+import { fileIdInUrl } from "@/lib/requests/file-ids";
 
 const { formTemplates, formTemplateVersions, pdfFiles, packageDocuments, packageTemplateItems, requests, webhooks } = schema;
 
@@ -179,8 +181,8 @@ export async function requestCountsByTemplate(): Promise<Map<string, number>> {
 }
 
 /**
- * Deletes a form for good: its versions, the requests that used it (with their steps, signatures and history),
- * its place in packages, its webhooks, and its PDFs that no other form uses. Writes are sequential (neon-http);
+ * Deletes a form for good: its versions, the requests that used it (with their steps, signatures, history and
+ * stored files), its place in packages, its webhooks, and its PDFs that no other form uses — bytes included. Writes are sequential (neon-http);
  * the request rows go first so nothing is left pointing at a deleted version.
  */
 export async function deleteTemplate(templateId: string): Promise<{ requests: number }> {
@@ -197,7 +199,10 @@ export async function deleteTemplate(templateId: string): Promise<{ requests: nu
       .where(inArray(packageDocuments.templateVersionId, versionIds));
     requestIds = docs.map((d) => d.requestId);
   }
+  // The files those requests own are referenced by plain id, so they are collected before the rows go.
+  const requestFileIds = await fileIdsOfRequests(requestIds);
   if (requestIds.length) await db.delete(requests).where(inArray(requests.id, requestIds));
+  await deleteStoredFiles(requestFileIds);
   // The form's own signing route and settings go with it (its requests were deleted above).
   const ownPkg = await formPackageId(templateId);
   const [used] = await db.select({ id: requests.id }).from(requests).where(eq(requests.packageTemplateId, ownPkg)).limit(1);
@@ -213,7 +218,12 @@ export async function deleteTemplate(templateId: string): Promise<{ requests: nu
       .where(inArray(formTemplateVersions.pdfFileId, pdfIds));
     const used = new Set(stillUsed.map((r) => r.id));
     const orphans = pdfIds.filter((id) => !used.has(id));
-    if (orphans.length) await db.delete(pdfFiles).where(inArray(pdfFiles.id, orphans));
+    if (orphans.length) {
+      // A pdf_files row only points at its bytes by url, so its stored file goes with it or stays for good.
+      const rows = await db.select({ blobUrl: pdfFiles.blobUrl }).from(pdfFiles).where(inArray(pdfFiles.id, orphans));
+      await db.delete(pdfFiles).where(inArray(pdfFiles.id, orphans));
+      await deleteStoredFiles(rows.map((r) => fileIdInUrl(r.blobUrl)).filter((id): id is string => !!id));
+    }
   }
   return { requests: requestIds.length };
 }
