@@ -5,7 +5,7 @@ import { allFields, type FormDefinition, type FormField } from "./schema";
 export interface PrefillSubject {
   name: string;
   /** The organization of the request (from its link, or chosen when the request was opened). */
-  org?: { name: string; registrationNumber?: string | null } | null;
+  org?: { name: string; registrationNumber?: string | null; fields?: Record<string, string> | null } | null;
   idNumber?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -22,6 +22,18 @@ export const PREFILL_KEYS = [
   { key: "org.name", label: "שם העמותה (לפי הקישור)" },
   { key: "org.registrationNumber", label: "ח\"פ / מספר העמותה" },
 ] as const;
+
+/** The prefix of the organizations’ own fields, defined by an admin: `org.fields.<key>`. */
+export const ORG_FIELD_PREFIX = "org.fields.";
+
+/** The key of an organization field, or undefined when this is not one. */
+export const orgFieldKey = (prefill: string | undefined): string | undefined =>
+  prefill?.startsWith(ORG_FIELD_PREFIX) ? prefill.slice(ORG_FIELD_PREFIX.length) : undefined;
+
+/** The prefill list a builder shows: the fixed keys plus the organizations’ own fields. */
+export function prefillKeys(orgFields: { key: string; label: string }[] = []): { key: string; label: string }[] {
+  return [...PREFILL_KEYS, ...orgFields.map((f) => ({ key: `${ORG_FIELD_PREFIX}${f.key}`, label: `${f.label} (שדה של העמותה)` }))];
+}
 
 /**
  * Fields with these ids are the organization's fields: they fill themselves from the request's organization (as if
@@ -59,8 +71,11 @@ function valueFor(key: string, type: string, s: PrefillSubject): unknown {
       return s.org?.name.trim() || undefined;
     case "org.registrationNumber":
       return s.org?.registrationNumber?.trim() || undefined;
-    default:
-      return undefined;
+    default: {
+      // The organizations' own fields: the value this organization filled in, if any.
+      const k = orgFieldKey(key);
+      return k ? s.org?.fields?.[k]?.trim() || undefined : undefined;
+    }
   }
 }
 

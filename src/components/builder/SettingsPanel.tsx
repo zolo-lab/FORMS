@@ -1,7 +1,7 @@
 "use client";
 import { StepChecks, type StepView } from "./StepSelect";
 import { useState } from "react";
-import { PREFILL_KEYS } from "@/lib/forms/prefill";
+import { prefillKeys } from "@/lib/forms/prefill";
 import { copySourceInForm } from "@/lib/forms/copy";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { allFields, type FieldOption, type FieldValidation, type FormDefinition,
 import { FIELD_STYLE_OPTIONS, cleanStyle, fieldStyleClass, type FieldStyle } from "@/lib/forms/field-style";
 import { cn } from "@/lib/utils";
 import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
+import { isOrgField } from "@/lib/forms/prefill";
 import { TODAY } from "@/lib/forms/defaults";
 import { STANDARD_FIELD_IDS } from "@/lib/forms/standard-ids";
 import { GROUP_SOURCE_PREFIX, groupIdOfSource } from "@/lib/workflow/assignee";
@@ -180,9 +181,11 @@ function LinkToBox({ def, field, stamps, onPatch }: { def: FormDefinition; field
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [],
+  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [], orgFields = [],
 }: {
   def: FormDefinition;
+  /** The organizations' own fields: choosing one fills the field from the request's organization, read-only. */
+  orgFields?: { key: string; label: string }[];
   /** The form's places on the PDF, to find the box a field belongs to ("קשר לתיבה שמעל"). */
   stamps?: PdfStamp[];
   field: FormField;
@@ -200,6 +203,7 @@ export function FieldSettings({
   onStartPick?: (sourceId: string) => void;
 }) {
   const meta = FIELD_TYPE_META[field.type];
+  const keys = prefillKeys(orgFields);
   const v: FieldValidation = field.validation ?? {};
   const setV = (patch: Partial<FieldValidation>) => {
     const next = { ...v, ...patch };
@@ -419,11 +423,14 @@ export function FieldSettings({
               <option value="">אוטומטי</option><option value="full">מלא</option><option value="half">חצי</option><option value="third">שליש</option>
             </Select>
           </Row>
-          <Row label="מילוי אוטומטי מנתוני העובד/הבקשה">
+          <Row
+            label="מילוי אוטומטי מנתוני העובד/הבקשה"
+            hint={isOrgField(field) ? "שדה של העמותה: המערכת ממלאת אותו לפי העמותה שממנה יצאה הבקשה, והוא מוצג לקריאה בלבד" : undefined}
+          >
             <Select aria-label="מילוי אוטומטי מנתוני העובד/הבקשה" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })}>
               <option value="">ללא</option>
-              {PREFILL_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-              {field.prefill && !PREFILL_KEYS.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
+              {keys.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+              {field.prefill && !keys.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
             </Select>
           </Row>
           <CopyFrom def={def} field={field} onPatch={onPatch} />

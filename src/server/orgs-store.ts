@@ -1,11 +1,12 @@
-import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { OrgInput } from "@/lib/orgs/input";
 import { projectSlug } from "@/lib/forms/public-link";
 import { labelKey } from "@/lib/forms/field-keys";
+import { orgFieldKeyFromLabel } from "@/lib/orgs/field-key";
 import { db, schema } from "@/db";
 import type { ReminderPolicy } from "@/lib/workflow/types";
 
-const { organizations, projects } = schema;
+const { organizations, organizationFieldDefs, projects } = schema;
 
 export async function listOrgs() {
   return db.select().from(organizations).orderBy(asc(organizations.name));
@@ -116,4 +117,56 @@ export async function deleteProject(id: string): Promise<{ ok: true } | { ok: fa
 
 export async function setOrgsActive(ids: string[], active: boolean) {
   if (ids.length) await db.update(organizations).set({ active }).where(inArray(organizations.id, ids));
+}
+
+// ───────────────────────── The organizations' own fields ─────────────────────────
+
+export type OrgFieldDef = typeof organizationFieldDefs.$inferSelect;
+
+/** Every organization field, in the order an admin put them in. */
+export async function listOrgFieldDefs(): Promise<OrgFieldDef[]> {
+  return db.select().from(organizationFieldDefs).orderBy(asc(organizationFieldDefs.order), asc(organizationFieldDefs.label));
+}
+
+/**
+ * Adds a field for ALL organizations at once: one definition, and every organization fills in its own value later.
+ * The key is derived from the label (so the forms can point at it) and must be free.
+ */
+export async function createOrgFieldDef(label: string): Promise<{ ok: true; key: string } | { ok: false; reason: "label" | "exists" }> {
+  const clean = label.trim();
+  if (!clean) return { ok: false, reason: "label" };
+  const key = orgFieldKeyFromLabel(clean);
+  const [dup] = await db.select({ id: organizationFieldDefs.id }).from(organizationFieldDefs).where(eq(organizationFieldDefs.key, key));
+  if (dup) return { ok: false, reason: "exists" };
+  const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(organizationFieldDefs);
+  await db.insert(organizationFieldDefs).values({ key, label: clean, order: Number(n) });
+  return { ok: true, key };
+}
+
+/** Renames a field for everyone. The key never changes, so forms pointing at it keep working. */
+export async function renameOrgFieldDef(id: string, label: string): Promise<boolean> {
+  const clean = label.trim();
+  if (!clean) return false;
+  await db.update(organizationFieldDefs).set({ label: clean, updatedAt: new Date() }).where(eq(organizationFieldDefs.id, id));
+  return true;
+}
+
+/** Drops a field everywhere, and the values the organizations filled in for it. */
+export async function deleteOrgFieldDef(id: string) {
+  const [row] = await db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
+  if (!row) return;
+  await db.delete(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
+  await db.update(organizations).set({ fieldValues: sql`${organizations.fieldValues} - ${row.key}` });
+}
+
+/** One organization's values, by key. Keys without a definition are dropped on the way in. */
+export async function setOrgFieldValues(id: string, values: Record<string, string>) {
+  const defs = await listOrgFieldDefs();
+  const known = new Set(defs.map((d) => d.key));
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(values)) {
+    const text = v.trim();
+    if (known.has(k) && text) clean[k] = text;
+  }
+  await db.update(organizations).set({ fieldValues: clean }).where(eq(organizations.id, id));
 }

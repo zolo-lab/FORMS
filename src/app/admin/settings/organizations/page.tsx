@@ -9,9 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgTheme } from "@/components/branding";
 import { normalizeHex } from "@/lib/branding";
-import { listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
+import { listOrgFieldDefs, listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
 import { ORG_ERRORS } from "@/lib/orgs/input";
-import { createOrgAction, createProjectAction, deleteProjectAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
+import { createOrgAction, createOrgFieldAction, createProjectAction, deleteOrgFieldAction, deleteProjectAction, renameOrgFieldAction, saveOrgFieldValuesAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
 import { OrgsTable } from "./OrgsTable";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,8 @@ export const dynamic = "force-dynamic";
 const ERRORS: Record<string, string> = {
   ...ORG_ERRORS,
   color: "צבע לא תקין (פורמט #RRGGBB)",
+  orgField: "יש להזין שם לשדה",
+  orgFieldExists: "כבר קיים שדה בשם הזה",
   email: "כתובת שולח לא תקינה",
   logo: "הלוגו חייב להיות PNG / JPG / WEBP עד 1MB",
 };
@@ -37,7 +39,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
 /** Organizations as a table; adding and editing (details, projects, branding, sender) in a centered window that saves itself. */
 export default async function OrganizationsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; edit?: string; n?: string }> }) {
   const { error, saved, edit, n } = await searchParams;
-  const [orgs, projects, usage] = await Promise.all([listOrgs(), listProjects(), projectUsage()]);
+  const [orgs, projects, usage, orgFields] = await Promise.all([listOrgs(), listProjects(), projectUsage(), listOrgFieldDefs()]);
   const rows = orgs.map((o) => ({
     id: o.id,
     name: o.name,
@@ -138,6 +140,72 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <input type="hidden" name="organizationId" value={o.id} />
                 <Field label="פרויקט חדש" htmlFor="new-proj"><Input id="new-proj" name="name" required maxLength={120} placeholder="למשל: ארצנו" className="min-w-56" /></Field>
                 <SubmitButton variant="outline" saved={saved === `newproj-${o.id}`} savedText="נוסף">הוספה</SubmitButton>
+              </form>
+            </section>
+
+            <section aria-label="שדות של העמותה" className="space-y-3 border-t pt-4">
+              <div>
+                <h3 className="font-semibold">שדות מזהים של העמותה</h3>
+                <p className="text-sm text-muted-foreground">
+                  ערכים קבועים של העמותה (מספר תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
+                  בבונה הטפסים אפשר לבחור אותו ב&quot;מילוי מראש&quot;: הוא יוצג לקריאה בלבד ויתמלא לפי העמותה שממנה יצאה הבקשה.
+                </p>
+              </div>
+              {orgFields.length > 0 && (
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה (בכל העמותות)</th>
+                        <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
+                        <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orgFields.map((f) => (
+                        <tr key={f.id} className="border-t">
+                          <td className="px-3 py-1.5">
+                            <AutoSaveForm action={renameOrgFieldAction} errors={ERRORS}>
+                              <input type="hidden" name="id" value={f.id} />
+                              <Input name="label" defaultValue={f.label} required maxLength={120} aria-label={`שם השדה – ${f.label}`} className="h-9" />
+                            </AutoSaveForm>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <Input
+                              form={`orgfields-${o.id}`}
+                              name={`f.${f.key}`}
+                              defaultValue={(o.fieldValues ?? {})[f.key] ?? ""}
+                              maxLength={200}
+                              aria-label={`${f.label} – ${o.name}`}
+                              className="h-9"
+                            />
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <form action={deleteOrgFieldAction}>
+                              <input type="hidden" name="id" value={f.id} />
+                              <input type="hidden" name="org" value={o.id} />
+                              <SubmitButton size="icon" variant="ghost" className="text-destructive" aria-label={`מחיקת השדה ${f.label} מכל העמותות`} title="מחיקה מכל העמותות">
+                                <Trash2 className="size-4" aria-hidden />
+                              </SubmitButton>
+                            </form>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* The values of this organization save together, as the projects table does. */}
+              <AutoSaveForm id={`orgfields-${o.id}`} action={saveOrgFieldValuesAction} errors={ERRORS}>
+                <input type="hidden" name="id" value={o.id} />
+              </AutoSaveForm>
+              {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
+              <form action={createOrgFieldAction} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="org" value={o.id} />
+                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor="new-orgfield">
+                  <Input id="new-orgfield" name="label" required maxLength={120} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
+                </Field>
+                <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספה</SubmitButton>
               </form>
             </section>
 
