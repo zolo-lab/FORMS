@@ -8,7 +8,15 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: damp-wildflower-79510538
+      NEON_BRANCH: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      isolated: ${{ steps.mode.outputs.isolated }}
     steps:
+      - id: mode
+        run: echo "isolated=${{ env.NEON_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -16,15 +24,34 @@ jobs:
       - run: npm i -g pnpm@10
       # No lockfile is committed yet (dev environment has no npm access); versions are pinned in package.json.
       - run: pnpm install --no-frozen-lockfile
+      # Isolated database for this run: a Neon branch copied from dev, shared by the unit tests and e2e of this run
+      # and deleted by the `db-cleanup` job. Without the NEON_API_KEY secret, both jobs fall back to the shared dev DB.
+      - name: Branch expiry (safety net if cleanup never runs)
+        if: env.NEON_API_KEY != ''
+        id: expiry
+        run: echo "at=$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Neon branch for this run
+        if: env.NEON_API_KEY != ''
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          api_key: ${{ env.NEON_API_KEY }}
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          parent_branch: dev
+          branch_name: ${{ env.NEON_BRANCH }}
+          database: forms
+          role: forms_owner
+          expires_at: ${{ steps.expiry.outputs.at }}
       - run: pnpm typecheck
       - run: node scripts/eslint-annotations.mjs
       - run: pnpm test
         env:
-          # Dev-branch DB; enables tests/requests-store.test.ts (skipped when unset).
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      # e2e (which cleans up at its end) does not run when this job fails: clean the test data here instead.
+          # This run's Neon branch (or the shared dev DB); enables tests/requests-store.test.ts (skipped when unset).
+          DATABASE_URL: ${{ steps.neon.outputs.db_url || secrets.DATABASE_URL }}
+      # Shared dev DB only: e2e (which cleans up at its end) does not run when this job fails, so clean here instead.
+      # An isolated run's branch is simply deleted.
       - run: pnpm exec tsx scripts/clean-test-data.ts
-        if: failure()
+        if: failure() && env.NEON_API_KEY == ''
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Hebrew PDF sample
@@ -45,10 +72,15 @@ jobs:
     runs-on: ubuntu-latest
     # After the unit tests, so the cleanup at the end of e2e also removes what they created.
     needs: check
-    # One e2e run at a time on the shared dev DB: its teardown removes all test data (tests/e2e/clean-test-data.ts).
+    # On the shared dev DB only one e2e run at a time, since its teardown removes all test data
+    # (tests/e2e/clean-test-data.ts). With a Neon branch per run there is nothing shared, so no lock.
     concurrency:
-      group: e2e-dev-db
+      group: ${{ needs.check.outputs.isolated == 'true' && format('e2e-{0}-{1}', github.run_id, github.run_attempt) || 'e2e-dev-db' }}
       cancel-in-progress: false
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: damp-wildflower-79510538
+      NEON_BRANCH: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,16 +88,44 @@ jobs:
           node-version: 22
       - run: npm i -g pnpm@10
       - run: pnpm install --no-frozen-lockfile
+      # Same branch the check job created (the action returns the existing one).
+      - name: Branch expiry (safety net if cleanup never runs)
+        if: env.NEON_API_KEY != ''
+        id: expiry
+        run: echo "at=$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Neon branch for this run
+        if: env.NEON_API_KEY != ''
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          api_key: ${{ env.NEON_API_KEY }}
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          parent_branch: dev
+          branch_name: ${{ env.NEON_BRANCH }}
+          database: forms
+          role: forms_owner
+          expires_at: ${{ steps.expiry.outputs.at }}
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ steps.neon.outputs.db_url || secrets.DATABASE_URL }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: e2e-results
           path: test-results/
           retention-days: 7
+  # Deletes this run's Neon branch, whatever happened to the tests.
+  db-cleanup:
+    needs: [check, e2e]
+    if: always() && needs.check.outputs.isolated == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: neondatabase/delete-branch-action@v3
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          project_id: damp-wildflower-79510538
+          branch: ci-${{ github.run_id }}-${{ github.run_attempt }}
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
   # reviewed from environments that cannot download Actions artifacts.
   previews:
