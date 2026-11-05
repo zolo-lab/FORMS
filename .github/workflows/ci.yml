@@ -8,6 +8,12 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Same group as e2e below: this job also works against the shared dev DB (the DB-backed unit tests, and the
+    # repo-wide `clean-test-data` it runs on failure), so it must not overlap another run's e2e. Two runs sharing
+    # that one small Neon compute is how a passing test starts timing out for no reason in its own diff.
+    concurrency:
+      group: e2e-dev-db
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     # After the unit tests, so the cleanup at the end of e2e also removes what they created.
     needs: check
-    # One e2e run at a time on the shared dev DB: its teardown removes all test data (tests/e2e/clean-test-data.ts).
+    # One run at a time on the shared dev DB, together with `check` above: the teardown here removes all test data
+    # it recognises by name (tests/e2e/clean-test-data.ts), which is another run's data too if the two overlap.
     concurrency:
       group: e2e-dev-db
       cancel-in-progress: false

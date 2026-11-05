@@ -145,7 +145,13 @@ Open items from the plan are listed in the audit document (P1-2 what the signer 
 - REST API v1 (#60): `/api/v1/*` with `fk_` bearer keys (`/admin/settings/api-keys`), documented in `docs/api.md`.
 - Bulk send (6.9): `src/lib/import/*` (XLSX/CSV parsing without dependencies, column mapping, validation) and `/admin/requests/bulk` (chunks of 10, progress, error CSV, `bulk_jobs` row).
 - Production still holds QA test data (form "בדיקה QA – טופס קליטה", request 41306ebf-c7a2-4032-b9ef-571902b0ddbf). Production migrations are not auto-applied (P1-16).
-- e2e on CI occasionally times out on DB-heavy pages (editor, dashboard) when several branches run against the one dev DB; rerun failed jobs before assuming a regression.
+- **CI jobs that touch the dev DB are serialised** (`check` and `e2e` share the `e2e-dev-db` concurrency group, 5.11.2026).
+  Before that, two runs overlapping on the one small Neon compute produced failures with no relation to the diff — on PR #249,
+  which changes only markdown, `mobile-resume` timed out waiting for "גרסה 1 פורסמה" while main's run was live, and passed
+  alone on rerun. The serialisation means a second run now *waits*; GitHub keeps one pending run per group and cancels
+  further ones, so a cancelled job here means "another run held the DB", not a failure.
+  Still not isolated: a per-run DB. The teardown recognises test data by a number in its name, so two runs that did overlap
+  would still delete each other's fixtures. The real fix is a Neon branch (or schema) per run — not done.
 
 ## 12. Next step
 
