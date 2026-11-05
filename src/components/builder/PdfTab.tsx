@@ -84,6 +84,22 @@ export function PdfTab({
   /** After detection: fields that sit next to a box, offered "show only when ticked" (applied only on approval). */
   const [links, setLinks] = useState<LinkSuggestion[] | null>(null);
   const pending = pdf ? unplacedSimpleFields(definition, pdf.mapping.stamps).length : 0;
+  /**
+   * How many waiting fields the document itself offers a place for (printed label next to a free spot), counted
+   * quietly ahead of time: the "שיבוץ אוטומטי" button shows only when there is something to offer.
+   */
+  const [canGuess, setCanGuess] = useState(0);
+  useEffect(() => {
+    if (!pdf || pending === 0) return; // the button needs pending > 0 anyway
+    const read = readPages();
+    if (!read) return;
+    let live = true;
+    read
+      .then((pages) => { if (live) setCanGuess(planGuess(definition, pdf.mapping.stamps, pages, () => "", null).stamps.length); })
+      .catch(() => { if (live) setCanGuess(0); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- readPages caches per document
+  }, [definition, pdf?.mapping.stamps, pending, doc, docKey]);
   /** Several field changes can happen in one event (paste of 3 elements); each must build on the previous one. */
   const defRef = useRef(definition);
   useEffect(() => { defRef.current = definition; }, [definition]);
@@ -217,9 +233,9 @@ export function PdfTab({
             {guessBusy ? "מנתח את ה-PDF…" : "זיהוי שדות מה-PDF"}
           </Button>
         )}
-        {pdf && pending > 0 && (
+        {pdf && pending > 0 && canGuess > 0 && (
           <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
-            {guessBusy ? "מנתח את ה-PDF…" : `שיבוץ אוטומטי של ${pending} שדות ממתינים`}
+            {guessBusy ? "מנתח את ה-PDF…" : canGuess === 1 ? "הצעה לשיבוץ שדה אחד" : `הצעה לשיבוץ ${canGuess} שדות`}
           </Button>
         )}
       </div>
