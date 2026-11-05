@@ -329,12 +329,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     }
     const moving = mode === "move" && group.includes(stamp.id) && group.length > 1 ? group : [stamp.id];
     if (moving.length === 1) select(stamp.id);
-    pushHistory();
     const startX = e.clientX, startY = e.clientY;
     let moved = false;
     const origins = new Map(latest.current.stamps.filter((s) => moving.includes(s.id)).map((s) => [s.id, { x: s.x, y: s.y, width: s.width, height: s.height, page: s.page }]));
     const move = (ev: PointerEvent) => {
       if (!moved && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < 3) return;
+      // An undo step only when the box really moves: a plain click (selecting it) is not one.
+      if (!moved) pushHistory();
       moved = true;
       const dx = (ev.clientX - startX) / scale;
       const dy = -(ev.clientY - startY) / scale; // screen down = PDF down
