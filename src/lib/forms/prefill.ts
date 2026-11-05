@@ -30,8 +30,21 @@ export const ORG_FIELD_PREFIX = "org.fields.";
 export const orgFieldKey = (prefill: string | undefined): string | undefined =>
   prefill?.startsWith(ORG_FIELD_PREFIX) ? prefill.slice(ORG_FIELD_PREFIX.length) : undefined;
 
-/** The prefill list a builder shows: the fixed keys plus the organizations’ own fields. */
-export function prefillKeys(orgFields: { key: string; label: string }[] = []): { key: string; label: string }[] {
+/**
+ * Field types whose answer is not a plain string (a name, a bank account and an address are objects; a grid or a
+ * table is a structure of its own). An organization’s value is one line of text, so it is not offered for them.
+ */
+const COMPOSITE_TYPES = new Set(["full_name", "address", "bank_account", "radio_grid", "checkbox_grid", "repeating_table", "group", "file_upload", "signature"]);
+
+/** May a field of this type be filled from an organization field (one line of text)? */
+export const takesOrgField = (type: string) => !COMPOSITE_TYPES.has(type);
+
+/**
+ * The prefill list a builder shows: the fixed keys, plus the organizations’ own fields for the field types whose
+ * answer is a plain line of text.
+ */
+export function prefillKeys(orgFields: { key: string; label: string }[] = [], type?: string): { key: string; label: string }[] {
+  if (type !== undefined && !takesOrgField(type)) return [...PREFILL_KEYS];
   return [...PREFILL_KEYS, ...orgFields.map((f) => ({ key: `${ORG_FIELD_PREFIX}${f.key}`, label: `${f.label} (שדה של העמותה)` }))];
 }
 

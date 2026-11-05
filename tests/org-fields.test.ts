@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { orgFieldKeyFromLabel } from "@/lib/orgs/field-key";
-import { ORG_FIELD_PREFIX, isOrgField, lockOrgFields, orgFieldKey, prefillKeys, withOrgFields, withPrefill } from "@/lib/forms/prefill";
+import { ORG_FIELD_PREFIX, isOrgField, lockOrgFields, orgFieldKey, prefillKeys, takesOrgField, withOrgFields, withPrefill } from "@/lib/forms/prefill";
 import type { FormDefinition } from "@/lib/forms/schema";
 
 const TIK = orgFieldKeyFromLabel("מספר תיק ניכויים");
@@ -64,5 +64,20 @@ describe("the builder's prefill list", () => {
   it("without any organization field it is the fixed list", () => {
     expect(prefillKeys()).toHaveLength(prefillKeys([]).length);
     expect(orgFieldKey("employee.name")).toBeUndefined();
+  });
+});
+
+describe("where an organization field may be used", () => {
+  it("is not offered for answers that are not one line of text", () => {
+    const mine = [{ key: TIK, label: "מספר תיק ניכויים" }];
+    expect(prefillKeys(mine, "short_text").some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(true);
+    for (const t of ["full_name", "address", "bank_account", "radio_grid", "repeating_table", "signature", "file_upload"]) {
+      expect(prefillKeys(mine, t).some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(false);
+      expect(takesOrgField(t)).toBe(false);
+    }
+  });
+
+  it("without a type the whole list is offered (an old caller)", () => {
+    expect(prefillKeys([{ key: TIK, label: "א" }]).some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(true);
   });
 });

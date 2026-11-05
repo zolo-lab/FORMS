@@ -155,8 +155,10 @@ export async function renameOrgFieldDef(id: string, label: string): Promise<bool
 export async function deleteOrgFieldDef(id: string) {
   const [row] = await db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
   if (!row) return;
-  await db.delete(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
+  // No transactions over neon-http: drop the values first. A failure then leaves everything as it was, and a
+  // failure of the second write leaves a definition without values – never values waiting for a recreated key.
   await db.update(organizations).set({ fieldValues: sql`${organizations.fieldValues} - ${row.key}` });
+  await db.delete(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
 }
 
 /** One organization's values, by key. Keys without a definition are dropped on the way in. */

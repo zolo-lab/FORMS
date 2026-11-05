@@ -203,7 +203,7 @@ export function FieldSettings({
   onStartPick?: (sourceId: string) => void;
 }) {
   const meta = FIELD_TYPE_META[field.type];
-  const keys = prefillKeys(orgFields);
+  const keys = prefillKeys(orgFields, field.type);
   const v: FieldValidation = field.validation ?? {};
   const setV = (patch: Partial<FieldValidation>) => {
     const next = { ...v, ...patch };

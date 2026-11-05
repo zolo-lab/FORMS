@@ -4,7 +4,7 @@ import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
 import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
 import { withCopies } from "@/lib/forms/copy";
-import { withPrefill } from "@/lib/forms/prefill";
+import { withOrgFields, withPrefill } from "@/lib/forms/prefill";
 import { lookupsFor } from "@/server/people-store";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
@@ -63,7 +63,25 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           initialAnswers={answersForClient(
             ctx.definition,
             // Copies from earlier steps' answers ("fname1" of this step ← "fname" the employee filled).
-            withCopies(ctx.fullDefinition, withPrefill(ctx.definition, { name: ctx.request.subjectName, idNumber: ctx.request.subjectIdNumber, email: ctx.request.subjectEmail, phone: ctx.request.subjectPhone, org: ctx.org }, ctx.answers)),
+            withCopies(
+              ctx.fullDefinition,
+              // The organization's own fields always carry this organization's values, as submitting does.
+              withOrgFields(
+                ctx.definition,
+                { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber, fields: ctx.org.fieldValues },
+                withPrefill(
+                  ctx.definition,
+                  {
+                    name: ctx.request.subjectName,
+                    idNumber: ctx.request.subjectIdNumber,
+                    email: ctx.request.subjectEmail,
+                    phone: ctx.request.subjectPhone,
+                    org: { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber, fields: ctx.org.fieldValues },
+                  },
+                  ctx.answers,
+                ),
+              ),
+            ),
           )}
           filled={ctx.filled}
           role={ctx.role}
