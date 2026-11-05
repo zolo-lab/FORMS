@@ -167,6 +167,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     };
     if (onTransform) {
       let added = copies;
+      // Ctrl+Z here restores the boxes; the editor then drops the copied field, which has no box left.
+      pushHistory();
       onTransform((def, stamps) => {
         const { def: d, out } = cloneAll(def);
         added = out;
