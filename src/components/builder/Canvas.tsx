@@ -40,6 +40,12 @@ export interface CanvasProps {
   /** "סימון שדות לשלב": tick = the field is also edited in that step, untick = not in it (its other steps stay). */
 }
 
+/** Dropped on the upper half of row `fi` → before it; on the lower half → after it. */
+function halfOf(e: React.DragEvent, fi: number): number {
+  const r = e.currentTarget.getBoundingClientRect();
+  return e.clientY < r.top + r.height / 2 ? fi : fi + 1;
+}
+
 function readDrop(e: React.DragEvent): { type?: FieldType; fieldId?: string } {
   const type = e.dataTransfer.getData(DRAG_TYPE) as FieldType | "";
   const fieldId = e.dataTransfer.getData(DRAG_FIELD);
@@ -109,15 +115,14 @@ export function Canvas(p: CanvasProps) {
                       onDragEnd={endDrag}
                       onDragOver={(e) => {
                         e.preventDefault();
-                        const r = e.currentTarget.getBoundingClientRect();
-                        const index = e.clientY < r.top + r.height / 2 ? fi : fi + 1;
+                        const index = halfOf(e, fi);
                         if (dropAt?.page !== pi || dropAt.index !== index) setDropAt({ page: pi, index });
                       }}
                       onDrop={(e) => {
+                        // The place comes from the drop itself (the line may not have re-rendered yet).
                         e.preventDefault();
-                        const at = dropAt;
                         endDrag();
-                        if (at) p.onDropAt(at.page, at.index, readDrop(e));
+                        p.onDropAt(pi, halfOf(e, fi), readDrop(e));
                       }}
                       className={cn(
                         "flex items-center gap-2 rounded-md border bg-background p-2 transition-opacity",
