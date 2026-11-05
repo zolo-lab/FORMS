@@ -58,8 +58,16 @@ export function Canvas(p: CanvasProps) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<{ page: number; index: number } | null>(null);
   const endDrag = () => { setDragging(null); setDropAt(null); setOver(null); };
-  const line = (page: number, index: number) =>
-    dropAt?.page === page && dropAt.index === index ? <div aria-hidden className="pointer-events-none my-0.5 h-1 rounded-full bg-primary" /> : <div className="h-1.5" />;
+  // The gap between rows keeps one height (nothing jumps under the pointer) and takes a drop too.
+  const line = (page: number, index: number) => (
+    <div
+      className="relative h-2"
+      onDragOver={(e) => { e.preventDefault(); if (dropAt?.page !== page || dropAt.index !== index) setDropAt({ page, index }); }}
+      onDrop={(e) => { e.preventDefault(); endDrag(); p.onDropAt(page, index, readDrop(e)); }}
+    >
+      {dropAt?.page === page && dropAt.index === index && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-primary" />}
+    </div>
+  );
   const zone = (page: number, index: number, key: string, children?: React.ReactNode) => (
     <div
       key={key}

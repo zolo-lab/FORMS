@@ -71,6 +71,6 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   await expect.poll(labels).toEqual(["ראשון", "שני", "שלישי"]);
   // Drop "שלישי" on the upper half of "ראשון": it goes first.
   const first = rows.filter({ hasText: "ראשון" });
-  await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 4 } });
+  await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 8 } });
   await expect.poll(labels).toEqual(["שלישי", "ראשון", "שני"]);
 });
