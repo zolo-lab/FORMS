@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDown, Folder, Mail, Trash2, Webhook } from "lucide-react";
+import { ChevronDown, Mail, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/input";
@@ -8,10 +8,9 @@ import { cn } from "@/lib/utils";
 import { describeDestination, destinationProblems, itemLabel, type ProcessingContext } from "@/lib/processing/model";
 import { COMPLETION_DESTINATION_ID, type Destination, type SendItem } from "@/lib/processing/types";
 import { RecipientPicker } from "./RecipientPicker";
-import { DriveTarget } from "./DriveTarget";
 
-const ICON = { drive: Folder, email: Mail, webhook: Webhook } as const;
-const KIND_LABEL = { drive: "תיקייה בדרייב", email: "מייל", webhook: "Webhook" } as const;
+const ICON = { email: Mail } as const;
+const KIND_LABEL = { email: "מייל" } as const;
 
 const sameItem = (a: SendItem, b: SendItem) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -108,16 +107,6 @@ export function DestinationCard({
                 </div>
               )}
             </>
-          )}
-
-          {d.kind === "drive" && (
-            <DriveTarget
-              folderId={d.folderId}
-              path={d.path}
-              fileName={d.fileName}
-              idPrefix={id}
-              onChange={(patch) => onChange({ ...d, ...patch })}
-            />
           )}
 
           {problems.length > 0 && (

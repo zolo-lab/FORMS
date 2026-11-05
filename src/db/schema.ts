@@ -58,8 +58,6 @@ export const notificationStatus = pgEnum("notification_status", ["queued", "sent
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  /** Drive folder this organization files into; empty = GOOGLE_DRIVE_ROOT_FOLDER_ID. Paths resolve below it. */
-  driveRootFolderId: text("drive_root_folder_id"),
   /** מספר עמותה, e.g. 580556306 */
   registrationNumber: text("registration_number").notNull().unique(),
   /** Legacy single project name (6.17); moved into `projects` on first read and not used otherwise. */

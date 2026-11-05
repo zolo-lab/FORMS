@@ -107,9 +107,7 @@ describe("recipientsFor", () => {
 });
 
 describe("describeTarget", () => {
-  it("names a Drive path, a webhook, and the people on a mail", () => {
-    expect(describeTarget(dest({ kind: "drive", path: "שכר/{שנה}" }), [])).toBe("שכר/{שנה}");
-    expect(describeTarget(dest({ kind: "webhook", webhookId: "w" }), [])).toBe("webhook");
+  it("names the people on the mail, and does not repeat an address as its own name", () => {
     expect(describeTarget(dest(), [{ name: "שכר", email: "p@x.il" }, { name: "h@x.il", email: "h@x.il" }])).toBe("שכר <p@x.il>, h@x.il");
   });
 });
@@ -125,9 +123,5 @@ describe("skipReason", () => {
 
   it("is silent when the destination is ready", () => {
     expect(skipReason(dest(), [{ fileId: "f", name: "x" }], [{ name: "a", email: "a@b.il" }])).toBeNull();
-  });
-
-  it("does not demand recipients for a Drive destination", () => {
-    expect(skipReason(dest({ kind: "drive", path: "x" }), [{ fileId: "f", name: "x" }], [])).toBeNull();
   });
 });

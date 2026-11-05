@@ -1,6 +1,6 @@
 /**
  * "עיבוד טופס": what happens to the signed documents once every step is done — cutting them into parts,
- * and sending each piece to Drive, by e-mail or to a webhook.
+ * and mailing each piece to whoever should get it.
  * Pure types only (no runtime imports), so `src/db/schema.ts` can import them for the jsonb column.
  */
 import type { RecipientKind } from "@/lib/notifications/triggers";
@@ -41,16 +41,6 @@ export type RecipientRef =
   /** A fixed address typed here. */
   | { kind: "fixed"; name: string; email: string };
 
-export interface DriveDestination {
-  kind: "drive";
-  /** A folder picked in the Drive browser. Wins over `path` when both are set. */
-  folderId?: string;
-  /** A path below the organization's root, with variables: "שכר {עמותה}/{שנה}/101_{שנה}". */
-  path?: string;
-  /** File name with variables; empty = `{סוג} - {עובד} {ת"ז}.pdf`. */
-  fileName?: string;
-}
-
 export interface EmailDestination {
   kind: "email";
   to: RecipientRef[];
@@ -60,12 +50,11 @@ export interface EmailDestination {
   note?: string;
 }
 
-export interface WebhookDestination {
-  kind: "webhook";
-  webhookId: string;
-}
-
-export type Destination = { id: string; items: SendItem[] } & (DriveDestination | EmailDestination | WebhookDestination);
+/**
+ * A destination is an e-mail and nothing else. Drive filing and webhooks were built and taken out again
+ * (5.11.2026): the tool cuts, and sends what it cut to a person.
+ */
+export type Destination = { id: string; items: SendItem[] } & EmailDestination;
 
 export type DestinationKind = Destination["kind"];
 
