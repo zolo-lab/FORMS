@@ -182,5 +182,6 @@ test("undoing a box move keeps a field edited after it", async ({ page }) => {
   await box.click();
   await page.keyboard.press("Control+z");
   await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0, 1); // the move is undone
+  await box.click(); // undo clears the selection; select the box again to see its field
   await expect(label).toHaveValue("שם שנערך"); // the label edited after it stays
 });
