@@ -210,6 +210,18 @@ async function mailDestination(
   to: Recipient[],
   opts: { requestId: string; organizationId: string; subject: string; formName: string },
 ): Promise<void> {
+  // The mail goes out later, from the outbox, so each attachment has to exist as a stored file by then.
+  // A part is cut here and stored as a file on its way out — a file, never a document of the request.
+  const attached: string[] = [];
+  if (d.attach) {
+    const { putFile } = await import("./storage");
+    for (const f of picked) {
+      if (!f.cut) { attached.push(f.fileId); continue; }
+      const { bytes, name } = await bytesOf(f);
+      const stored = await putFile({ name, mime: "application/pdf", bytes });
+      attached.push(stored.id);
+    }
+  }
   const names = picked.map((f) => f.name).join(", ");
   const note = d.note?.trim();
   const body = [
@@ -227,8 +239,8 @@ async function mailDestination(
       templateKey: PROCESSING_KEY,
       subject: `${opts.formName} – ${opts.subject}`,
       body,
-      // Only the files this destination chose; `attach: false` sends the note without them.
-      attachFileIds: d.attach ? picked.map((f) => f.fileId) : [],
+      // Only the files this destination chose, each already cut to what it is meant to be.
+      attachFileIds: attached,
     })),
   );
   if (inserted === 0) throw new Error("ההודעה לא נוצרה (ייתכן שהנמענים כיבו את ההתראה הזאת)");
