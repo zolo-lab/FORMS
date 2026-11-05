@@ -55,8 +55,6 @@ export interface PdfPlacementProps {
   onCloneField?: (fieldId: string) => string | null;
   /** Pressing "place" on a waiting field: a suggested stamp from the PDF's own text (null = no idea, the field goes to the page centre). */
   onSuggest?: (fieldId: string) => Promise<PdfStamp | null>;
-  /** "New step from here": cut the form's step at this field. */
-  onSplitStep?: (fieldId: string) => void;
   /** "סימון בטופס": a click marks or unmarks the box's field as opened by the source field; nothing moves. */
   pick?: PickMode;
   /** Detection fixes that change the form and its boxes together (see detect-fixes.ts). */
@@ -64,7 +62,7 @@ export interface PdfPlacementProps {
   /** The fields of the selected boxes, for the editor's single step picker. When given, the in-viewer "העברה לשלב" bar is not shown. */
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -144,15 +142,21 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
   /**
-   * "העתקת תיבה": nothing is added yet. The next click on the document pastes one more box of the same field there
-   * (it writes the same answer, e.g. the ID number at the top of every page). Esc cancels.
+   * "העתקת תיבה": nothing is added yet. The next click on the document pastes there a copy: a new field like the
+   * original (same type, label and settings). Esc cancels.
    */
   const [boxCopy, setBoxCopy] = useState<PdfStamp | null>(null);
   const pasteBoxAt = (page: number, at: { x: number; y: number }) => {
     if (!boxCopy) return;
     const pg = pages[page]!;
     const c = clampBox({ width: boxCopy.width, height: boxCopy.height, x: at.x - boxCopy.width / 2, y: at.y - boxCopy.height / 2 }, pg.width, pg.height);
-    const copy = { ...boxCopy, id: nanoid(8), page, x: round1(c.x), y: round1(c.y) };
+    // Every box is its own field (the PDF and the responsive form always list the same fields): the copy is a new
+    // field just like the original, same type, label and settings. Without a form to add it to, the same field.
+    // A table cell stays in its table; a part of a field (bank.branch) copies the whole field and keeps the part.
+    const base = baseFieldId(boxCopy.fieldId);
+    const part = boxCopy.fieldId.slice(base.length);
+    const fieldId = tableCellOf(boxCopy.fieldId) ? boxCopy.fieldId : (onCloneField?.(base) ?? base) + part;
+    const copy = { ...boxCopy, id: nanoid(8), fieldId, page, x: round1(c.x), y: round1(c.y) };
     setStamps([...mapping.stamps, copy]);
     setBoxCopy(null);
     select(copy.id);
@@ -617,7 +621,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                           type="button"
                           aria-label="העתקת התיבה"
                           aria-pressed={boxCopy?.id === s.id}
-                          title="העתקה: אחר כך לוחצים במקום במסמך, ושם תודבק תיבה של אותו שדה"
+                          title="העתקה: אחר כך לוחצים במקום במסמך, ושם יודבק שדה חדש זהה"
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); setBoxCopy(boxCopy?.id === s.id ? null : s); }}
                           className={cn(
@@ -695,9 +699,6 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 </div>
               ))}
             </div>
-            {onSplitStep && fieldOf(selectedStamp) && !tableCellOf(selectedStamp.fieldId) && (
-              <Button size="sm" variant="outline" className="min-h-9" onClick={() => onSplitStep(selectedStamp.fieldId)}>עמוד חדש מכאן</Button>
-            )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
                 <Label className="text-muted-foreground">{group.length > 1 ? `באיזה שלב (${group.length} תיבות מסומנות)` : "באילו שלבים השדה פתוח לעריכה"}</Label>
@@ -778,7 +779,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <Button
               variant="outline"
               size="sm"
-              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). אחרי ההעתקה לוחצים במקום במסמך. Ctrl+D יוצר שדה חדש."
+              title="שדה חדש זהה (אותו סוג, שם והגדרות). אחרי ההעתקה לוחצים במקום במסמך שבו להדביק אותו."
               aria-pressed={boxCopy?.id === selectedStamp.id}
               onClick={() => setBoxCopy(boxCopy?.id === selectedStamp.id ? null : selectedStamp)}
             >

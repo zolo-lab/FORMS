@@ -119,7 +119,7 @@ test("all boxes share one colour; the step chosen to view stands out in green", 
   await expect(box).not.toHaveClass(/border-success/);
 });
 
-test("copying a box adds nothing until a click on the document pastes it there, same field", async ({ page }) => {
+test("copying a box adds nothing until a click on the document pastes there a new field like it", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   const pdfPage = page.getByTestId("pdf-page-0");
   await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
@@ -132,7 +132,7 @@ test("copying a box adds nothing until a click on the document pastes it there, 
   await pdfPage.click({ position: { x: 120, y: area.height - 120 } });
   await expect.poll(async () => (await mapping()).length).toBe(2);
   const after = await mapping();
-  expect(after[1]!.fieldId).toBe(after[0]!.fieldId);
+  expect(after[1]!.fieldId).not.toBe(after[0]!.fieldId); // its own field, so the responsive form lists it too
   expect(after[1]!.y).toBeLessThan(200); // pasted where clicked, near the bottom of the page
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
   // Esc cancels a copy.

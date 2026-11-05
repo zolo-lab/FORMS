@@ -24,7 +24,7 @@ import {
   renameFieldId, updateField, updatePage,
 } from "@/lib/forms/builder";
 import { fieldsLeftWithoutStamps, pruneStamps } from "@/lib/forms/pdf-items";
-import { orderByPdf } from "@/lib/forms/pdf-draw";
+import { orderByPdf, splitStepAt } from "@/lib/forms/pdf-draw";
 import { applyCheckboxLinks, suggestCheckboxLinks, type LinkSuggestion } from "@/lib/forms/checkbox-links";
 import { CheckboxLinksDialog } from "./CheckboxLinksDialog";
 import { fieldDictionary, renameStamps, suggestFieldIds } from "@/lib/forms/field-dictionary";
@@ -582,6 +582,12 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 onDuplicate={(id) => { const r = duplicateField(def, id); commit(r.def); setSelection({ kind: "field", id: r.id }); }}
                 onRemove={(id) => { commit(removeField(def, id)); setSelection(null); }}
                 onAddPage={() => { commit(addPage(def)); setSelection({ kind: "page", index: def.pages.length }); }}
+                onSplitPage={(id) => {
+                  const r = splitStepAt(def, id);
+                  if (!r) return;
+                  commit(r.definition);
+                  setNote(`נוצר עמוד חדש (${r.definition.pages[r.step]!.title}) שמתחיל בשדה הזה.`);
+                }}
                 onRemovePage={(i) => { commit(removePage(def, i)); setSelection({ kind: "page", index: 0 }); }}
                 onMovePage={(i, dir) => { commit(movePage(def, i, i + dir)); setSelection({ kind: "page", index: i + dir }); }}
               />

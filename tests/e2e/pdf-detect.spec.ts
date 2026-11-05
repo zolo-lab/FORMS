@@ -51,14 +51,16 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   await expect.poll(() => page.locator("[data-stamp]").count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(5);
   await expect(page.getByText(/שיבוצים הוצעו אוטומטית/)).toBeVisible();
 
-  // Cut the form into steps right from the document: the date of birth opens step 2.
+  // Pages belong to the responsive form only: the button is not on the document.
   await page.locator("[data-stamp]").filter({ hasText: "תאריך לידה" }).first().click();
-  await page.getByRole("button", { name: "עמוד חדש מכאן" }).click();
-  await expect(page.getByText(/נוצר עמוד חדש/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "עמוד חדש מכאן" })).toHaveCount(0);
 
-  // The same fields are the responsive form, in the order of the document.
+  // The same fields are the responsive form, in the order of the document; the date of birth opens page 2.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
   for (const label of ["שם העובד", "מספר זהות", "תאריך לידה", "מין"]) await expect(page.getByText(label).first()).toBeVisible();
+  await page.getByRole("button", { name: /^תאריך לידה/ }).first().click();
+  await page.getByRole("button", { name: "עמוד חדש מכאן" }).click();
+  await expect(page.getByText(/נוצר עמוד חדש/)).toBeVisible();
   await expect(page.getByText("עמוד 2").filter({ visible: true }).first()).toBeVisible();
   await page.getByText("כלים", { exact: true }).click();
   await expect(page.getByRole("button", { name: "סידור השדות לפי ה-PDF" })).toBeVisible();
