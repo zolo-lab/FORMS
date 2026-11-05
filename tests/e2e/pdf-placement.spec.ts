@@ -142,3 +142,26 @@ test("copying a box adds nothing until a click on the document pastes there a ne
   await pdfPage.click({ position: { x: 300, y: 300 } });
   expect(await mapping()).toHaveLength(2);
 });
+
+test("a pasted box undoes and redoes together with its new field", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string }[];
+  const fieldIds = async () => JSON.parse((await page.getByTestId("field-ids").textContent())!) as string[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
+  const area = (await pdfPage.boundingBox())!;
+  await pdfPage.click({ position: { x: 150, y: area.height - 150 } });
+  await expect.poll(async () => (await stamps()).length).toBe(2);
+  const copied = (await stamps())[1]!.fieldId;
+  expect(await fieldIds()).toContain(copied);
+
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await stamps()).length).toBe(1);
+  expect(await fieldIds()).not.toContain(copied);
+
+  await page.keyboard.press("Control+Shift+z");
+  await expect.poll(async () => (await stamps()).length).toBe(2);
+  expect(await fieldIds()).toContain(copied); // the box never points at a field that is gone
+});

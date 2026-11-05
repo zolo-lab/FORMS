@@ -17,7 +17,12 @@ export function PlacementDemo() {
     setDefinitionState(defRef.current);
   };
   const [data, setData] = useState<Uint8Array | null>(null);
-  const [mapping, setMapping] = useState<PdfMapping>({ schemaVersion: 1, pages: [{ width: 595.28, height: 841.89 }], stamps: [] });
+  const [mapping, setMappingState] = useState<PdfMapping>({ schemaVersion: 1, pages: [{ width: 595.28, height: 841.89 }], stamps: [] });
+  const mappingRef = useRef(mapping);
+  const setMapping = (next: PdfMapping | ((m: PdfMapping) => PdfMapping)) => {
+    mappingRef.current = typeof next === "function" ? next(mappingRef.current) : next;
+    setMappingState(mappingRef.current);
+  };
   useEffect(() => {
     (async () => {
       const doc = await PDFDocument.create();
@@ -37,6 +42,14 @@ export function PlacementDemo() {
         onFieldPatch={(fieldId, patch) =>
           setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
         }
+        onTransform={(fix) => {
+          const r = fix(defRef.current, mappingRef.current.stamps);
+          if (!r.def) return r.error;
+          setDefinition(r.def);
+          mappingRef.current = { ...mappingRef.current, stamps: r.stamps };
+          setMapping(mappingRef.current);
+          return undefined;
+        }}
         onCloneField={(fieldId) => {
           const r = cloneField(defRef.current, fieldId);
           if (!r) return null;
@@ -50,6 +63,7 @@ export function PlacementDemo() {
           return r.stamp.id;
         }}
       />
+      <pre dir="ltr" data-testid="field-ids" className="sr-only">{JSON.stringify(definition.pages.flatMap((p) => p.fields.map((f) => f.id)))}</pre>
       <pre dir="ltr" data-testid="mapping" className="mt-4 max-h-60 overflow-auto rounded-md bg-muted p-2 text-xs">{JSON.stringify(mapping.stamps, null, 1)}</pre>
     </>
   );

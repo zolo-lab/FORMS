@@ -86,7 +86,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const r = snapToText(box, texts[page] ?? [], { tolerance: 10, sideTolerance: 40 });
     return { ...box, x: r.x, y: r.y };
   };
-  const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
+  // Undo on the PDF: the boxes, plus the form as it was (a paste also adds fields), so both come back together.
+  type Snapshot = { mapping: PdfMapping; definition: FormDefinition };
+  const history = useRef<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
@@ -130,7 +132,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
   const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
   const pushHistory = () => {
-    history.current.past = [...history.current.past.slice(-49), latest.current];
+    history.current.past = [...history.current.past.slice(-49), now()];
     history.current.future = [];
   };
   /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
@@ -376,7 +378,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
   // During a drag the closure's `mapping` is stale, so always patch from the latest ref.
   const latest = useRef(mapping);
-  useEffect(() => { latest.current = mapping; });
+  const latestDef = useRef(definition);
+  useEffect(() => { latest.current = mapping; latestDef.current = definition; });
+  const now = (): Snapshot => ({ mapping: latest.current, definition: latestDef.current });
   const textsRef = useRef(texts);
   useEffect(() => { textsRef.current = texts; });
 
@@ -387,13 +391,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const pos = kind === "dist-x" ? distributeBoxes(list, "x") : kind === "dist-y" ? distributeBoxes(list, "y") : alignBoxes(list, kind);
     patchMany(new Map(list.map((s, i) => [s.id, { x: round1(pos[i]!.x), y: round1(pos[i]!.y) }])));
   }
+  /** Go back (or forward) to a snapshot: the form too when it changed since, as one editor step. */
+  function restore(to: Snapshot) {
+    if (onTransform && to.definition !== latestDef.current) onTransform(() => ({ def: to.definition, stamps: to.mapping.stamps }));
+    else onMappingChange(to.mapping);
+  }
   function undo() {
     const h = history.current;
     const prev = h.past.at(-1);
     if (!prev) return;
     h.past = h.past.slice(0, -1);
-    h.future = [latest.current, ...h.future];
-    onMappingChange(prev);
+    h.future = [now(), ...h.future];
+    restore(prev);
     select(null);
   }
   function redo() {
@@ -401,8 +410,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const next = h.future[0];
     if (!next) return;
     h.future = h.future.slice(1);
-    h.past = [...h.past, latest.current];
-    onMappingChange(next);
+    h.past = [...h.past, now()];
+    restore(next);
   }
   function paste() {
     if (clipboard.current.length === 0) return;
@@ -411,8 +420,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
       return { ...s, x: round1(c.x), y: round1(c.y) };
     }));
-    // Shift the clipboard so repeated pastes cascade.
-    clipboard.current = copies;
+    // Shift the clipboard so repeated pastes cascade, still copying the original fields (a pasted copy may be undone).
+    clipboard.current = copies.map((c, i) => ({ ...c, fieldId: clipboard.current[i]!.fieldId }));
     setSelected(copies[0]!.id);
     setExtra(copies.slice(1).map((c) => c.id));
     reveal(copies[0]!.id);
