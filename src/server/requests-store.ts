@@ -44,7 +44,6 @@ import type { FormDefinition } from "@/lib/forms/schema";
 import { COMPLETION_DOCS_KEY, completionTargets } from "@/lib/notifications/completion";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import type { StepRole, Workflow } from "@/lib/workflow/types";
-import { ownDocuments } from "./package-docs";
 
 const { requests, signingSteps, stepTokens, submissions, events, notifications, packageTemplates, packageTemplateItems, packageDocuments, formTemplates, formTemplateVersions, organizations } = schema;
 
@@ -182,7 +181,7 @@ export async function storeHighlights(requestId: string, defs: FormDefinition[],
 }
 
 export async function refreshHighlights(requestId: string): Promise<Highlights> {
-  const docRows = await db.select({ v: packageDocuments.templateVersionId }).from(packageDocuments).where(ownDocuments(requestId));
+  const docRows = await db.select({ v: packageDocuments.templateVersionId }).from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
   const versions = docRows.length
     ? await db.select({ definition: formTemplateVersions.definition }).from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.v)))
     : [];
@@ -342,7 +341,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   const [pkg] = await db.select().from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
   const answers = await collectedAnswers(requestId);
   // Saved contacts and group members the steps may be routed to (a "group" dropdown stores the contact id).
-  const docRows = await db.select().from(packageDocuments).where(ownDocuments(requestId));
+  const docRows = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
   const versions = docRows.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.templateVersionId))) : [];
   // The organization's fields (org_name, org_number…) carry the request's organization from the start, for every step.
   const [reqOrg] = await db.select({ name: organizations.name, registrationNumber: organizations.registrationNumber }).from(organizations).where(eq(organizations.id, req.organizationId));
@@ -420,7 +419,7 @@ export async function getRequest(requestId: string) {
   if (!request) return null;
   const [steps, documents, evs] = await Promise.all([
     loadSteps(requestId),
-    db.select().from(packageDocuments).where(ownDocuments(requestId)).orderBy(asc(packageDocuments.order)),
+    db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId)).orderBy(asc(packageDocuments.order)),
     db.select().from(events).where(eq(events.requestId, requestId)).orderBy(asc(events.createdAt)),
   ]);
   // Titles for display: document → pinned version → template.

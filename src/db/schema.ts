@@ -411,18 +411,6 @@ export const packageDocuments = pgTable("package_documents", {
   finalFileId: uuid("final_file_id"),
   finalSha256: text("final_sha256"),
   generatedAt: timestamp("generated_at", { withTimezone: true }),
-  /**
-   * A part cut out of another document ("עיבוד טופס"): the row of the document it was cut from.
-   * null = a document of the request itself. Anything that means "the documents of this request" must say
-   * `isNull(parentDocumentId)` — use `ownDocuments()` in `src/server/package-docs.ts`, never a bare requestId.
-   */
-  parentDocumentId: uuid("parent_document_id"),
-  /** Which pages of the parent this part holds, as the builder wrote them: "1-2,5". */
-  pages: text("pages"),
-  /** What the part is called ("101", "הסכם העסקה"); null for a whole document. */
-  partName: text("part_name"),
-  /** Document type, for consistent folder and file names between organizations. */
-  typeId: uuid("type_id"),
   /** Copy filed in the Drive archive (null until archived, or when the archive is not configured). */
   driveFileId: text("drive_file_id"),
   driveUrl: text("drive_url"),
