@@ -17,6 +17,8 @@ import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
 import { ownDocuments, partsOf } from "./package-docs";
 import { triggersFor } from "./mail-triggers";
+import { driveProblem, uploadToFolders } from "./drive";
+import { resolveFileName, resolvePath, type PathContext } from "@/lib/processing/path";
 import { insertNotifications } from "./notifications";
 
 const { deliveries, events, packageDocuments, packageTemplates, formTemplateVersions, formTemplates, requests, signingSteps, organizations, users } = schema;
@@ -103,7 +105,7 @@ async function record(row: typeof deliveries.$inferInsert): Promise<void> {
 /** Sends one destination. Never throws: the outcome is the row it returns. */
 async function runDestination(
   d: Destination,
-  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string },
+  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string; path: PathContext; driveRootFolderId: string | null },
 ): Promise<void> {
   const picked = filesForDestination(d, opts.files);
   const to = d.kind === "email" ? recipientsFor(d.to, opts.look) : [];
@@ -117,14 +119,16 @@ async function runDestination(
   }
 
   try {
+    let url: string | null = null;
     if (d.kind === "email") await mailDestination(d, picked, to, opts);
-    // Drive and webhook destinations arrive with their own steps of the build; until then they are recorded
-    // as not attempted rather than silently dropped.
+    else if (d.kind === "drive") url = await driveDestination(d, picked, opts);
+    // Webhook destinations arrive with their own step of the build; until then they are recorded as not
+    // attempted rather than silently dropped.
     else {
       await record({ ...base, status: "failed", error: "יעד מסוג זה עדיין לא נתמך", attempts: 1 });
       return;
     }
-    await record({ ...base, status: "done", attempts: 1 });
+    await record({ ...base, status: "done", attempts: 1, url });
     await db.insert(events).values({ requestId: opts.requestId, actorType: "system", type: "delivery_done", payload: { destinationId: d.id, kind: d.kind, target, files: picked.length } });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -132,6 +136,39 @@ async function runDestination(
     await db.insert(events).values({ requestId: opts.requestId, actorType: "system", type: "delivery_failed", payload: { destinationId: d.id, kind: d.kind, target, error: error.slice(0, 200) } });
     console.error("delivery failed", { requestId: opts.requestId, destination: d.id, error });
   }
+}
+
+/**
+ * Files every chosen file into Drive, under the destination's path (or a folder picked in the browser).
+ * Returns the link of the last file, which is what the request page shows.
+ */
+async function driveDestination(
+  d: Destination & { kind: "drive" },
+  picked: SendableFile[],
+  opts: { requestId: string; path: PathContext; driveRootFolderId: string | null },
+): Promise<string | null> {
+  const problem = driveProblem();
+  if (problem) throw new Error(`ארכיון Drive כבוי: ${problem}`);
+  const { getFile } = await import("./storage");
+  let last: string | null = null;
+  for (const f of picked) {
+    const stored = await getFile(f.fileId);
+    if (!stored) throw new Error(`הקובץ "${f.name}" לא נמצא`);
+    // `{סוג}` follows the part being filed, so one destination can carry several parts into one tree.
+    const ctx: PathContext = { ...opts.path, type: opts.path.type ?? f.name.replace(/\.pdf$/i, "") };
+    const { segments, unknown } = resolvePath(d.path ?? "", ctx);
+    if (unknown.length) throw new Error(`משתנה לא מוכר בנתיב: ${unknown.join(", ")}`);
+    const up = await uploadToFolders({
+      folders: segments,
+      fileName: resolveFileName(d.fileName, ctx),
+      bytes: stored.bytes,
+      // A folder picked in the browser wins over the path; otherwise the organization's root, then the global one.
+      rootFolderId: d.folderId ?? opts.driveRootFolderId,
+    });
+    if (!up) throw new Error("ארכיון Drive לא מוגדר");
+    last = up.driveUrl;
+  }
+  return last;
 }
 
 const PROCESSING_KEY = "processing_docs";
@@ -186,14 +223,25 @@ export async function runProcessing(requestId: string, opts: { only?: string[] }
   const { collectedAnswers } = await import("./requests-store");
   const answers = await collectedAnswers(requestId);
   const [files, look] = await Promise.all([requestFiles(requestId, answers), peopleFor(requestId, answers)]);
-  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const [org] = await db.select({ name: organizations.name, driveRootFolderId: organizations.driveRootFolderId }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const steps = await db.select({ completedAt: signingSteps.completedAt }).from(signingSteps).where(eq(signingSteps.requestId, requestId));
+  const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
+  const path: PathContext = {
+    organization: org?.name,
+    form: pkg?.name,
+    subject: req.subjectName,
+    idNumber: req.subjectIdNumber ?? undefined,
+    signedAt: times.length ? new Date(Math.max(...times)) : new Date(),
+    requestId,
+    answers: answers as Record<string, unknown>,
+  };
 
   let run = 0;
   for (const d of wanted) {
     if (settled.has(d.id) && !opts.only) continue;
     // A retry replaces the earlier attempt of this round rather than piling rows up.
     if (opts.only) await db.delete(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.destinationId, d.id), eq(deliveries.round, round)));
-    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "" });
+    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "", path, driveRootFolderId: org?.driveRootFolderId ?? null });
     run++;
   }
   const after = await db.select({ status: deliveries.status }).from(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.round, round)));
