@@ -1,0 +1,51 @@
+# CodeRabbit's review of this repository. The project's own rules live in CLAUDE.md; what matters most of them is
+# repeated here as review instructions, because a generic review misses exactly the things that break this system.
+language: he
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!drizzle/meta/**"
+    - "!**/*.snap"
+    - "!assets/**"
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        הממשק עברי ו-RTL. יש להשתמש רק ב-Tailwind לוגי: ms- me- ps- pe- start- end- text-start text-end.
+        לסמן כבאג כל שימוש ב-ml- mr- pl- pr- left- right- text-left text-right.
+        צבעים: רק טוקנים סמנטיים (bg-primary, text-muted-foreground). לסמן כבאג כל hex גולמי בקומפוננטה.
+        טקסט שמוזן על ידי משתמש לא נכנס ללוג: אין להדפיס מספרי זהות או פרטי בנק.
+    - path: "src/lib/pdf/**"
+      instructions: |
+        כל טקסט עברי או מעורב שמצויר על PDF חייב לעבור דרך drawHebrew(). קריאה ישירה ל-page.drawText() עם טקסט
+        של משתמש היא באג (הטקסט ייצא הפוך).
+    - path: "src/lib/forms/**"
+      instructions: |
+        טפסים הם נתונים (FormDefinition). אין לקודד טופס בתוך קומפוננטה.
+        סוג שדה חדש חייב להופיע ב-field-types.ts, ב-switch הממצה של validate.ts, ברנדרר, בהגדרות הבונה ובבדיקות.
+        שינוי שמשנה את ההתנהגות של גרסת טופס שכבר פורסמה הוא באג, אלא אם זו המטרה המוצהרת של ה-PR.
+    - path: "src/server/**"
+      instructions: |
+        תשובות נבדקות בצד השרת עם validateAnswers() ונשמר result.cleaned, לא הקלט הגולמי.
+        בקרת גישה: טוקן חתימה (/s/[token]) רואה רק את השדות של השלב שלו; שדות internal הם של ממלא הבקשה בלבד;
+        משתמש "מעקב בלבד" לא רואה תוכן; שלב שמוגן ב-OTP לא ייחשף דרך מסלול אחר (PDF, קבצים, טיוטות).
+        לחפש אובדן נתונים: שדות מוסתרים שמוחקים ערך ששלב מאוחר צריך, מרוצי טיוטה/שמירה אוטומטית,
+        תשובות שנזרקות בשקט, וקבצים שנשארים מאחור כשבקשה או טופס נמחקים.
+    - path: "drizzle/*.sql"
+      instructions: |
+        מיגרציות נוצרות עם drizzle-kit ומגיעות עם drizzle/meta מעודכן. מיגרציה שמוסיפה עמודה או טבלה שכבר קיימת
+        תפיל את הבנייה (auto-migrate בפרודקשן) – לוודא שאין כפילות מול מיגרציה קודמת באותו PR.
+    - path: "tests/e2e/**"
+      instructions: |
+        מילוי הטופס בנייד הוא המסלול העיקרי; החבילה רצה ברוחב 390px. לבדוק גדלי מגע ופריסה ברוחב צר.
+
+chat:
+  auto_reply: true
