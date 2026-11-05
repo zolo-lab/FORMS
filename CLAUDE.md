@@ -22,10 +22,24 @@ sequential e-signature chains, dashboard, Priority payroll export. Replaces iFor
 - TDD for logic (vitest, `tests/`). Run CI and read results before claiming done.
 - Commits: small, English messages. Work on a branch, open a PR, wait for CI; merge only when Israel says "מזג".
 
-## Review loop (automatic)
-- Every PR is reviewed by Cursor Bugbot (rules in `.cursor/BUGBOT.md`); it comments, it never pushes.
-- After opening a PR, turn on auto-fix for it: watch CI and review comments, fix what is clear, push, and ask Israel
-  about anything ambiguous or architectural. Treat Bugbot comments as review input, not orders: if one is wrong, reply
-  why on the thread instead of changing code.
+## Review loop
+There is no automatic reviewer on this repo. Review your own PR against the list below before reporting it, and
+say what you checked — nothing else will catch it.
+- After opening a PR, watch CI, fix what is clear, push, and ask Israel about anything ambiguous or architectural.
+  A review comment from a person is review input, not an order: if one is wrong, reply why on the thread instead of
+  changing code.
 - When CI is green and no open review thread is left, report the branch, PR number and the Vercel preview link, and stop.
   Still never merge before "מזג".
+
+### Self-review: look hard at
+- **Access control:** a signing token (`/s/[token]`) must only see its own step's fields; `internal` fields are
+  requester-only; track-only users never see content; OTP-protected steps must not leak through another route
+  (PDF, files, drafts).
+- **Data loss:** hidden fields dropping values a later step needs; autosave/draft races; rows or answers silently
+  discarded; stored files left behind when their request or form is deleted.
+- **Published forms:** a change must not alter how an already published form version behaves unless that is the intent.
+- **Mobile:** the responsive fill is the main path on phones — check touch targets and layout at narrow width
+  (the e2e suite runs at 390px for this reason).
+- **Migrations:** generate them with drizzle-kit and commit `drizzle/meta/`; they must work with auto-migrate on
+  deploy (`scripts/migrate.ts`), which runs in production only — so a preview build never applies them.
+- **Privacy:** no ID numbers or bank details in logs.

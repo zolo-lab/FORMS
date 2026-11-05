@@ -56,5 +56,6 @@ Today: static list of 17 banks (`src/lib/forms/lookups.ts`), branch is free text
 - Searchable combobox for bank ("לאו" or "10" finds לאומי) and for branch (by number, name or city), branches filtered by the chosen bank.
 - Same component in the request wizard, the signing page and the public link.
 
-## Automatic review loop
-See `AGENTS.md` and `.cursor/BUGBOT.md` (branch `chore/auto-review`): Bugbot reviews every PR, Claude Code auto-fixes, Israel approves the preview.
+## Review loop
+See `AGENTS.md` and `CLAUDE.md`: Claude Code opens the PR, reviews it against the self-review list, watches CI, and
+Israel approves the preview. There is no automatic reviewer.
