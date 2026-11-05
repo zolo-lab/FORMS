@@ -345,7 +345,7 @@ export async function sendRequest(requestId: string, actor: { type: "user" | "ap
   const docRows = await db.select().from(packageDocuments).where(eq(packageDocuments.requestId, requestId));
   const versions = docRows.length ? await db.select().from(formTemplateVersions).where(inArray(formTemplateVersions.id, docRows.map((d) => d.templateVersionId))) : [];
   // The organization's fields (org_name, org_number…) carry the request's organization from the start, for every step.
-  const [reqOrg] = await db.select({ name: organizations.name, registrationNumber: organizations.registrationNumber }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const [reqOrg] = await db.select({ name: organizations.name, registrationNumber: organizations.registrationNumber, fields: organizations.fieldValues }).from(organizations).where(eq(organizations.id, req.organizationId));
   const orgAnswers = versions.reduce<Answers>((a, v) => withOrgFields(v.definition, reqOrg ?? null, a), {});
   if (Object.keys(orgAnswers).length) {
     const params = (req.apiParams ?? {}) as { requesterAnswers?: Answers };
