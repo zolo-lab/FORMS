@@ -427,6 +427,35 @@ export const packageDocuments = pgTable("package_documents", {
   ...timestamps,
 });
 
+/**
+ * One attempt to send one thing to one destination of "עיבוד טופס" — the record behind "נשלח ✓" / "נסה שוב"
+ * on the request page. A row per destination per round, so a request that came back and finished again
+ * sends afresh instead of being skipped as already done.
+ */
+export const deliveries = pgTable("deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  requestId: uuid("request_id")
+    .notNull()
+    .references(() => requests.id, { onDelete: "cascade" }),
+  /** The destination's id inside `package_templates.processing`. */
+  destinationId: text("destination_id").notNull(),
+  /** 'drive' | 'email' | 'webhook' */
+  kind: text("kind").notNull(),
+  /** Where it went, in words, for the request page ("חשבות שכר <payroll@…>"). */
+  target: text("target").notNull(),
+  /** The package_documents rows that were sent (whole documents and parts). */
+  documentIds: jsonb("document_ids").$type<string[]>().notNull().default([]),
+  /** 'queued' | 'done' | 'failed' */
+  status: text("status").notNull().default("queued"),
+  /** Where it landed, when the destination has a link (Drive). */
+  url: text("url"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  /** How many times this request had completed when the row was made; a later round sends again. */
+  round: integer("round").notNull().default(1),
+  ...timestamps,
+});
+
 export const signingSteps = pgTable(
   "signing_steps",
   {
@@ -550,6 +579,11 @@ export const notifications = pgTable("notifications", {
   /** The designed e-mail (HTML) when the trigger has one; `body` is its plain-text part. */
   html: text("html"),
   error: text("error"),
+  /**
+   * Stored files to attach when this one is sent ("עיבוד טופס" mails a chosen part to a chosen person).
+   * Empty/absent = the older behaviour, where the attachments follow from `templateKey`.
+   */
+  attachFileIds: jsonb("attach_file_ids").$type<string[]>(),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   attempts: integer("attempts").notNull().default(0),

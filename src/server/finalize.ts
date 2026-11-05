@@ -103,5 +103,16 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
       console.error("drive archive failed", { requestId, doc: d.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  // "עיבוד טופס": once every document and its parts exist, the destinations are carried out. Never fatal —
+  // a failed delivery is recorded and retried from the request page, the signed documents are already stored.
+  try {
+    const { runProcessing } = await import("./deliver");
+    const r = await runProcessing(requestId);
+    if (r.failed) console.error("some deliveries failed", { requestId, failed: r.failed });
+  } catch (err) {
+    console.error("processing failed", { requestId, error: err instanceof Error ? err.message : String(err) });
+  }
+
   return { generated, skipped };
 }

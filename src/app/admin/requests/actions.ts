@@ -302,3 +302,16 @@ export async function followUpAction(fd: FormData) {
   revalidatePath(`/admin/requests/${requestId}`);
   redirect(`/admin/requests/${requestId}`);
 }
+
+/** "נסה שוב" on one destination of "עיבוד טופס": runs that destination again for the current round. */
+export async function retryDeliveryAction(requestId: string, destinationId: string): Promise<{ ok: boolean; message: string }> {
+  if (!(await canSeeRequest(requestId))) return { ok: false, message: "אין הרשאה" };
+  try {
+    const { runProcessing } = await import("@/server/deliver");
+    const r = await runProcessing(requestId, { only: [destinationId] });
+    revalidatePath(`/admin/requests/${requestId}`);
+    return r.failed > 0 ? { ok: false, message: "השליחה נכשלה שוב" } : { ok: true, message: "נשלח" };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "השליחה נכשלה" };
+  }
+}
