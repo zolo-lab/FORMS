@@ -2,12 +2,13 @@
 import { ChevronDown, Folder, Mail, Trash2, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input, Textarea } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { describeDestination, destinationProblems, itemLabel, type ProcessingContext } from "@/lib/processing/model";
 import { COMPLETION_DESTINATION_ID, type Destination, type SendItem } from "@/lib/processing/types";
 import { RecipientPicker } from "./RecipientPicker";
+import { DriveTarget } from "./DriveTarget";
 
 const ICON = { drive: Folder, email: Mail, webhook: Webhook } as const;
 const KIND_LABEL = { drive: "תיקייה בדרייב", email: "מייל", webhook: "Webhook" } as const;
@@ -110,11 +111,13 @@ export function DestinationCard({
           )}
 
           {d.kind === "drive" && (
-            <div className="space-y-1">
-              <Label htmlFor={`${id}-path`}>נתיב התיקייה</Label>
-              <Input id={`${id}-path`} value={d.path ?? ""} onChange={(e) => onChange({ ...d, path: e.target.value })} placeholder="שכר {עמותה}/{שנה}/101_{שנה}" />
-              <p className="text-xs text-muted-foreground">מתחת לתיקיית השורש של העמותה. בחירת תיקייה מהדרייב תתווסף בהמשך.</p>
-            </div>
+            <DriveTarget
+              folderId={d.folderId}
+              path={d.path}
+              fileName={d.fileName}
+              idPrefix={id}
+              onChange={(patch) => onChange({ ...d, ...patch })}
+            />
           )}
 
           {problems.length > 0 && (

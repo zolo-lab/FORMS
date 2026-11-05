@@ -146,8 +146,12 @@ export async function finalizeRequestAction(requestId: string): Promise<{ ok: bo
   try {
     const { finalizeRequest } = await import("@/server/finalize");
     const r = await finalizeRequest(requestId);
+    // Run the destinations here too, so a request finalized by hand is also filed and sent.
+    const { runProcessing } = await import("@/server/deliver");
+    const p = await runProcessing(requestId);
     revalidatePath(`/admin/requests/${requestId}`);
-    return { ok: true, message: r.generated ? `נוצרו ${r.generated} קבצים` : "כל הקבצים כבר קיימים (קבצים שטרם בארכיון ב-Drive הועלו אליו)" };
+    const sent = p.run ? `, ${p.run} יעדים בוצעו${p.failed ? ` (${p.failed} נכשלו)` : ""}` : "";
+    return { ok: true, message: (r.generated ? `נוצרו ${r.generated} קבצים` : "כל הקבצים כבר קיימים") + sent };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "היצירה נכשלה" };
   }

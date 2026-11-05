@@ -8,8 +8,8 @@ const files: RequestFiles = {
     { documentId: "d2", templateId: "tpl-2", fileId: "f-doc2", title: "הסכם" },
   ],
   parts: [
-    { documentId: "p1", partId: "a", fileId: "f-101", name: "101" },
-    { documentId: "p2", partId: "b", fileId: null, name: "לא נוצר" },
+    { documentId: "p1", partId: "a", fileId: "f-101", name: "101", pages: "1-2" },
+    { documentId: "p2", partId: "b", fileId: null, name: "לא נוצר", pages: "3" },
   ],
   uploads: [
     { fieldId: "tz", fileId: "f-tz", name: "צילום ת\"ז.pdf" },
@@ -30,7 +30,9 @@ describe("filesForItem", () => {
   });
 
   it("takes a part by its id and names the file after the part", () => {
-    expect(filesForItem({ kind: "part", partId: "a" }, files)).toEqual([{ documentId: "p1", fileId: "f-101", name: "101.pdf" }]);
+    expect(filesForItem({ kind: "part", partId: "a" }, files)).toEqual([
+      { documentId: "p1", fileId: "f-101", name: "101.pdf", cut: { pages: "1-2", sourcePages: undefined } },
+    ]);
   });
 
   it("leaves out a part that has no file yet instead of sending a broken reference", () => {

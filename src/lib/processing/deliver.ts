@@ -8,18 +8,24 @@ import type { Destination, RecipientRef, SendItem } from "./types";
 
 /** A stored file a destination can send: a whole document, a part, or something a signer uploaded. */
 export interface SendableFile {
-  /** `package_documents.id` for a document or part; the upload's stored id otherwise. */
+  /** The document row this came from, when it came from one. */
   documentId?: string;
+  /** The stored file to read. For a part this is the whole signed document it is cut out of. */
   fileId: string;
   name: string;
+  /**
+   * Set on a part: the pages to cut out of `fileId` on the way out, and how many pages the document had
+   * before its certificate page was appended — so "3-" means "to the end of the form", never the certificate.
+   */
+  cut?: { pages: string; sourcePages?: number };
 }
 
 /** Everything of one request a destination may pick from. */
 export interface RequestFiles {
   /** Whole signed documents, by the package item (form template) they belong to. */
   documents: { documentId: string; templateId?: string; fileId: string | null; title: string }[];
-  /** Parts cut out of them, by the part id in `processing.parts`. */
-  parts: { documentId: string; partId: string; fileId: string | null; name: string }[];
+  /** Parts the form defines, as cuts of the signed documents — never stored documents of their own. */
+  parts: { documentId: string; partId: string; fileId: string | null; name: string; pages: string; sourcePages?: number }[];
   /** Files signers uploaded, by the field they were uploaded in. */
   uploads: { fieldId: string; fileId: string; name: string }[];
 }
@@ -50,7 +56,7 @@ export function filesForItem(item: SendItem, files: RequestFiles): SendableFile[
   if (item.kind === "part") {
     return files.parts
       .filter((p) => p.partId === item.partId && p.fileId)
-      .map((p) => ({ documentId: p.documentId, fileId: p.fileId!, name: `${p.name}.pdf` }));
+      .map((p) => ({ documentId: p.documentId, fileId: p.fileId!, name: `${p.name}.pdf`, cut: { pages: p.pages, sourcePages: p.sourcePages } }));
   }
   return files.uploads
     .filter((u) => item.fieldId === "*" || u.fieldId === item.fieldId)
@@ -59,7 +65,7 @@ export function filesForItem(item: SendItem, files: RequestFiles): SendableFile[
 
 /** Everything a destination sends, each file once even when two items name it. */
 export function filesForDestination(d: Destination, files: RequestFiles): SendableFile[] {
-  return seen(d.items.flatMap((i) => filesForItem(i, files)), (f) => f.fileId);
+  return seen(d.items.flatMap((i) => filesForItem(i, files)), (f) => `${f.fileId}:${f.cut?.pages ?? ""}`);
 }
 
 /** The people a `RecipientRef` stands for, looked up by the engine and passed in here. */

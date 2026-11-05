@@ -1,5 +1,5 @@
 "use client";
-import { Check, Loader2, Mail, Plus } from "lucide-react";
+import { Check, Folder, Loader2, Mail, Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,11 @@ export function ProcessingTab({
   ];
 
   const patch = (id: string, next: Destination) => onChange({ ...value, destinations: value.destinations.map((d) => (d.id === id ? next : d)) });
+  const addDrive = () => {
+    const id = newDestinationId();
+    onChange({ ...value, destinations: [...value.destinations, { id, kind: "drive", items: [{ kind: "full" }], path: "" }] });
+    setOpen(id);
+  };
   const addEmail = () => {
     const id = newDestinationId();
     onChange({ ...value, destinations: [...value.destinations, { id, kind: "email", attach: true, items: [{ kind: "full" }], to: [] }] });
@@ -98,10 +103,15 @@ export function ProcessingTab({
             />
           ))}
         </ul>
-        <Button type="button" variant="outline" onClick={addEmail}>
-          <Plus className="size-4" aria-hidden /><Mail className="size-4" aria-hidden />הוספת יעד מייל
-        </Button>
-        <p className="text-xs text-muted-foreground">תיוק בתיקיית דרייב והעברת המסמכים הנלווים – בשלבים הבאים של הבנייה.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={addEmail}>
+            <Plus className="size-4" aria-hidden /><Mail className="size-4" aria-hidden />הוספת יעד מייל
+          </Button>
+          <Button type="button" variant="outline" onClick={addDrive}>
+            <Plus className="size-4" aria-hidden /><Folder className="size-4" aria-hidden />הוספת תיקייה בדרייב
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">העברת המסמכים הנלווים ליעד משלהם – בשלב הבא של הבנייה.</p>
       </section>
 
       <div className={cn("sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur")}>

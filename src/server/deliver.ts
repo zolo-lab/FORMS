@@ -12,11 +12,13 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeProcessing } from "@/lib/processing/model";
 import { describeTarget, filesForDestination, recipientsFor, skipReason, type PeopleLookup, type RequestFiles, type SendableFile } from "@/lib/processing/deliver";
-import type { Destination } from "@/lib/processing/types";
+import type { CutPart, Destination } from "@/lib/processing/types";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
-import { ownDocuments, partsOf } from "./package-docs";
+import { ownDocuments } from "./package-docs";
 import { triggersFor } from "./mail-triggers";
+import { driveProblem, uploadToFolders } from "./drive";
+import { resolveFileName, resolvePath, type PathContext } from "@/lib/processing/path";
 import { insertNotifications } from "./notifications";
 
 const { deliveries, events, packageDocuments, packageTemplates, formTemplateVersions, formTemplates, requests, signingSteps, organizations, users } = schema;
@@ -45,23 +47,43 @@ function uploadsByField(answers: Answers): { fieldId: string; fileId: string; na
 }
 
 /** Everything of this request a destination may pick from. */
-async function requestFiles(requestId: string, answers: Answers): Promise<RequestFiles> {
+async function requestFiles(requestId: string, answers: Answers, parts: CutPart[]): Promise<RequestFiles> {
   const docs = await db
-    .select({ documentId: packageDocuments.id, fileId: packageDocuments.finalFileId, templateId: formTemplateVersions.templateId, title: formTemplates.title })
+    .select({
+      documentId: packageDocuments.id,
+      fileId: packageDocuments.finalFileId,
+      templateId: formTemplateVersions.templateId,
+      title: formTemplates.title,
+      // How long the form is without its certificate page, so "3-" never sweeps the certificate into a part.
+      sourcePages: schema.pdfFiles.pages,
+    })
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+    .leftJoin(schema.pdfFiles, eq(schema.pdfFiles.id, formTemplateVersions.pdfFileId))
     .where(ownDocuments(requestId))
     .orderBy(asc(packageDocuments.order));
-  const parts = await db
-    .select({ documentId: packageDocuments.id, partName: packageDocuments.partName, fileId: packageDocuments.finalFileId, pages: packageDocuments.pages })
-    .from(packageDocuments)
-    .where(partsOf(requestId))
-    .orderBy(asc(packageDocuments.order));
+
+  // A part is not a document of the request: it is a cut of one, made on the way out and never stored as a row.
+  const cuts: RequestFiles["parts"] = [];
+  for (const part of parts) {
+    for (const d of docs) {
+      const mine = part.documentId ? d.templateId === part.documentId : docs.length === 1;
+      if (!mine) continue;
+      cuts.push({
+        documentId: d.documentId,
+        partId: part.id,
+        fileId: d.fileId,
+        name: part.name?.trim() || "חלק",
+        pages: part.pages,
+        sourcePages: typeof d.sourcePages === "number" ? d.sourcePages : undefined,
+      });
+    }
+  }
+
   return {
     documents: docs.map((d) => ({ documentId: d.documentId, templateId: d.templateId, fileId: d.fileId, title: d.title })),
-    // Parts are matched back to `processing.parts` by name: that is what the builder shows and what the row stores.
-    parts: parts.map((p) => ({ documentId: p.documentId, partId: p.partName ?? "", fileId: p.fileId, name: p.partName ?? "חלק" })),
+    parts: cuts,
     uploads: uploadsByField(answers),
   };
 }
@@ -103,7 +125,7 @@ async function record(row: typeof deliveries.$inferInsert): Promise<void> {
 /** Sends one destination. Never throws: the outcome is the row it returns. */
 async function runDestination(
   d: Destination,
-  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string },
+  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string; path: PathContext; driveRootFolderId: string | null },
 ): Promise<void> {
   const picked = filesForDestination(d, opts.files);
   const to = d.kind === "email" ? recipientsFor(d.to, opts.look) : [];
@@ -117,14 +139,16 @@ async function runDestination(
   }
 
   try {
+    let url: string | null = null;
     if (d.kind === "email") await mailDestination(d, picked, to, opts);
-    // Drive and webhook destinations arrive with their own steps of the build; until then they are recorded
-    // as not attempted rather than silently dropped.
+    else if (d.kind === "drive") url = await driveDestination(d, picked, opts);
+    // Webhook destinations arrive with their own step of the build; until then they are recorded as not
+    // attempted rather than silently dropped.
     else {
       await record({ ...base, status: "failed", error: "יעד מסוג זה עדיין לא נתמך", attempts: 1 });
       return;
     }
-    await record({ ...base, status: "done", attempts: 1 });
+    await record({ ...base, status: "done", attempts: 1, url });
     await db.insert(events).values({ requestId: opts.requestId, actorType: "system", type: "delivery_done", payload: { destinationId: d.id, kind: d.kind, target, files: picked.length } });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -132,6 +156,51 @@ async function runDestination(
     await db.insert(events).values({ requestId: opts.requestId, actorType: "system", type: "delivery_failed", payload: { destinationId: d.id, kind: d.kind, target, error: error.slice(0, 200) } });
     console.error("delivery failed", { requestId: opts.requestId, destination: d.id, error });
   }
+}
+
+/**
+ * Files every chosen file into Drive, under the destination's path (or a folder picked in the browser).
+ * Returns the link of the last file, which is what the request page shows.
+ */
+/**
+ * The bytes a destination sends. A part is cut here, out of the stored signed document — it is never a
+ * document of the request, only a file on its way out. Cutting is deterministic, so a retry sends the
+ * very same bytes.
+ */
+async function bytesOf(f: SendableFile): Promise<{ bytes: Uint8Array; name: string }> {
+  const { getFile } = await import("./storage");
+  const stored = await getFile(f.fileId);
+  if (!stored) throw new Error(`הקובץ "${f.name}" לא נמצא`);
+  if (!f.cut) return { bytes: stored.bytes, name: f.name };
+  const { cutPages } = await import("@/lib/pdf/cut");
+  return { bytes: await cutPages(stored.bytes, f.cut.pages, f.cut.sourcePages), name: f.name };
+}
+
+async function driveDestination(
+  d: Destination & { kind: "drive" },
+  picked: SendableFile[],
+  opts: { requestId: string; path: PathContext; driveRootFolderId: string | null },
+): Promise<string | null> {
+  const problem = driveProblem();
+  if (problem) throw new Error(`ארכיון Drive כבוי: ${problem}`);
+  let last: string | null = null;
+  for (const f of picked) {
+    const { bytes } = await bytesOf(f);
+    // `{סוג}` follows the part being filed, so one destination can carry several parts into one tree.
+    const ctx: PathContext = { ...opts.path, type: opts.path.type ?? f.name.replace(/\.pdf$/i, "") };
+    const { segments, unknown } = resolvePath(d.path ?? "", ctx);
+    if (unknown.length) throw new Error(`משתנה לא מוכר בנתיב: ${unknown.join(", ")}`);
+    const up = await uploadToFolders({
+      folders: segments,
+      fileName: resolveFileName(d.fileName, ctx),
+      bytes,
+      // A folder picked in the browser wins over the path; otherwise the organization's root, then the global one.
+      rootFolderId: d.folderId ?? opts.driveRootFolderId,
+    });
+    if (!up) throw new Error("ארכיון Drive לא מוגדר");
+    last = up.driveUrl;
+  }
+  return last;
 }
 
 const PROCESSING_KEY = "processing_docs";
@@ -185,15 +254,26 @@ export async function runProcessing(requestId: string, opts: { only?: string[] }
 
   const { collectedAnswers } = await import("./requests-store");
   const answers = await collectedAnswers(requestId);
-  const [files, look] = await Promise.all([requestFiles(requestId, answers), peopleFor(requestId, answers)]);
-  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const [files, look] = await Promise.all([requestFiles(requestId, answers, processing.parts), peopleFor(requestId, answers)]);
+  const [org] = await db.select({ name: organizations.name, driveRootFolderId: organizations.driveRootFolderId }).from(organizations).where(eq(organizations.id, req.organizationId));
+  const steps = await db.select({ completedAt: signingSteps.completedAt }).from(signingSteps).where(eq(signingSteps.requestId, requestId));
+  const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
+  const path: PathContext = {
+    organization: org?.name,
+    form: pkg?.name,
+    subject: req.subjectName,
+    idNumber: req.subjectIdNumber ?? undefined,
+    signedAt: times.length ? new Date(Math.max(...times)) : new Date(),
+    requestId,
+    answers: answers as Record<string, unknown>,
+  };
 
   let run = 0;
   for (const d of wanted) {
     if (settled.has(d.id) && !opts.only) continue;
     // A retry replaces the earlier attempt of this round rather than piling rows up.
     if (opts.only) await db.delete(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.destinationId, d.id), eq(deliveries.round, round)));
-    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "" });
+    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "", path, driveRootFolderId: org?.driveRootFolderId ?? null });
     run++;
   }
   const after = await db.select({ status: deliveries.status }).from(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.round, round)));
