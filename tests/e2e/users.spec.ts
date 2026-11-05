@@ -53,7 +53,7 @@ test("users: a refused save keeps everything already typed and ticked", async ({
   await page.getByLabel("טלפון נייד").fill("12345");
   await page.getByRole("button", { name: "יצירת המשתמש" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("מספר הטלפון לא תקין");
+  await expect(page.getByRole("alert").filter({ hasText: "מספר הטלפון לא תקין" })).toBeVisible();
   await expect(page.getByLabel("שם מלא")).toHaveValue(name);
   await expect(page.getByLabel("מייל")).toHaveValue(email);
   await expect(page.getByLabel("טלפון נייד")).toHaveValue("12345");
