@@ -1,7 +1,8 @@
 /**
  * Cutting pages out of a signed PDF into a document of their own ("עיבוד טופס").
- * The source is the stamped PDF **before** the certificate page is appended, so a part comes out clean:
- * what the employee signed, and nothing else bolted on.
+ * Cutting happens on the way out, when a destination sends a part — a part is never stored as a document of
+ * the request. `sourcePages` keeps the certificate page out of an open range, so a part is what people signed
+ * and nothing else bolted on.
  */
 import { PDFDocument } from "pdf-lib";
 import { parsePages } from "@/lib/processing/pages";
@@ -11,9 +12,12 @@ import { parsePages } from "@/lib/processing/pages";
  * Throws when the spec names no page of this document — a part that would be an empty PDF is a mistake,
  * not something to file silently.
  */
-export async function cutPages(bytes: Uint8Array, spec: string): Promise<Uint8Array> {
+export async function cutPages(bytes: Uint8Array, spec: string, sourcePages?: number): Promise<Uint8Array> {
   const src = await PDFDocument.load(bytes);
-  const { pages, errors } = parsePages(spec, src.getPageCount());
+  // The signed file ends with a certificate page. `sourcePages` is the form's own length, so an open range
+  // ("3-") stops at the end of the form instead of sweeping the certificate into the part.
+  const limit = sourcePages && sourcePages > 0 ? Math.min(sourcePages, src.getPageCount()) : src.getPageCount();
+  const { pages, errors } = parsePages(spec, limit);
   if (errors.length) throw new Error(`bad page range "${spec}": ${errors.join("; ")}`);
   if (!pages.length) throw new Error(`page range "${spec}" selects no page`);
   const out = await PDFDocument.create();

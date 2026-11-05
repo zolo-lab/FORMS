@@ -40,3 +40,21 @@ describe("cutPages", () => {
     await expect(cutPages(await sample(2), "abc")).rejects.toThrow(/לא מספר עמוד/);
   });
 });
+
+describe("cutPages with a certificate page at the end", () => {
+  it("stops an open range at the end of the form, not at the certificate", async () => {
+    // 4 pages of form + 1 certificate page, as a signed document looks.
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < 5; i++) doc.addPage([200 + i, 400]);
+    const signed = await doc.save();
+    expect(await widths(await cutPages(signed, "3-", 4))).toEqual([202, 203]);
+    // Without the hint the certificate would come along.
+    expect(await widths(await cutPages(signed, "3-"))).toEqual([202, 203, 204]);
+  });
+
+  it("still refuses a range past the form's own length", async () => {
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < 5; i++) doc.addPage([200 + i, 400]);
+    await expect(cutPages(await doc.save(), "5", 4)).rejects.toThrow(/4 עמודים/);
+  });
+});

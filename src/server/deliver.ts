@@ -12,10 +12,10 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeProcessing } from "@/lib/processing/model";
 import { describeTarget, filesForDestination, recipientsFor, skipReason, type PeopleLookup, type RequestFiles, type SendableFile } from "@/lib/processing/deliver";
-import type { Destination } from "@/lib/processing/types";
+import type { CutPart, Destination } from "@/lib/processing/types";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
-import { ownDocuments, partsOf } from "./package-docs";
+import { ownDocuments } from "./package-docs";
 import { triggersFor } from "./mail-triggers";
 import { driveProblem, uploadToFolders } from "./drive";
 import { resolveFileName, resolvePath, type PathContext } from "@/lib/processing/path";
@@ -47,23 +47,43 @@ function uploadsByField(answers: Answers): { fieldId: string; fileId: string; na
 }
 
 /** Everything of this request a destination may pick from. */
-async function requestFiles(requestId: string, answers: Answers): Promise<RequestFiles> {
+async function requestFiles(requestId: string, answers: Answers, parts: CutPart[]): Promise<RequestFiles> {
   const docs = await db
-    .select({ documentId: packageDocuments.id, fileId: packageDocuments.finalFileId, templateId: formTemplateVersions.templateId, title: formTemplates.title })
+    .select({
+      documentId: packageDocuments.id,
+      fileId: packageDocuments.finalFileId,
+      templateId: formTemplateVersions.templateId,
+      title: formTemplates.title,
+      // How long the form is without its certificate page, so "3-" never sweeps the certificate into a part.
+      sourcePages: schema.pdfFiles.pages,
+    })
     .from(packageDocuments)
     .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, packageDocuments.templateVersionId))
     .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+    .leftJoin(schema.pdfFiles, eq(schema.pdfFiles.id, formTemplateVersions.pdfFileId))
     .where(ownDocuments(requestId))
     .orderBy(asc(packageDocuments.order));
-  const parts = await db
-    .select({ documentId: packageDocuments.id, partName: packageDocuments.partName, fileId: packageDocuments.finalFileId, pages: packageDocuments.pages })
-    .from(packageDocuments)
-    .where(partsOf(requestId))
-    .orderBy(asc(packageDocuments.order));
+
+  // A part is not a document of the request: it is a cut of one, made on the way out and never stored as a row.
+  const cuts: RequestFiles["parts"] = [];
+  for (const part of parts) {
+    for (const d of docs) {
+      const mine = part.documentId ? d.templateId === part.documentId : docs.length === 1;
+      if (!mine) continue;
+      cuts.push({
+        documentId: d.documentId,
+        partId: part.id,
+        fileId: d.fileId,
+        name: part.name?.trim() || "חלק",
+        pages: part.pages,
+        sourcePages: typeof d.sourcePages === "number" ? d.sourcePages : undefined,
+      });
+    }
+  }
+
   return {
     documents: docs.map((d) => ({ documentId: d.documentId, templateId: d.templateId, fileId: d.fileId, title: d.title })),
-    // Parts are matched back to `processing.parts` by name: that is what the builder shows and what the row stores.
-    parts: parts.map((p) => ({ documentId: p.documentId, partId: p.partName ?? "", fileId: p.fileId, name: p.partName ?? "חלק" })),
+    parts: cuts,
     uploads: uploadsByField(answers),
   };
 }
@@ -142,6 +162,20 @@ async function runDestination(
  * Files every chosen file into Drive, under the destination's path (or a folder picked in the browser).
  * Returns the link of the last file, which is what the request page shows.
  */
+/**
+ * The bytes a destination sends. A part is cut here, out of the stored signed document — it is never a
+ * document of the request, only a file on its way out. Cutting is deterministic, so a retry sends the
+ * very same bytes.
+ */
+async function bytesOf(f: SendableFile): Promise<{ bytes: Uint8Array; name: string }> {
+  const { getFile } = await import("./storage");
+  const stored = await getFile(f.fileId);
+  if (!stored) throw new Error(`הקובץ "${f.name}" לא נמצא`);
+  if (!f.cut) return { bytes: stored.bytes, name: f.name };
+  const { cutPages } = await import("@/lib/pdf/cut");
+  return { bytes: await cutPages(stored.bytes, f.cut.pages, f.cut.sourcePages), name: f.name };
+}
+
 async function driveDestination(
   d: Destination & { kind: "drive" },
   picked: SendableFile[],
@@ -149,11 +183,9 @@ async function driveDestination(
 ): Promise<string | null> {
   const problem = driveProblem();
   if (problem) throw new Error(`ארכיון Drive כבוי: ${problem}`);
-  const { getFile } = await import("./storage");
   let last: string | null = null;
   for (const f of picked) {
-    const stored = await getFile(f.fileId);
-    if (!stored) throw new Error(`הקובץ "${f.name}" לא נמצא`);
+    const { bytes } = await bytesOf(f);
     // `{סוג}` follows the part being filed, so one destination can carry several parts into one tree.
     const ctx: PathContext = { ...opts.path, type: opts.path.type ?? f.name.replace(/\.pdf$/i, "") };
     const { segments, unknown } = resolvePath(d.path ?? "", ctx);
@@ -161,7 +193,7 @@ async function driveDestination(
     const up = await uploadToFolders({
       folders: segments,
       fileName: resolveFileName(d.fileName, ctx),
-      bytes: stored.bytes,
+      bytes,
       // A folder picked in the browser wins over the path; otherwise the organization's root, then the global one.
       rootFolderId: d.folderId ?? opts.driveRootFolderId,
     });
@@ -222,7 +254,7 @@ export async function runProcessing(requestId: string, opts: { only?: string[] }
 
   const { collectedAnswers } = await import("./requests-store");
   const answers = await collectedAnswers(requestId);
-  const [files, look] = await Promise.all([requestFiles(requestId, answers), peopleFor(requestId, answers)]);
+  const [files, look] = await Promise.all([requestFiles(requestId, answers, processing.parts), peopleFor(requestId, answers)]);
   const [org] = await db.select({ name: organizations.name, driveRootFolderId: organizations.driveRootFolderId }).from(organizations).where(eq(organizations.id, req.organizationId));
   const steps = await db.select({ completedAt: signingSteps.completedAt }).from(signingSteps).where(eq(signingSteps.requestId, requestId));
   const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
