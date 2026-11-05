@@ -41,7 +41,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("combobox", { name: "ערך", exact: true }).first().selectOption({ label: "חודשי" });
 
   // Second page with one field.
-  await page.getByRole("button", { name: "עמוד חדש" }).click();
+  await page.getByRole("button", { name: "עמוד חדש", exact: true }).click();
   await add("תשובה קצרה", "הערות");
 
   // Autosave, then the full-page preview: fill, step through, submit.

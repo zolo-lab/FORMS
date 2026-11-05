@@ -20,7 +20,7 @@ import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
-import { pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
+import { cloneField, pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
 import { FieldIcon } from "@/components/builder/field-icon";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
@@ -145,21 +145,52 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
    * "העתקת תיבה": nothing is added yet. The next click on the document pastes there a copy: a new field like the
    * original (same type, label and settings). Esc cancels.
    */
+  /**
+   * Add copies of boxes, already moved to their new place. Every box is its own field (the PDF and the responsive
+   * form always list the same fields), so each copy gets a new field just like its original: same type, label and
+   * settings. Field and box change in one step (one undo). A table cell stays in its table; a part of a field
+   * (bank.branch) copies the whole field and keeps the part. Without a form to add to, the box shares the field.
+   */
+  function addCopies(boxes: PdfStamp[]): PdfStamp[] {
+    const copies = boxes.map((b) => ({ ...b, id: nanoid(8) }));
+    const cloneAll = (def: FormDefinition) => {
+      let d = def;
+      const out = copies.map((b) => {
+        if (tableCellOf(b.fieldId)) return b;
+        const base = baseFieldId(b.fieldId);
+        const r = cloneField(d, base);
+        if (!r) return b;
+        d = r.definition;
+        return { ...b, fieldId: r.fieldId + b.fieldId.slice(base.length) };
+      });
+      return { def: d, out };
+    };
+    if (onTransform) {
+      let added = copies;
+      onTransform((def, stamps) => {
+        const { def: d, out } = cloneAll(def);
+        added = out;
+        return { def: d, stamps: [...stamps, ...out] };
+      });
+      return added;
+    }
+    const out = copies.map((b) => {
+      if (tableCellOf(b.fieldId)) return b;
+      const base = baseFieldId(b.fieldId);
+      const id = onCloneField?.(base);
+      return id ? { ...b, fieldId: id + b.fieldId.slice(base.length) } : b;
+    });
+    setStamps([...mapping.stamps, ...out]);
+    return out;
+  }
   const [boxCopy, setBoxCopy] = useState<PdfStamp | null>(null);
   const pasteBoxAt = (page: number, at: { x: number; y: number }) => {
     if (!boxCopy) return;
     const pg = pages[page]!;
     const c = clampBox({ width: boxCopy.width, height: boxCopy.height, x: at.x - boxCopy.width / 2, y: at.y - boxCopy.height / 2 }, pg.width, pg.height);
-    // Every box is its own field (the PDF and the responsive form always list the same fields): the copy is a new
-    // field just like the original, same type, label and settings. Without a form to add it to, the same field.
-    // A table cell stays in its table; a part of a field (bank.branch) copies the whole field and keeps the part.
-    const base = baseFieldId(boxCopy.fieldId);
-    const part = boxCopy.fieldId.slice(base.length);
-    const fieldId = tableCellOf(boxCopy.fieldId) ? boxCopy.fieldId : (onCloneField?.(base) ?? base) + part;
-    const copy = { ...boxCopy, id: nanoid(8), fieldId, page, x: round1(c.x), y: round1(c.y) };
-    setStamps([...mapping.stamps, copy]);
+    const [copy] = addCopies([{ ...boxCopy, page, x: round1(c.x), y: round1(c.y) }]);
     setBoxCopy(null);
-    select(copy.id);
+    select(copy!.id);
   };
   /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
   const inViewStep = (s: PdfStamp): boolean => {
@@ -373,16 +404,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
   function paste() {
     if (clipboard.current.length === 0) return;
-    const copies = clipboard.current.map((s) => {
+    const copies = addCopies(clipboard.current.map((s) => {
       const pg = pages[s.page]!;
       const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
-      // A pasted element gets its own new field (copy of the original); null = the same field is drawn again.
-      const fieldId = onCloneField?.(s.fieldId) ?? s.fieldId;
-      return { ...s, id: nanoid(8), fieldId, x: round1(c.x), y: round1(c.y) };
-    });
+      return { ...s, x: round1(c.x), y: round1(c.y) };
+    }));
     // Shift the clipboard so repeated pastes cascade.
     clipboard.current = copies;
-    setStamps([...mapping.stamps, ...copies]);
     setSelected(copies[0]!.id);
     setExtra(copies.slice(1).map((c) => c.id));
     reveal(copies[0]!.id);

@@ -115,6 +115,16 @@ describe("elements drawn on the PDF are ordinary form fields", () => {
     expect(cloneField(c.definition, "_stamp")).toBeNull();
     expect(cloneField(c.definition, "rows[0].x")).toBeNull();
   });
+
+  it("cloneField gives the copy the same label and type but its own export column", () => {
+    const d = def([{ id: "p1", fields: [{ id: "name", type: "short_text", label: "שם עובד" }] }]);
+    d.pages[0]!.fields[0]!.exportKey = "EMP_NAME";
+    const c = cloneField(d, "name")!;
+    const copy = c.definition.pages[0]!.fields[1]!;
+    expect([copy.label, copy.type]).toEqual(["שם עובד", "short_text"]);
+    expect(copy.exportKey).toBeUndefined();
+    expect("exportKey" in JSON.parse(JSON.stringify(copy))).toBe(false);
+  });
 });
 
 describe("legacy pdfOnly flag", () => {

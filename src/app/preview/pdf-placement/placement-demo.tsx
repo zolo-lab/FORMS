@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { nanoid } from "nanoid";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
@@ -9,7 +9,13 @@ import { sampleForm } from "../../../../tests/fixtures/sample-form";
 
 /** No-database demo: generates a blank A4 PDF in the browser and lets you place sample-form fields on it. */
 export function PlacementDemo() {
-  const [definition, setDefinition] = useState(sampleForm);
+  const [definition, setDefinitionState] = useState(sampleForm);
+  // Several clones in one paste build on each other before React re-renders.
+  const defRef = useRef(sampleForm);
+  const setDefinition = (next: typeof sampleForm | ((d: typeof sampleForm) => typeof sampleForm)) => {
+    defRef.current = typeof next === "function" ? next(defRef.current) : next;
+    setDefinitionState(defRef.current);
+  };
   const [data, setData] = useState<Uint8Array | null>(null);
   const [mapping, setMapping] = useState<PdfMapping>({ schemaVersion: 1, pages: [{ width: 595.28, height: 841.89 }], stamps: [] });
   useEffect(() => {
@@ -32,7 +38,7 @@ export function PlacementDemo() {
           setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
         }
         onCloneField={(fieldId) => {
-          const r = cloneField(definition, fieldId);
+          const r = cloneField(defRef.current, fieldId);
           if (!r) return null;
           setDefinition(r.definition);
           return r.fieldId;
