@@ -49,6 +49,17 @@ describe("filesForItem", () => {
   });
 });
 
+describe("a part downloaded by hand and a part sent to a destination", () => {
+  it("are the same file: the download picks it with filesForItem, exactly as a destination does", () => {
+    const d = dest({ items: [{ kind: "part", partId: "a" }] });
+    expect(filesForItem({ kind: "part", partId: "a" }, files)).toEqual(filesForDestination(d, files));
+  });
+
+  it("offers nothing to download for a part whose document is not signed yet", () => {
+    expect(filesForItem({ kind: "part", partId: "b" }, files)).toEqual([]);
+  });
+});
+
 describe("filesForDestination", () => {
   it("sends each file once even when two items name it", () => {
     const d = dest({ items: [{ kind: "full" }, { kind: "full", documentId: "tpl-1" }] });

@@ -4,7 +4,7 @@ import { canSeeRequest, currentUser } from "@/server/users-store";
 import { hasGrant } from "@/lib/auth/permissions";
 import { FinalizeButton } from "@/components/requests/FinalizeButton";
 import { RetryDelivery } from "@/components/requests/RetryDelivery";
-import { requestDeliveries } from "@/server/deliver";
+import { requestDeliveries, requestParts } from "@/server/deliver";
 import { driveEnabled, driveProblem } from "@/server/drive";
 import { RefreshLinks } from "@/components/requests/RefreshLinks";
 import { RequestActions } from "@/components/requests/RequestActions";
@@ -40,6 +40,8 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const files = await uploadedFiles(id);
   // Where each document and part was sent ("עיבוד טופס").
   const deliveries = await requestDeliveries(id);
+  // Parts the form cuts out of its signed documents, offered for download (cut on the way out, never stored).
+  const parts = request.status === "completed" ? await requestParts(id) : [];
   const fmt = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jerusalem" });
   const [label, tone] = REQUEST_STATUS_LABEL[request.status];
   const openSteps = steps.filter((s) => (s.status === "active" || s.status === "in_progress") && s.role !== "requester");
@@ -145,6 +147,25 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
               </div>
             ))}
           </Card>
+          {parts.length > 0 && (
+            <Card className="divide-y">
+              <p className="px-3 pt-3 text-xs text-muted-foreground">
+                חלקים מתוך המסמך החתום. נחתכים בהורדה עצמה, בלי עמוד האסמכתא.
+              </p>
+              {parts.map((p) => (
+                <div key={p.partId} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-xs text-muted-foreground">{`עמודים ${p.pages}`}</span>
+                  <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/parts/${p.partId}?inline=1`} target="_blank" rel="noopener noreferrer">
+                    תצוגה
+                  </a>
+                  <a className="text-primary hover:underline" href={`/api/admin/requests/${request.id}/parts/${p.partId}`}>
+                    הורדה
+                  </a>
+                </div>
+              ))}
+            </Card>
+          )}
           {documents.some((d) => !d.finalFileId) && <FinalizeButton requestId={request.id} />}
           {!driveEnabled() && documents.some((d) => !d.driveUrl) && driveProblem() && (
             <p className="text-xs text-muted-foreground">ארכיון Drive כבוי: {driveProblem()}.</p>

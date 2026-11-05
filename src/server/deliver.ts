@@ -11,7 +11,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeProcessing } from "@/lib/processing/model";
-import { describeTarget, filesForDestination, recipientsFor, skipReason, type PeopleLookup, type RequestFiles, type SendableFile } from "@/lib/processing/deliver";
+import { describeTarget, filesForDestination, filesForItem, recipientsFor, skipReason, type PeopleLookup, type RequestFiles, type SendableFile } from "@/lib/processing/deliver";
 import type { CutPart, Destination } from "@/lib/processing/types";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
@@ -289,6 +289,37 @@ export async function runProcessing(requestId: string, opts: { only?: string[] }
   }
   const after = await db.select({ status: deliveries.status }).from(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.round, round)));
   return { run, failed: after.filter((r) => r.status === "failed").length };
+}
+
+/**
+ * One part of a request, cut out of the signed document on the way out — the same bytes a destination would
+ * send, so what an admin downloads by hand and what the mail carries can never drift apart.
+ * Null when the form defines no such part, or the document it cuts has not been signed yet.
+ */
+export async function partFile(requestId: string, partId: string): Promise<{ bytes: Uint8Array; name: string } | null> {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) return null;
+  const [pkg] = await db.select({ processing: packageTemplates.processing }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  const parts = normalizeProcessing(pkg?.processing).parts;
+  if (!parts.some((p) => p.id === partId)) return null;
+  const { collectedAnswers } = await import("./requests-store");
+  const files = await requestFiles(requestId, await collectedAnswers(requestId), parts);
+  const [picked] = filesForItem({ kind: "part", partId }, files);
+  return picked ? bytesOf(picked) : null;
+}
+
+/** The parts of a request that have something to download, for the request page. */
+export async function requestParts(requestId: string): Promise<{ partId: string; name: string; pages: string }[]> {
+  const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
+  if (!req) return [];
+  const [pkg] = await db.select({ processing: packageTemplates.processing }).from(packageTemplates).where(eq(packageTemplates.id, req.packageTemplateId));
+  const parts = normalizeProcessing(pkg?.processing).parts;
+  if (!parts.length) return [];
+  const { collectedAnswers } = await import("./requests-store");
+  const files = await requestFiles(requestId, await collectedAnswers(requestId), parts);
+  return parts
+    .filter((p) => filesForItem({ kind: "part", partId: p.id }, files).length > 0)
+    .map((p) => ({ partId: p.id, name: p.name, pages: p.pages }));
 }
 
 /** What the request page shows under "עיבוד", newest round first. */
