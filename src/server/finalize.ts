@@ -2,6 +2,10 @@
  * Final PDFs: when a request completes, every package document becomes one PDF
  * (stamped template, or an answers summary when the form has no PDF) plus the reference page.
  * Idempotent per document: a document that already has `finalFileId` is left alone unless `force`.
+ *
+ * This file ends where the signed documents do. "עיבוד טופס" — cutting them and sending them on to Drive or
+ * by mail — is a separate trigger that runs afterwards on the finished documents (`src/server/deliver.ts`),
+ * so a slow upload never holds up the person who just signed.
  */
 import { asc, eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
@@ -92,17 +96,6 @@ export async function finalizeRequest(requestId: string, opts: { force?: boolean
     } catch (err) {
       console.error("drive archive failed", { requestId, doc: d.id, error: err instanceof Error ? err.message : String(err) });
     }
-  }
-
-  // "עיבוד טופס": a separate step that runs on the finished documents, like a scenario that watches them.
-  // It never changes them and never fails the request —
-  // a failed delivery is recorded and retried from the request page, the signed documents are already stored.
-  try {
-    const { runProcessing } = await import("./deliver");
-    const r = await runProcessing(requestId);
-    if (r.failed) console.error("some deliveries failed", { requestId, failed: r.failed });
-  } catch (err) {
-    console.error("processing failed", { requestId, error: err instanceof Error ? err.message : String(err) });
   }
 
   return { generated, skipped };

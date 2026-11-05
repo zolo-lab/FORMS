@@ -527,6 +527,16 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     } catch (e) {
       console.error("[finalize] failed", row.requestId, e);
     }
+    // "עיבוד טופס" runs on the finished documents, after the response: filing to Drive can take a while and
+    // the person who just signed should not be kept waiting for it.
+    await afterResponse(async () => {
+      try {
+        const { runProcessing } = await import("./deliver");
+        await runProcessing(row.requestId);
+      } catch (e) {
+        console.error("[processing] failed", row.requestId, e);
+      }
+    });
   }
   // Webhooks go out after the final PDFs exist (request.completed links to them) and after the response.
   const exposed = result.events.filter((e) => e.type === "request_completed" || e.type === "step_completed" || e.type === "request_declined");
