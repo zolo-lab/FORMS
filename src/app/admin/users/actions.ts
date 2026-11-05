@@ -7,6 +7,7 @@ import { requireAdmin } from "@/server/guards";
 import { listProjects } from "@/server/orgs-store";
 import { createGroup, deleteGroup, renameGroup } from "@/server/people-store";
 import { saveUserDetails, setGroupUsers } from "@/server/user-admin";
+import type { SaveUserState } from "./[id]/UserForm";
 import { currentUser, permissionsOf, setUserGrants, setUserOrgAccess, setUserPermissions, setUserProjectAccess } from "@/server/users-store";
 
 const PATH = "/admin/users";
@@ -17,24 +18,27 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 /**
  * One form for everything about a user (new when `id` is empty): details, type, and for a manager the extra
  * permissions, the forms they may send/see, and the organizations. No password here: sign-in is set up separately.
+ *
+ * A refusal is RETURNED, never redirected to: the form stays on screen with everything the admin already typed
+ * and ticked (losing the rest of the form over one bad phone number is the bug this shape prevents).
  */
-export async function saveUserAction(fd: FormData) {
+export async function saveUserAction(_prev: SaveUserState | null, fd: FormData): Promise<SaveUserState | null> {
   await requireAdmin();
   const id = str(fd, "id");
-  const edit = (q: string) => redirect(`${PATH}/${id || "new"}${q}`);
+  const refuse = (error: string): SaveUserState => ({ error });
   if (id && !UUID.test(id)) redirect(PATH);
   const name = str(fd, "name");
   const email = str(fd, "email").toLowerCase();
   const phoneRaw = str(fd, "phone");
   const role = str(fd, "role") as UserRole;
   const active = fd.get("active") === "on";
-  if (!name) edit("?error=name");
-  if (!isValidEmail(email)) edit("?error=email");
-  if (phoneRaw && !isValidIsraeliPhone(phoneRaw)) edit("?error=phone");
-  if (!ROLES.includes(role)) edit("?error=input");
+  if (!name) return refuse("name");
+  if (!isValidEmail(email)) return refuse("email");
+  if (phoneRaw && !isValidIsraeliPhone(phoneRaw)) return refuse("phone");
+  if (!ROLES.includes(role)) return refuse("input");
   const me = await currentUser();
   // An admin cannot lock themselves out.
-  if (id && me?.id === id && (role !== "admin" || !active)) edit("?error=self");
+  if (id && me?.id === id && (role !== "admin" || !active)) return refuse("self");
   const allProjects = await listProjects();
   const tickedProjects = new Set(fd.getAll("projects").map(String));
   // A ticked project brings its organization along (ticking "ארצנו" alone means "שיבת ציון › ארצנו").
@@ -43,10 +47,10 @@ export async function saveUserAction(fd: FormData) {
     ...allProjects.filter((p) => tickedProjects.has(p.id)).map((p) => p.organizationId),
   ])];
   // "Only some" with nothing ticked would silently mean "all": refuse it instead.
-  if (role === "manager" && fd.get("orgScope") === "some" && orgIds.length === 0) edit("?error=orgs");
+  if (role === "manager" && fd.get("orgScope") === "some" && orgIds.length === 0) return refuse("orgs");
 
   const saved = await saveUserDetails({ id: id || undefined, name, email, role, active, phone: phoneRaw ? normalizeIsraeliPhone(phoneRaw) : null });
-  if (!saved.ok) edit("?error=exists");
+  if (!saved.ok) return refuse("exists");
   const userId = (saved as { id: string }).id;
 
   if (role === "manager") {
