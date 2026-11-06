@@ -198,7 +198,8 @@ export function cloneField(def: FormDefinition, fieldId: string): { definition: 
     const at = p.fields.findIndex((f) => f.id === fieldId);
     if (at < 0) return p;
     const fields = [...p.fields];
-    fields.splice(at + 1, 0, { ...source, id });
+    // Its own export column: the source's exportKey would merge both answers into one column.
+    fields.splice(at + 1, 0, { ...source, id, exportKey: undefined });
     return { ...p, fields };
   });
   return { definition: { ...def, pages }, fieldId: id };

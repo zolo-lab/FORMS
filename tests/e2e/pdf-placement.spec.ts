@@ -119,7 +119,7 @@ test("all boxes share one colour; the step chosen to view stands out in green", 
   await expect(box).not.toHaveClass(/border-success/);
 });
 
-test("copying a box adds nothing until a click on the document pastes it there, same field", async ({ page }) => {
+test("copying a box adds nothing until a click on the document pastes there a new field like it", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   const pdfPage = page.getByTestId("pdf-page-0");
   await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
@@ -132,7 +132,7 @@ test("copying a box adds nothing until a click on the document pastes it there, 
   await pdfPage.click({ position: { x: 120, y: area.height - 120 } });
   await expect.poll(async () => (await mapping()).length).toBe(2);
   const after = await mapping();
-  expect(after[1]!.fieldId).toBe(after[0]!.fieldId);
+  expect(after[1]!.fieldId).not.toBe(after[0]!.fieldId); // its own field, so the responsive form lists it too
   expect(after[1]!.y).toBeLessThan(200); // pasted where clicked, near the bottom of the page
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
   // Esc cancels a copy.
@@ -141,4 +141,47 @@ test("copying a box adds nothing until a click on the document pastes it there, 
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toHaveCount(0);
   await pdfPage.click({ position: { x: 300, y: 300 } });
   expect(await mapping()).toHaveLength(2);
+});
+
+test("a pasted box undoes and redoes together with its new field", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string }[];
+  const fieldIds = async () => JSON.parse((await page.getByTestId("field-ids").textContent())!) as string[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
+  const area = (await pdfPage.boundingBox())!;
+  await pdfPage.click({ position: { x: 150, y: area.height - 150 } });
+  await expect.poll(async () => (await stamps()).length).toBe(2);
+  const copied = (await stamps())[1]!.fieldId;
+  expect(await fieldIds()).toContain(copied);
+
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await stamps()).length).toBe(1);
+  expect(await fieldIds()).not.toContain(copied);
+
+  await page.keyboard.press("Control+Shift+z");
+  await expect.poll(async () => (await stamps()).length).toBe(2);
+  expect(await fieldIds()).toContain(copied); // the box never points at a field that is gone
+});
+
+test("undoing a box move keeps a field edited after it", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { x: number }[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  const box = page.locator("[data-stamp]").first();
+  const x0 = (await stamps())[0]!.x;
+  await box.click();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0 - 10, 1);
+  const label = page.getByRole("region", { name: "הגדרות השדה" }).getByLabel("שם השדה (מה שהממלא רואה)");
+  await label.fill("שם שנערך");
+  await box.click();
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0, 1); // the move is undone
+  await box.click(); // undo clears the selection; select the box again to see its field
+  await expect(label).toHaveValue("שם שנערך"); // the label edited after it stays
 });

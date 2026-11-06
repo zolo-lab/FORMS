@@ -20,7 +20,7 @@ import { baseFieldId, ROLE_OVERLAY } from "@/lib/pdf/role-style";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
 import { fillerRoles, type FillerRole } from "@/lib/forms/schema";
-import { pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
+import { cloneField, pdfPaletteEntry, pdfPaletteGroups, type PaletteEntry } from "@/lib/forms/pdf-draw";
 import { FieldIcon } from "@/components/builder/field-icon";
 import { PageCanvas } from "./PageCanvas";
 import { StampStyleControls } from "./StampStyleControls";
@@ -55,8 +55,6 @@ export interface PdfPlacementProps {
   onCloneField?: (fieldId: string) => string | null;
   /** Pressing "place" on a waiting field: a suggested stamp from the PDF's own text (null = no idea, the field goes to the page centre). */
   onSuggest?: (fieldId: string) => Promise<PdfStamp | null>;
-  /** "New step from here": cut the form's step at this field. */
-  onSplitStep?: (fieldId: string) => void;
   /** "סימון בטופס": a click marks or unmarks the box's field as opened by the source field; nothing moves. */
   pick?: PickMode;
   /** Detection fixes that change the form and its boxes together (see detect-fixes.ts). */
@@ -64,7 +62,7 @@ export interface PdfPlacementProps {
   /** The fields of the selected boxes, for the editor's single step picker. When given, the in-viewer "העברה לשלב" bar is not shown. */
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, onSplitStep, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -88,7 +86,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const r = snapToText(box, texts[page] ?? [], { tolerance: 10, sideTolerance: 40 });
     return { ...box, x: r.x, y: r.y };
   };
-  const history = useRef<{ past: PdfMapping[]; future: PdfMapping[] }>({ past: [], future: [] });
+  // Undo on the PDF: the boxes, plus the form only for actions that changed it too (a paste adds fields), so both
+  // come back together and an undo of a box move never rolls back a field edited since.
+  type Snapshot = { mapping: PdfMapping; definition?: FormDefinition };
+  const history = useRef<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] });
   const clipboard = useRef<PdfStamp[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const [activePage, setActivePage] = useState(0);
@@ -131,8 +132,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   const selectedStamp = mapping.stamps.find((s) => s.id === selected) ?? null;
   const guessedCount = mapping.stamps.filter((s) => s.guessed).length;
   const group = useMemo(() => [...(selected ? [selected] : []), ...extra].filter((id) => mapping.stamps.some((s) => s.id === id)), [selected, extra, mapping.stamps]);
-  const pushHistory = () => {
-    history.current.past = [...history.current.past.slice(-49), latest.current];
+  const pushHistory = (withDefinition = false) => {
+    history.current.past = [...history.current.past.slice(-49), now(withDefinition)];
     history.current.future = [];
   };
   /** The step role of the field a box writes ("none" for boxes that are not a field, e.g. the signing date). */
@@ -144,18 +145,57 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   /** A box whose field is in no step of the form is drawn as "not in a step". */
   const shownRole = (s: PdfStamp): FillerRole | "none" => { const r = roleOf(s); return r === "none" || stepRoles.has(r) ? r : "unassigned"; };
   /**
-   * "העתקת תיבה": nothing is added yet. The next click on the document pastes one more box of the same field there
-   * (it writes the same answer, e.g. the ID number at the top of every page). Esc cancels.
+   * "העתקת תיבה": nothing is added yet. The next click on the document pastes there a copy: a new field like the
+   * original (same type, label and settings). Esc cancels.
    */
+  /**
+   * Add copies of boxes, already moved to their new place. Every box is its own field (the PDF and the responsive
+   * form always list the same fields), so each copy gets a new field just like its original: same type, label and
+   * settings. Field and box change in one step (one undo). A table cell stays in its table; a part of a field
+   * (bank.branch) copies the whole field and keeps the part. Without a form to add to, the box shares the field.
+   */
+  function addCopies(boxes: PdfStamp[]): PdfStamp[] {
+    const copies = boxes.map((b) => ({ ...b, id: nanoid(8) }));
+    const cloneAll = (def: FormDefinition) => {
+      let d = def;
+      const out = copies.map((b) => {
+        if (tableCellOf(b.fieldId)) return b;
+        const base = baseFieldId(b.fieldId);
+        const r = cloneField(d, base);
+        if (!r) return b;
+        d = r.definition;
+        return { ...b, fieldId: r.fieldId + b.fieldId.slice(base.length) };
+      });
+      return { def: d, out };
+    };
+    if (onTransform) {
+      let added = copies;
+      // Ctrl+Z here restores the boxes; the editor then drops the copied field, which has no box left.
+      pushHistory(true);
+      onTransform((def, stamps) => {
+        const { def: d, out } = cloneAll(def);
+        added = out;
+        return { def: d, stamps: [...stamps, ...out] };
+      });
+      return added;
+    }
+    const out = copies.map((b) => {
+      if (tableCellOf(b.fieldId)) return b;
+      const base = baseFieldId(b.fieldId);
+      const id = onCloneField?.(base);
+      return id ? { ...b, fieldId: id + b.fieldId.slice(base.length) } : b;
+    });
+    setStamps([...mapping.stamps, ...out]);
+    return out;
+  }
   const [boxCopy, setBoxCopy] = useState<PdfStamp | null>(null);
   const pasteBoxAt = (page: number, at: { x: number; y: number }) => {
     if (!boxCopy) return;
     const pg = pages[page]!;
     const c = clampBox({ width: boxCopy.width, height: boxCopy.height, x: at.x - boxCopy.width / 2, y: at.y - boxCopy.height / 2 }, pg.width, pg.height);
-    const copy = { ...boxCopy, id: nanoid(8), page, x: round1(c.x), y: round1(c.y) };
-    setStamps([...mapping.stamps, copy]);
+    const [copy] = addCopies([{ ...boxCopy, page, x: round1(c.x), y: round1(c.y) }]);
     setBoxCopy(null);
-    select(copy.id);
+    select(copy!.id);
   };
   /** The box belongs to the step marked above: the step is its field's own, or one it shares. */
   const inViewStep = (s: PdfStamp): boolean => {
@@ -289,12 +329,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     }
     const moving = mode === "move" && group.includes(stamp.id) && group.length > 1 ? group : [stamp.id];
     if (moving.length === 1) select(stamp.id);
-    pushHistory();
     const startX = e.clientX, startY = e.clientY;
     let moved = false;
     const origins = new Map(latest.current.stamps.filter((s) => moving.includes(s.id)).map((s) => [s.id, { x: s.x, y: s.y, width: s.width, height: s.height, page: s.page }]));
     const move = (ev: PointerEvent) => {
       if (!moved && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < 3) return;
+      // An undo step only when the box really moves: a plain click (selecting it) is not one.
+      if (!moved) pushHistory();
       moved = true;
       const dx = (ev.clientX - startX) / scale;
       const dy = -(ev.clientY - startY) / scale; // screen down = PDF down
@@ -339,7 +380,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   }
   // During a drag the closure's `mapping` is stale, so always patch from the latest ref.
   const latest = useRef(mapping);
-  useEffect(() => { latest.current = mapping; });
+  const latestDef = useRef(definition);
+  useEffect(() => { latest.current = mapping; latestDef.current = definition; });
+  const now = (withDefinition: boolean): Snapshot => ({ mapping: latest.current, ...(withDefinition ? { definition: latestDef.current } : {}) });
   const textsRef = useRef(texts);
   useEffect(() => { textsRef.current = texts; });
 
@@ -350,13 +393,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const pos = kind === "dist-x" ? distributeBoxes(list, "x") : kind === "dist-y" ? distributeBoxes(list, "y") : alignBoxes(list, kind);
     patchMany(new Map(list.map((s, i) => [s.id, { x: round1(pos[i]!.x), y: round1(pos[i]!.y) }])));
   }
+  /** Go back (or forward) to a snapshot: the form too when it changed since, as one editor step. */
+  function restore(to: Snapshot) {
+    if (onTransform && to.definition) { const def = to.definition; onTransform(() => ({ def, stamps: to.mapping.stamps })); }
+    else onMappingChange(to.mapping);
+  }
   function undo() {
     const h = history.current;
     const prev = h.past.at(-1);
     if (!prev) return;
     h.past = h.past.slice(0, -1);
-    h.future = [latest.current, ...h.future];
-    onMappingChange(prev);
+    h.future = [now(!!prev.definition), ...h.future];
+    restore(prev);
     select(null);
   }
   function redo() {
@@ -364,21 +412,18 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const next = h.future[0];
     if (!next) return;
     h.future = h.future.slice(1);
-    h.past = [...h.past, latest.current];
-    onMappingChange(next);
+    h.past = [...h.past, now(!!next.definition)];
+    restore(next);
   }
   function paste() {
     if (clipboard.current.length === 0) return;
-    const copies = clipboard.current.map((s) => {
+    const copies = addCopies(clipboard.current.map((s) => {
       const pg = pages[s.page]!;
       const c = clampBox({ ...s, x: s.x + 12, y: s.y - 12 }, pg.width, pg.height);
-      // A pasted element gets its own new field (copy of the original); null = the same field is drawn again.
-      const fieldId = onCloneField?.(s.fieldId) ?? s.fieldId;
-      return { ...s, id: nanoid(8), fieldId, x: round1(c.x), y: round1(c.y) };
-    });
-    // Shift the clipboard so repeated pastes cascade.
-    clipboard.current = copies;
-    setStamps([...mapping.stamps, ...copies]);
+      return { ...s, x: round1(c.x), y: round1(c.y) };
+    }));
+    // Shift the clipboard so repeated pastes cascade, still copying the original fields (a pasted copy may be undone).
+    clipboard.current = copies.map((c, i) => ({ ...c, fieldId: clipboard.current[i]!.fieldId }));
     setSelected(copies[0]!.id);
     setExtra(copies.slice(1).map((c) => c.id));
     reveal(copies[0]!.id);
@@ -617,7 +662,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                           type="button"
                           aria-label="העתקת התיבה"
                           aria-pressed={boxCopy?.id === s.id}
-                          title="העתקה: אחר כך לוחצים במקום במסמך, ושם תודבק תיבה של אותו שדה"
+                          title="העתקה: אחר כך לוחצים במקום במסמך, ושם יודבק שדה חדש זהה"
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); setBoxCopy(boxCopy?.id === s.id ? null : s); }}
                           className={cn(
@@ -695,9 +740,6 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 </div>
               ))}
             </div>
-            {onSplitStep && fieldOf(selectedStamp) && !tableCellOf(selectedStamp.fieldId) && (
-              <Button size="sm" variant="outline" className="min-h-9" onClick={() => onSplitStep(selectedStamp.fieldId)}>עמוד חדש מכאן</Button>
-            )}
             {onFieldPatch && !["date_signed", "stamp_image"].includes(selectedStamp.kind) && (
               <div className="space-y-1">
                 <Label className="text-muted-foreground">{group.length > 1 ? `באיזה שלב (${group.length} תיבות מסומנות)` : "באילו שלבים השדה פתוח לעריכה"}</Label>
@@ -778,7 +820,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <Button
               variant="outline"
               size="sm"
-              title="תיבה נוספת של אותו שדה: אותה תשובה תיכתב גם במקום החדש (למשל מספר זהות בראש כל עמוד). אחרי ההעתקה לוחצים במקום במסמך. Ctrl+D יוצר שדה חדש."
+              title="שדה חדש זהה (אותו סוג, שם והגדרות). אחרי ההעתקה לוחצים במקום במסמך שבו להדביק אותו."
               aria-pressed={boxCopy?.id === selectedStamp.id}
               onClick={() => setBoxCopy(boxCopy?.id === selectedStamp.id ? null : selectedStamp)}
             >

@@ -1,17 +1,28 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { nanoid } from "nanoid";
 import { PdfPlacement } from "@/components/pdf/PdfPlacement";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
-import { addDrawnElement } from "@/lib/forms/pdf-draw";
+import { addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
 import { sampleForm } from "../../../../tests/fixtures/sample-form";
 
 /** No-database demo: generates a blank A4 PDF in the browser and lets you place sample-form fields on it. */
 export function PlacementDemo() {
-  const [definition, setDefinition] = useState(sampleForm);
+  const [definition, setDefinitionState] = useState(sampleForm);
+  // Several clones in one paste build on each other before React re-renders.
+  const defRef = useRef(sampleForm);
+  const setDefinition = (next: typeof sampleForm | ((d: typeof sampleForm) => typeof sampleForm)) => {
+    defRef.current = typeof next === "function" ? next(defRef.current) : next;
+    setDefinitionState(defRef.current);
+  };
   const [data, setData] = useState<Uint8Array | null>(null);
-  const [mapping, setMapping] = useState<PdfMapping>({ schemaVersion: 1, pages: [{ width: 595.28, height: 841.89 }], stamps: [] });
+  const [mapping, setMappingState] = useState<PdfMapping>({ schemaVersion: 1, pages: [{ width: 595.28, height: 841.89 }], stamps: [] });
+  const mappingRef = useRef(mapping);
+  const setMapping = (next: PdfMapping | ((m: PdfMapping) => PdfMapping)) => {
+    mappingRef.current = typeof next === "function" ? next(mappingRef.current) : next;
+    setMappingState(mappingRef.current);
+  };
   useEffect(() => {
     (async () => {
       const doc = await PDFDocument.create();
@@ -31,6 +42,20 @@ export function PlacementDemo() {
         onFieldPatch={(fieldId, patch) =>
           setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
         }
+        onTransform={(fix) => {
+          const r = fix(defRef.current, mappingRef.current.stamps);
+          if (!r.def) return r.error;
+          setDefinition(r.def);
+          mappingRef.current = { ...mappingRef.current, stamps: r.stamps };
+          setMapping(mappingRef.current);
+          return undefined;
+        }}
+        onCloneField={(fieldId) => {
+          const r = cloneField(defRef.current, fieldId);
+          if (!r) return null;
+          setDefinition(r.definition);
+          return r.fieldId;
+        }}
         onDrawElement={(entry, page, at) => {
           const r = addDrawnElement(definition, entry, page, at, () => nanoid(8));
           setDefinition(r.definition);
@@ -38,6 +63,7 @@ export function PlacementDemo() {
           return r.stamp.id;
         }}
       />
+      <pre dir="ltr" data-testid="field-ids" className="sr-only">{JSON.stringify(definition.pages.flatMap((p) => p.fields.map((f) => f.id)))}</pre>
       <pre dir="ltr" data-testid="mapping" className="mt-4 max-h-60 overflow-auto rounded-md bg-muted p-2 text-xs">{JSON.stringify(mapping.stamps, null, 1)}</pre>
     </>
   );

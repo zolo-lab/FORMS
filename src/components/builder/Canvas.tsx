@@ -26,6 +26,8 @@ export interface CanvasProps {
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
   onAddPage: () => void;
+  /** "עמוד חדש מכאן": the selected field and those after it on its page open a new page. */
+  onSplitPage?: (id: string) => void;
   onRemovePage: (index: number) => void;
   onMovePage: (index: number, dir: -1 | 1) => void;
   /**
@@ -192,6 +194,11 @@ export function Canvas(p: CanvasProps) {
                             placeholder="הסבר קצר מתחת לתווית (לא חובה)"
                             onChange={(e) => p.onPatchField(f.id, { description: e.target.value || undefined })}
                           />
+                        )}
+                        {p.onSplitPage && fi > 0 && (
+                          <Button variant="outline" size="sm" className="min-h-9 justify-self-start sm:col-span-2" onClick={() => p.onSplitPage!(f.id)}>
+                            עמוד חדש מכאן
+                          </Button>
                         )}
                       </div>
                     )}
