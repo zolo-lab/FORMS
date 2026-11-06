@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 const ERRORS: Record<string, string> = {
   ...ORG_ERRORS,
   color: "צבע לא תקין (פורמט #RRGGBB)",
-  orgField: "יש להזין שם לשדה",
+  orgFieldKey: "שם השדה חייב להיות באנגלית: אות ראשונה, ואחריה אותיות, ספרות, מקף או קו תחתון (עד 40 תווים)",
   orgFieldExists: "כבר קיים שדה בשם הזה",
   email: "כתובת שולח לא תקינה",
   logo: "הלוגו חייב להיות PNG / JPG / WEBP עד 1MB",
@@ -148,8 +148,9 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               <div>
                 <h3 className="font-semibold">שדות מזהים של העמותה</h3>
                 <p className="text-sm text-muted-foreground">
-                  ערכים קבועים של העמותה (מספר תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
-                  בבונה הטפסים אפשר לבחור אותו ב&quot;מילוי מראש&quot;: הוא יוצג לקריאה בלבד ויתמלא לפי העמותה שממנה יצאה הבקשה.
+                  ערכים קבועים של העמותה (תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
+                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו, ולכן אי אפשר לשנות אותו אחרי היצירה.
+                  בבונה הטפסים בוחרים אותו תחת &quot;מילוי אוטומטי&quot;: הוא מתמלא לפי העמותה שממנה יצאה הבקשה ומוצג לקריאה בלבד.
                 </p>
               </div>
               {/* One explicit save for the whole section: nothing here is written until the admin asks for it. */}
@@ -160,7 +161,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
-                          <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה (בכל העמותות)</th>
+                          <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה</th>
                           <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
                           <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
                         </tr>
@@ -168,22 +169,22 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <tbody>
                         {orgFields.map((f) => (
                           <tr key={f.id} className="border-t">
-                            <td className="px-3 py-1.5">
-                              <Input name={`label.${f.id}`} defaultValue={f.label} required maxLength={120} aria-label={`שם השדה – ${f.label}`} className="h-9" />
-                            </td>
+                            {/* The name is the key the forms point at, so it is shown, never edited. */}
+                            <td className="px-3 py-1.5 font-mono text-xs" dir="ltr">{f.key}</td>
                             <td className="px-3 py-1.5">
                               <Input name={`f.${f.key}`} defaultValue={(o.fieldValues ?? {})[f.key] ?? ""} maxLength={200} aria-label={`${f.label} – ${o.name}`} className="h-9" />
                             </td>
                             <td className="px-3 py-1.5">
-                              {/* Its own form: deleting must not go through the save button. */}
+                              {/*
+                                The button belongs to a delete form of its own, rendered outside this one: pressing
+                                Enter in a text box submits the first submit button of ITS form, and that must be
+                                the save, never a delete that would drop the field from every organization.
+                              */}
                               <SubmitButton
+                                form={`delorgfield-${f.id}`}
                                 size="icon"
                                 variant="ghost"
                                 className="text-destructive"
-                                formAction={deleteOrgFieldAction}
-                                formNoValidate
-                                name="delete"
-                                value={f.id}
                                 aria-label={`מחיקת השדה ${f.label} מכל העמותות`}
                                 title="מחיקה מכל העמותות"
                               >
@@ -199,11 +200,28 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
                 {orgFields.length > 0 && <SubmitButton>שמירת השדות וסגירה</SubmitButton>}
               </form>
+              {/* The delete forms live outside the save form; the buttons above point at them by id. */}
+              {orgFields.map((f) => (
+                <form key={f.id} id={`delorgfield-${f.id}`} action={deleteOrgFieldAction} className="hidden">
+                  <input type="hidden" name="id" value={f.id} />
+                  <input type="hidden" name="org" value={o.id} />
+                </form>
+              ))}
 
               <form action={createOrgFieldAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="org" value={o.id} />
-                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
-                  <Input id={`new-orgfield-${o.id}`} name="label" required maxLength={120} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
+                <Field label="שדה חדש באנגלית (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
+                  <Input
+                    id={`new-orgfield-${o.id}`}
+                    name="key"
+                    required
+                    maxLength={40}
+                    pattern="[a-zA-Z][a-zA-Z0-9_-]*"
+                    title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
+                    placeholder="deductionsFile"
+                    dir="ltr"
+                    className="min-w-56 font-mono"
+                  />
                 </Field>
                 <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספת שדה</SubmitButton>
               </form>

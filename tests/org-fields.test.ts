@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { orgFieldKeyFromLabel } from "@/lib/orgs/field-key";
-import { ORG_FIELD_PREFIX, isOrgField, lockOrgFields, orgFieldKey, prefillKeys, takesOrgField, withOrgFields, withPrefill } from "@/lib/forms/prefill";
+import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
+import { ORG_FIELD_PREFIX, isOrgField, lockOrgFields, orgFieldKey, prefillGroups, prefillKeys, takesOrgField, withOrgFields, withPrefill } from "@/lib/forms/prefill";
 import type { FormDefinition } from "@/lib/forms/schema";
 
-const TIK = orgFieldKeyFromLabel("מספר תיק ניכויים");
+const TIK = "deductionsFile";
 
 const def = {
   schemaVersion: 1,
@@ -16,16 +16,17 @@ const def = {
 
 const org = { name: "שיבת ציון", registrationNumber: "580556306", fields: { [TIK]: "9123456" } };
 
-describe("the key of an organization field", () => {
-  it("is stable for the same label and different for another", () => {
-    expect(orgFieldKeyFromLabel("מספר תיק ניכויים")).toBe(TIK);
-    expect(orgFieldKeyFromLabel("  מספר   תיק ניכויים  ")).toBe(TIK);
-    expect(orgFieldKeyFromLabel("מספר חוזה")).not.toBe(TIK);
+describe("the name of an organization field", () => {
+  it("takes an English name and trims it", () => {
+    expect(normalizeOrgFieldKey("deductionsFile")).toBe("deductionsFile");
+    expect(normalizeOrgFieldKey("  contract_no  ")).toBe("contract_no");
+    expect(normalizeOrgFieldKey("tax-file-2")).toBe("tax-file-2");
   });
 
-  it("is usable as a form key", () => {
-    expect(orgFieldKeyFromLabel("Deduction File")).toMatch(/^[a-z0-9_]+$/);
-    expect(TIK).toMatch(/^[a-z0-9_]+$/);
+  it("refuses anything that would not work as a key", () => {
+    for (const bad of ["", "   ", "תיק ניכויים", "2files", "_private", "has space", "bad.dot", "a".repeat(41)]) {
+      expect(normalizeOrgFieldKey(bad)).toBe(null);
+    }
   });
 });
 
@@ -54,11 +55,19 @@ describe("an organization field in a form", () => {
 
 describe("the builder's prefill list", () => {
   it("offers the organizations' fields after the fixed ones", () => {
-    const keys = prefillKeys([{ key: TIK, label: "מספר תיק ניכויים" }]);
+    const keys = prefillKeys([{ key: TIK, label: TIK }]);
     expect(keys.some((k) => k.key === "employee.name")).toBe(true);
     const mine = keys.find((k) => k.key === `${ORG_FIELD_PREFIX}${TIK}`);
-    expect(mine?.label).toContain("מספר תיק ניכויים");
+    expect(mine?.label).toContain(TIK);
     expect(orgFieldKey(mine!.key)).toBe(TIK);
+  });
+
+  it("groups the organizations' fields apart from the employee and request data", () => {
+    const g = prefillGroups([{ key: TIK, label: TIK }], "short_text");
+    expect(g.map((x) => x.label)).toEqual(["נתוני העובד והבקשה", "שדות שהוגדרו בעמותות"]);
+    expect(g[1]!.options).toEqual([{ key: `${ORG_FIELD_PREFIX}${TIK}`, label: TIK }]);
+    // A composite answer takes no organization value, so that group is not shown at all.
+    expect(prefillGroups([{ key: TIK, label: TIK }], "full_name")).toHaveLength(1);
   });
 
   it("without any organization field it is the fixed list", () => {
@@ -69,7 +78,7 @@ describe("the builder's prefill list", () => {
 
 describe("where an organization field may be used", () => {
   it("is not offered for answers that are not one line of text", () => {
-    const mine = [{ key: TIK, label: "מספר תיק ניכויים" }];
+    const mine = [{ key: TIK, label: TIK }];
     expect(prefillKeys(mine, "short_text").some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(true);
     for (const t of ["full_name", "address", "bank_account", "radio_grid", "repeating_table", "signature", "file_upload"]) {
       expect(prefillKeys(mine, t).some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(false);
@@ -78,6 +87,6 @@ describe("where an organization field may be used", () => {
   });
 
   it("without a type the whole list is offered (an old caller)", () => {
-    expect(prefillKeys([{ key: TIK, label: "א" }]).some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(true);
+    expect(prefillKeys([{ key: TIK, label: TIK }]).some((k) => k.key.startsWith(ORG_FIELD_PREFIX))).toBe(true);
   });
 });

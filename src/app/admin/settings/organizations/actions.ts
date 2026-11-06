@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
@@ -128,8 +128,8 @@ export async function createOrgFieldAction(formData: FormData) {
   await requireAdmin();
   const org = String(formData.get("org") ?? "");
   const back = UUID.test(org) ? `${PATH}?edit=${org}` : PATH;
-  const res = await createOrgFieldDef(String(formData.get("label") ?? ""));
-  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgField"}`);
+  const res = await createOrgFieldDef(String(formData.get("key") ?? ""));
+  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
   revalidatePath(PATH);
   redirect(`${back}&saved=orgfield`);
 }
@@ -142,11 +142,6 @@ export async function saveOrgFieldsAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!UUID.test(id)) redirect(PATH);
-  for (const [k, v] of formData.entries()) {
-    if (!k.startsWith("label.") || typeof v !== "string") continue;
-    const defId = k.slice("label.".length);
-    if (UUID.test(defId) && v.trim()) await renameOrgFieldDef(defId, v);
-  }
   const values: Record<string, string> = {};
   for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
   await setOrgFieldValues(id, values);
@@ -158,9 +153,8 @@ export async function saveOrgFieldsAction(formData: FormData) {
 /** Drops an organization field everywhere, with the values every organization filled in for it. */
 export async function deleteOrgFieldAction(formData: FormData) {
   await requireAdmin();
-  // The button sits inside the save form, so the field is named apart from the organization's own `id`.
-  const id = String(formData.get("delete") ?? "");
-  const org = String(formData.get("id") ?? "");
+  const id = String(formData.get("id") ?? "");
+  const org = String(formData.get("org") ?? "");
   if (UUID.test(id)) await deleteOrgFieldDef(id);
   revalidatePath(PATH);
   redirect(UUID.test(org) ? `${PATH}?edit=${org}&saved=orgfielddel` : PATH);
