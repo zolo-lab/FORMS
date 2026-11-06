@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
@@ -128,20 +128,27 @@ export async function createOrgFieldAction(formData: FormData) {
   await requireAdmin();
   const org = String(formData.get("org") ?? "");
   const back = UUID.test(org) ? `${PATH}?edit=${org}` : PATH;
-  const res = await createOrgFieldDef(String(formData.get("label") ?? ""));
-  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgField"}`);
+  const res = await createOrgFieldDef(String(formData.get("key") ?? ""));
+  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
   revalidatePath(PATH);
   redirect(`${back}&saved=orgfield`);
 }
 
-/** Renames one organization field for everyone (its key, and so the forms, stay as they are). */
-export async function renameOrgFieldAction(formData: FormData): Promise<AutoSaveResult> {
+/**
+ * The one save of the whole section: the names of the fields (for every organization) and this organization's own
+ * values, together, and then the panel closes – nothing here saves itself behind the admin's back.
+ */
+export async function saveOrgFieldsAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  if (!UUID.test(id) || !(await renameOrgFieldDef(id, String(formData.get("label") ?? "")))) return { ok: false, error: "orgField" };
+  if (!UUID.test(id)) redirect(PATH);
+  const values: Record<string, string> = {};
+  for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
+  await setOrgFieldValues(id, values);
   revalidatePath(PATH);
-  return { ok: true };
+  redirect(`${PATH}?saved=orgfields`);
 }
+
 
 /** Drops an organization field everywhere, with the values every organization filled in for it. */
 export async function deleteOrgFieldAction(formData: FormData) {
@@ -151,16 +158,4 @@ export async function deleteOrgFieldAction(formData: FormData) {
   if (UUID.test(id)) await deleteOrgFieldDef(id);
   revalidatePath(PATH);
   redirect(UUID.test(org) ? `${PATH}?edit=${org}&saved=orgfielddel` : PATH);
-}
-
-/** This organization's values for the fields (`f.<key>` in the form data). */
-export async function saveOrgFieldValuesAction(formData: FormData): Promise<AutoSaveResult> {
-  await requireAdmin();
-  const id = String(formData.get("id") ?? "");
-  if (!UUID.test(id)) return { ok: false, error: "input" };
-  const values: Record<string, string> = {};
-  for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
-  await setOrgFieldValues(id, values);
-  revalidatePath(PATH);
-  return { ok: true };
 }

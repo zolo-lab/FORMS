@@ -1,13 +1,15 @@
 /**
- * The stable key of an organization field, derived from the label an admin types ("מספר תיק ניכויים" →
- * "org_f_<hash>"). Forms point at the key, so it must stay the same when the label is later reworded; a Hebrew
- * label has no usable ASCII form, hence the hash rather than a slug. Pure, unit tested.
+ * The name of an organization field. An admin types it in English and it is both the name shown everywhere and the
+ * key the forms point at (`org.fields.<key>`), so it never changes behind a form's back. Pure, unit tested.
  */
-export function orgFieldKeyFromLabel(label: string): string {
-  const clean = label.trim().replace(/\s+/g, " ");
-  // A short, stable, case-insensitive digest of the label: enough to tell apart the handful of fields an admin adds.
-  let h = 5381;
-  for (const ch of clean.toLowerCase()) h = ((h * 33) ^ ch.codePointAt(0)!) >>> 0;
-  const ascii = clean.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
-  return `${ascii || "field"}_${h.toString(36)}`;
+
+/** Letters, digits, `_` and `-`, starting with a letter: the same shape a form field id has, plus the hyphen. */
+export const ORG_FIELD_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+export const ORG_FIELD_KEY_MAX = 40;
+
+/** The typed name, cleaned up, or `null` when it does not follow the rules. */
+export function normalizeOrgFieldKey(input: string): string | null {
+  const key = input.trim();
+  if (!key || key.length > ORG_FIELD_KEY_MAX || !ORG_FIELD_KEY_RE.test(key)) return null;
+  return key;
 }

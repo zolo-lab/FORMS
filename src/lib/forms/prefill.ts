@@ -48,6 +48,15 @@ export function prefillKeys(orgFields: { key: string; label: string }[] = [], ty
   return [...PREFILL_KEYS, ...orgFields.map((f) => ({ key: `${ORG_FIELD_PREFIX}${f.key}`, label: `${f.label} (שדה של העמותה)` }))];
 }
 
+/** The same list split in two, for a picker that shows the organizations’ own fields as a group of their own. */
+export function prefillGroups(orgFields: { key: string; label: string }[] = [], type?: string) {
+  const offered = type !== undefined && !takesOrgField(type) ? [] : orgFields;
+  return [
+    { label: "נתוני העובד והבקשה", options: [...PREFILL_KEYS] },
+    { label: "שדות שהוגדרו בעמותות", options: offered.map((f) => ({ key: `${ORG_FIELD_PREFIX}${f.key}`, label: f.label })) },
+  ].filter((g) => g.options.length > 0);
+}
+
 /**
  * Fields with these ids are the organization's fields: they fill themselves from the request's organization (as if
  * their prefill were set) and nobody types them.
