@@ -38,7 +38,7 @@ export default async function StorePage({ params, searchParams }: { params: Prom
         actions={
           <>
             <Link href="/admin/stores" className={buttonVariants({ variant: "ghost" })}>כל המאגרים</Link>
-            <a href={`/api/admin/stores/${store.id}/export`} className={buttonVariants({ variant: "outline" })}><Download className="size-4" aria-hidden />ייצוא לאקסל</a>
+            <a href={`/api/admin/stores/${store.id}/export`} download className={buttonVariants({ variant: "outline" })}><Download className="size-4" aria-hidden />ייצוא לאקסל</a>
           </>
         }
       />

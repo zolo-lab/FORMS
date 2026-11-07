@@ -69,7 +69,7 @@ export async function saveStore(
   if (Array.isArray(input.rows) && input.rows.length > MAX_ROWS) return { ok: false, reason: "tooMany" };
   const columns = normalizeColumns(input.columns, store.columns, store.lastColumnNumber);
   // A column added in this save has no key yet: the editor names its display column by label then.
-  const display = columns.find((c) => c.key === input.displayColumn) ?? columns.find((c) => c.label === input.displayLabel?.trim());
+  const display = columns.find((c) => c.key === input.displayColumn) ?? columns.find((c) => c.label === (input.displayLabel ?? "").replace(/\s+/g, " ").trim());
   const displayColumn = display?.key ?? columns[0]!.key;
   const rows = cleanRows(input.rows, columns);
 

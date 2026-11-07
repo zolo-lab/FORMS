@@ -39,8 +39,10 @@ export function StoreEditor({ storeId, columns, displayColumn, rows }: { storeId
     const message = "יש שינויים במאגר שלא נשמרו. לצאת בלי לשמור?";
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     const click = (e: MouseEvent) => {
-      const a = (e.target as Element | null)?.closest?.("a[href]");
-      if (a && !(a as HTMLAnchorElement).download && !confirm(message)) { e.preventDefault(); e.stopPropagation(); }
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      // A download (the export) or a link opened in a new tab leaves this page as it is: no question.
+      if (!a || a.hasAttribute("download") || a.target === "_blank" || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+      if (!confirm(message)) { e.preventDefault(); e.stopPropagation(); }
     };
     const submit = (e: SubmitEvent) => {
       if ((e.target as HTMLFormElement).dataset.storeForm === "import" && !confirm(message)) { e.preventDefault(); e.stopPropagation(); }
