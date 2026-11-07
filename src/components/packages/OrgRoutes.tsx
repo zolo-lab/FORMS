@@ -15,7 +15,16 @@ type Option = { id: string; label: string };
 export type SaveRoute = (organizationId: string, drafts: StepDraft[] | null) => Promise<{ ok: true } | { ok: false; errors: string[] }>;
 
 const strip = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
-const fresh = (drafts: StepDraft[]): EditorDraft[] => drafts.map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role }));
+/**
+ * Editable copies of steps. A route of its own already belongs to one organization, so per-organization link-expiry
+ * exceptions have no meaning in it (and are not shown here): they are dropped, and the step's own rule is what applies.
+ */
+const fresh = (drafts: StepDraft[]): EditorDraft[] =>
+  drafts.map((d) => {
+    const copy: EditorDraft = { ...d, key: crypto.randomUUID(), origRole: d.role };
+    delete copy.expiryByOrg;
+    return copy;
+  });
 const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringify(a?.map(strip) ?? null) === JSON.stringify(b?.map(strip) ?? null);
 
 /**

@@ -221,11 +221,15 @@ async function persist(
    */
   const linkByStep = new Map<string, { ownLinkExpiry: boolean; linkExpiresAt: Date | null }>();
   if (activatedIds.size && pkg) {
-    const route = routeFor(pkg, req.organizationId, req.projectId).steps;
+    const routed = routeFor(pkg, req.organizationId, req.projectId);
+    const route = routed.steps;
+    // Per-organization exceptions belong to the general route; an organization's (or project's) own route is already
+    // specific, so only its steps' own rule counts there.
+    const exceptionsFor = routed === pkg.workflow ? req.organizationId : null;
     let answers: Answers | null = null;
     for (const s of result.steps.filter((x) => activatedIds.has(x.id))) {
       const w = route.find((x) => x.order === s.order && x.role === s.role);
-      const rule = w && s.role !== "requester" ? stepExpiryRule(w, req.organizationId) : null;
+      const rule = w && s.role !== "requester" ? stepExpiryRule(w, exceptionsFor) : null;
       if (!rule) { linkByStep.set(s.id, { ownLinkExpiry: false, linkExpiresAt: null }); continue; }
       answers ??= await collectedAnswers(requestId);
       linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: stepLinkDeadline(rule, answers, now) });

@@ -62,5 +62,21 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
     await store.expireOverdue();
     expect((await store.getRequest(a.id))!.request.status).toBe("expired");
     expect((await store.getRequest(b.id))!.request.status).toBe("in_progress");
+
+    // An organization's own route: only its steps' own rule counts, never a leftover exception.
+    await db.update(schema.packageTemplates).set({
+      orgWorkflows: {
+        [special.id]: {
+          steps: [
+            { order: 1, role: "requester", action: "fill" },
+            { order: 2, role: "employee", action: "fill", expiry: { kind: "none" }, expiryByOrg: { [special.id]: { kind: "dayOfMonth", day: 20, dateFieldId: "start" } } },
+          ],
+        },
+      },
+    }).where(eq(schema.packageTemplates.id, pkg!.id));
+    const c = await open(special.id);
+    expect(c.step.ownLinkExpiry).toBe(true);
+    expect(c.step.linkExpiresAt).toBeNull();
+    expect(c.token.expiresAt).toBeNull();
   });
 });
