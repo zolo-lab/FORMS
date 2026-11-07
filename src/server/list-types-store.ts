@@ -1,7 +1,7 @@
 /** List types ("סוגי רשימות"): the database side. Pure rules live in src/lib/fields/list-type.ts. */
 import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { cleanTypeFields, displayKeyOf, renameKeyInType } from "@/lib/fields/list-type";
+import { cleanTypeFields, displayKeyOf, MAX_TYPE_FIELDS, renameKeyInType } from "@/lib/fields/list-type";
 
 const { listTypes } = schema;
 
@@ -45,11 +45,13 @@ export async function saveListType(id: string, input: { name: string; fields: un
 }
 
 /** Adds a field at the end of a type (e.g. one just created in the dictionary from the type's screen). */
-export async function appendFieldToType(id: string, key: string) {
+export async function appendFieldToType(id: string, key: string): Promise<boolean> {
   const t = await getListType(id);
-  if (!t || t.fields.includes(key)) return;
+  if (!t || t.fields.includes(key)) return true;
+  if (t.fields.length >= MAX_TYPE_FIELDS) return false;
   const fields = [...t.fields, key];
   await db.update(listTypes).set({ fields, displayKey: displayKeyOf(fields, t.displayKey), updatedAt: new Date() }).where(eq(listTypes.id, id));
+  return true;
 }
 
 export async function deleteListType(id: string) {
@@ -61,10 +63,14 @@ export async function typesUsingKey(key: string): Promise<ListType[]> {
   return orEmpty(db.select().from(listTypes).where(sql`${listTypes.fields} ? ${key}`));
 }
 
-/** A field's internal name changed: every type that lists it follows. */
-export async function renameKeyInTypes(from: string, to: string) {
-  for (const t of await typesUsingKey(from)) {
+/**
+ * The updates that make every type listing `from` list `to` instead – not run here, so the caller can run them in
+ * one batch with the dictionary's own update.
+ */
+export async function keyRenameInTypes(from: string, to: string) {
+  const now = new Date();
+  return (await typesUsingKey(from)).flatMap((t) => {
     const next = renameKeyInType(t, from, to);
-    if (next) await db.update(listTypes).set({ ...next, updatedAt: new Date() }).where(eq(listTypes.id, t.id));
-  }
+    return next ? [db.update(listTypes).set({ ...next, updatedAt: now }).where(eq(listTypes.id, t.id))] : [];
+  });
 }

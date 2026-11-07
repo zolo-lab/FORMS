@@ -8,7 +8,7 @@ import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
 import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
 import { createOrgFieldDef, listOrgFieldDefs, renameOrgFieldDef, takenFieldKeys, updateOrgFieldDef } from "./orgs-store";
-import { renameKeyInTypes, typesUsingKey } from "./list-types-store";
+import { keyRenameInTypes, typesUsingKey } from "./list-types-store";
 
 const { fieldDictionary } = schema;
 
@@ -95,9 +95,14 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
     key = typed;
   }
   // A type left out keeps the current one.
-  await db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
-  // The list types that list the field follow its new internal name.
-  if (key !== cur.key) await renameKeyInTypes(cur.key, key);
+  const own = db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
+  if (key === cur.key) {
+    await own;
+    return { ok: true, key };
+  }
+  // A new internal name: the field and every list type that lists it change in one batch (one transaction), so a
+  // failure leaves them all as they were, never a type pointing at a name the dictionary no longer has.
+  await db.batch([own, ...(await keyRenameInTypes(cur.key, key))]);
   return { ok: true, key };
 }
 

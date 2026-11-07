@@ -9,6 +9,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DICTIONARY_TYPE_LABELS, type DictionaryType } from "@/lib/fields/types";
 import { saveListTypeAction } from "../actions";
+import { MAX_TYPE_FIELDS } from "@/lib/fields/list-type";
 
 export type FieldOption = { key: string; label: string; type: DictionaryType };
 
@@ -141,7 +142,7 @@ export function TypeEditor({
           </div>
           <Button
             variant="outline"
-            disabled={!pick}
+            disabled={!pick || fields.length >= MAX_TYPE_FIELDS}
             onClick={() => {
               const next = [...fields, pick];
               setFields(next);

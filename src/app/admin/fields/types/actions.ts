@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireGrant } from "@/server/guards";
 import { createDictionaryEntry, listDictionary } from "@/server/field-dictionary-store";
-import { appendFieldToType, createListType, deleteListType, saveListType } from "@/server/list-types-store";
+import { appendFieldToType, createListType, deleteListType, getListType, saveListType } from "@/server/list-types-store";
+import { MAX_TYPE_FIELDS } from "@/lib/fields/list-type";
 
 const PATH = "/admin/fields/types";
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -34,6 +35,10 @@ export async function addNewFieldToTypeAction(fd: FormData) {
   await requireGrant("manageFields");
   const id = String(fd.get("typeId") ?? "");
   if (!UUID.test(id)) redirect(PATH);
+  // Checked before the field is created, so a full type does not leave a new field behind in the dictionary.
+  const type = await getListType(id);
+  if (!type) redirect(PATH);
+  if (type.fields.length >= MAX_TYPE_FIELDS) redirect(`${PATH}/${id}?error=full`);
   const r = await createDictionaryEntry({ label: String(fd.get("label") ?? ""), key: String(fd.get("key") ?? ""), type: String(fd.get("type") ?? ""), category: "general" });
   if (!r.ok) redirect(`${PATH}/${id}?error=${r.reason}`);
   await appendFieldToType(id, r.key);

@@ -19,6 +19,7 @@ const ERRORS: Record<string, string> = {
   label: "צריך שם לשדה",
   key: "השם הפנימי חייב להתחיל באות אנגלית, ואחריה אותיות, ספרות או קו תחתון",
   exists: "השם הפנימי הזה כבר תפוס",
+  full: "בסוג רשימה אפשר עד 40 שדות",
 };
 
 export default async function ListTypePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
