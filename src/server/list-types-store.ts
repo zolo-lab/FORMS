@@ -1,5 +1,5 @@
 /** List types ("סוגי רשימות"): the database side. Pure rules live in src/lib/fields/list-type.ts. */
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { cleanTypeFields, displayKeyOf } from "@/lib/fields/list-type";
 
@@ -44,8 +44,14 @@ export async function saveListType(id: string, input: { name: string; fields: un
   return true;
 }
 
-export async function deleteListType(id: string) {
-  await db.delete(listTypes).where(eq(listTypes.id, id));
+/** Deletes a type, unless it still has records (deleting it would delete every supplier in it). */
+export async function deleteListType(id: string): Promise<{ ok: true } | { ok: false; records: number }> {
+  const gone = await db
+    .delete(listTypes)
+    .where(and(eq(listTypes.id, id), sql`NOT EXISTS (SELECT 1 FROM ${schema.listRecords} WHERE ${schema.listRecords.listTypeId} = ${id})`))
+    .returning({ id: listTypes.id });
+  if (gone.length) return { ok: true };
+  return { ok: false, records: (await listRecordsOf(id)).length };
 }
 
 /** The types that use a field (by internal name). */
@@ -67,4 +73,40 @@ export function keyRenameInTypes(from: string, to: string) {
       updatedAt: new Date(),
     })
     .where(sql`${listTypes.fields} ? ${from} OR ${listTypes.displayKey} = ${from}`);
+}
+
+// ───────────────────────── Records (one supplier, one work place…) ─────────────────────────
+
+const { listRecords } = schema;
+export type ListRecord = typeof listRecords.$inferSelect;
+
+export async function listRecordsOf(typeId: string): Promise<ListRecord[]> {
+  if (!/^[0-9a-f-]{36}$/i.test(typeId)) return [];
+  return orEmpty(db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.createdAt)));
+}
+
+export async function recordCounts(): Promise<Map<string, number>> {
+  const rows = await orEmpty(db.select({ id: listRecords.listTypeId, n: sql<number>`count(*)::int` }).from(listRecords).groupBy(listRecords.listTypeId));
+  return new Map(rows.map((r) => [r.id, r.n]));
+}
+
+export async function saveRecord(typeId: string, id: string | null, values: Record<string, string>): Promise<string> {
+  if (id) {
+    await db.update(listRecords).set({ values, updatedAt: new Date() }).where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)));
+    return id;
+  }
+  const [row] = await db.insert(listRecords).values({ listTypeId: typeId, values }).returning({ id: listRecords.id });
+  return row!.id;
+}
+
+export async function deleteRecord(typeId: string, id: string) {
+  await db.delete(listRecords).where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)));
+}
+
+/** A field's internal name changed: its value moves to the new name in every record (run in the same batch). */
+export function keyRenameInRecords(from: string, to: string) {
+  return db
+    .update(listRecords)
+    .set({ values: sql`(${listRecords.values} - ${from}) || jsonb_build_object(${to}::text, ${listRecords.values} -> ${from})` })
+    .where(sql`${listRecords.values} ? ${from}`);
 }

@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 const ERRORS: Record<string, string> = {
   full: "בסוג רשימה אפשר עד 40 שדות",
+  records: "אי אפשר למחוק: יש בסוג הזה רשומות. מחקו אותן קודם בלשונית רשומות.",
 };
 
 export default async function ListTypePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {

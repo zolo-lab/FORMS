@@ -32,6 +32,9 @@ export async function saveListTypeAction(id: string, input: { name: string; fiel
 export async function deleteListTypeAction(fd: FormData) {
   await requireGrant("manageFields");
   const id = String(fd.get("id") ?? "");
-  if (UUID.test(id)) await deleteListType(id);
+  if (UUID.test(id)) {
+    const r = await deleteListType(id);
+    if (!r.ok) redirect(`${PATH}/${id}?error=records&n=${r.records}`);
+  }
   redirect(`${PATH}?saved=deleted`);
 }

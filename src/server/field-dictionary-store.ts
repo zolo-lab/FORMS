@@ -8,7 +8,7 @@ import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
 import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
 import { createOrgFieldDef, listOrgFieldDefs, renameOrgFieldDef, takenFieldKeys, updateOrgFieldDef } from "./orgs-store";
-import { keyRenameInTypes, typesUsingKey } from "./list-types-store";
+import { keyRenameInRecords, keyRenameInTypes, typesUsingKey } from "./list-types-store";
 
 const { fieldDictionary } = schema;
 
@@ -102,7 +102,7 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
   }
   // A new internal name: the field and every list type that lists it change in one batch (one transaction), so a
   // failure leaves them all as they were, never a type pointing at a name the dictionary no longer has.
-  await db.batch([own, keyRenameInTypes(cur.key, key)]);
+  await db.batch([own, keyRenameInTypes(cur.key, key), keyRenameInRecords(cur.key, key)]);
   return { ok: true, key };
 }
 

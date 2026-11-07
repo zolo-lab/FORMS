@@ -126,6 +126,23 @@ export const listTypes = pgTable("list_types", {
   ...timestamps,
 });
 
+/**
+ * The records of a list type: one supplier, one work place… `values` holds a value per field of the type, by
+ * internal name (a renamed field is renamed here too).
+ */
+export const listRecords = pgTable(
+  "list_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listTypeId: uuid("list_type_id")
+      .notNull()
+      .references(() => listTypes.id, { onDelete: "cascade" }),
+    values: jsonb("values").$type<Record<string, string>>().notNull().default({}),
+    ...timestamps,
+  },
+  (t) => [index("list_records_type_idx").on(t.listTypeId)],
+);
+
 export const fieldDictionary = pgTable("field_dictionary", {
   id: uuid("id").primaryKey().defaultRandom(),
   key: text("key").notNull().unique(),

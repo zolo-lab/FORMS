@@ -38,5 +38,15 @@ describe.skipIf(!hasDb)("list types (dev DB)", () => {
 
     const del = await dict.deleteDictionaryEntry(entry.id);
     expect(del).toMatchObject({ ok: false, reason: "inUse" });
+
+    // Records: a renamed key moves inside the stored values; a type with records cannot be deleted.
+    const rid = await types.saveRecord(id, null, { [`supNum${stamp}`]: "514000000", [`renamed${stamp}`]: "ספק א" });
+    expect((await types.recordCounts()).get(id)).toBe(1);
+    const entry2 = (await dict.listDictionary()).find((f) => f.key === `renamed${stamp}`)!;
+    expect(await dict.updateDictionaryEntry(entry2.id, "general", { label: entry2.label, type: "", key: `supName${stamp}` })).toEqual({ ok: true, key: `supName${stamp}` });
+    expect((await types.listRecordsOf(id))[0]?.values).toEqual({ [`supNum${stamp}`]: "514000000", [`supName${stamp}`]: "ספק א" });
+    expect(await types.deleteListType(id)).toEqual({ ok: false, records: 1 });
+    await types.deleteRecord(id, rid);
+    expect(await types.listRecordsOf(id)).toEqual([]);
   });
 });

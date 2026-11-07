@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/admin/fields", label: "שדות", exact: true },
   { href: "/admin/fields/types", label: "סוגי רשימות", exact: false },
+  { href: "/admin/fields/records", label: "רשומות", exact: false },
 ];
 
 /** The two screens of the identifying-fields area, as tabs. */
