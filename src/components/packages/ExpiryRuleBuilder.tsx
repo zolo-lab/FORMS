@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { describeExpiryRule, expiryFor, type ExpiryBase, type ExpiryRule, type ExpirySnap } from "@/lib/requests/expiry";
 
 /** A date field of the form; `hint` says who fills it ("שלב 2 · העובד"). */
-export type DateFieldOption = { id: string; label: string; hint?: string };
+export type DateFieldOption = { id: string; label: string; hint?: string; roles?: string[] };
 type BaseKind = "sent" | "stepStart";
 type Calc = Extract<ExpiryRule, { kind: "calc" }>;
 
@@ -52,7 +52,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const calc = value?.kind === "calc" ? value : null;
   const mode: "inherit" | "none" | "calc" = !value ? "inherit" : value.kind === "none" ? "none" : "calc";
   const fieldId = calc?.base.from === "field" ? calc.base.fieldId : (dateFields[0]?.id ?? "");
-  const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שכבר לא קיים";
+  const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const set = (patch: Partial<Calc>) => {
     const next: Calc = { ...(calc ?? { kind: "calc", base: { from: bases[0]! } as ExpiryBase }), ...patch };
     if (!next.addDays) delete next.addDays;
@@ -134,7 +134,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                     {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`}>{f.label}{f.hint ? ` · ${f.hint}` : ""}</option>)}
                   </optgroup>
                 )}
-                {fromField && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שכבר לא קיים</option>}
+                {fromField && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שלא זמין כאן</option>}
               </Select>
 
               <span className="text-sm font-medium">מוסיפים</span>

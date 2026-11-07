@@ -91,7 +91,7 @@ export interface FormEditorProps {
 /** The form's date fields, for a step's "the Nth of the month after…" link expiry. */
 const dateFieldsOf = (def: FormDefinition, steps: { role: string }[] = []) => answerFields(def).filter((f) => f.type === "date").map((f) => {
   const at = steps.findIndex((d) => d.role === fieldRole(f));
-  return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined };
+  return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined, roles: [fieldRole(f), ...(f.alsoFilledBy ?? [])] };
 });
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 

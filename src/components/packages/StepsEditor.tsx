@@ -80,12 +80,23 @@ export function StepsEditor({
   const fieldLabel = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? fid;
   const formDefault = defaultExpiry ?? "30 ימים מהשליחה";
   const expiryOf = (d: EditorDraft) => (orgView ? d.expiryByOrg?.[orgView.id] : d.expiry);
+  // A step's rule can count only from a date filled before the step starts (by an earlier step).
+  const datesBefore = (i: number) => {
+    const roles = new Set(drafts.slice(0, i).map((d) => d.role as string));
+    return dateFields.filter((f) => !f.roles || f.roles.some((r) => roles.has(r)));
+  };
+  const lateField = (rule: ExpiryRule | undefined, i: number) => {
+    const r = rule && normalizeExpiryRule(rule);
+    if (r?.kind !== "calc" || r.base.from !== "field") return null;
+    const fid = r.base.fieldId;
+    return dateFields.some((f) => f.id === fid) && !datesBefore(i).some((f) => f.id === fid) ? "תוקף הקישור: התאריך נבחר משלב שעוד לא מולא כשהשלב מתחיל" : null;
+  };
   // Every rule on the step blocks saving when incomplete: its own and each organization's (the route is shared).
   const problems = draftProblems(drafts, emailFields).map((p, i) => {
     const d = drafts[i]!;
-    const own = expiryProblem(d.expiry);
-    const byOrg = Object.values(d.expiryByOrg ?? {}).some((r) => expiryProblem(r)) ? "תוקף מיוחד לעמותה: הכלל לא שלם" : null;
-    return [...p, ...(own ? [own] : []), ...(byOrg ? [byOrg] : [])];
+    const own = expiryProblem(d.expiry) ?? lateField(d.expiry, i);
+    const org = Object.values(d.expiryByOrg ?? {}).map((r) => expiryProblem(r) ?? lateField(r, i)).find(Boolean);
+    return [...p, ...(own ? [own] : []), ...(org ? [`תוקף מיוחד לעמותה – ${org.replace(/^תוקף הקישור: /, "")}`] : [])];
   });
   const patch = (i: number, p: Partial<EditorDraft>) => onChange(drafts.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const choose = (i: number, who: StepWho) => {
@@ -295,7 +306,7 @@ export function StepsEditor({
                 id={`exp-${editing}`}
                 value={expiryOf(ed)}
                 onChange={(r) => setExpiry(editing, r)}
-                dateFields={dateFields}
+                dateFields={datesBefore(editing)}
                 bases={["stepStart", "sent"]}
                 inherit={inheritText(ed)}
               />
