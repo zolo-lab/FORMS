@@ -35,3 +35,9 @@ export async function newFormFromPdf(page: Page, title: string, pdf?: Buffer): P
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}\?tab=pdf/, { timeout: 45_000 });
   return new URL(page.url()).pathname.split("/").pop()!;
 }
+
+/** Add a field type from the PDF palette into the next free spot (choosing the type, then "במקום פנוי בעמוד"). */
+export async function addOnPdf(page: Page, label: string): Promise<void> {
+  await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
+  await page.getByRole("button", { name: "במקום פנוי בעמוד" }).click();
+}

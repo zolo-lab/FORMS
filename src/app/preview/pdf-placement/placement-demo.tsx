@@ -42,6 +42,7 @@ export function PlacementDemo() {
         onFieldPatch={(fieldId, patch) =>
           setDefinition((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, fields: pg.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) })) }))
         }
+        orgFields={[{ key: "deductionsFile", label: "תיק ניכויים" }]}
         onTransform={(fix) => {
           const r = fix(defRef.current, mappingRef.current.stamps);
           if (!r.def) return r.error;
@@ -64,6 +65,7 @@ export function PlacementDemo() {
         }}
       />
       <pre dir="ltr" data-testid="field-ids" className="sr-only">{JSON.stringify(definition.pages.flatMap((p) => p.fields.map((f) => f.id)))}</pre>
+      <pre dir="ltr" data-testid="field-prefills" className="sr-only">{JSON.stringify(definition.pages.flatMap((p) => p.fields.map((f) => f.prefill ?? null)))}</pre>
       <pre dir="ltr" data-testid="mapping" className="mt-4 max-h-60 overflow-auto rounded-md bg-muted p-2 text-xs">{JSON.stringify(mapping.stamps, null, 1)}</pre>
     </>
   );

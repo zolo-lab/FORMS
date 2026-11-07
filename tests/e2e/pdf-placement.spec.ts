@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { addOnPdf, login } from "./helpers";
 
 test.use({ viewport: { width: 1400, height: 900 }, hasTouch: false, isMobile: false });
 
@@ -16,7 +16,7 @@ test("places, moves and edits stamps on a PDF page", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "סוגי שדות" })).toBeVisible();
 
   // Adding a type puts a stamp on the page.
-  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await addOnPdf(page, "תשובה קצרה");
   const stamps = await mapping();
   expect(stamps).toHaveLength(1);
 
@@ -43,7 +43,7 @@ test("draws elements straight onto the PDF and styles them", async ({ page }) =>
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; kind: string; bold?: boolean; color?: string; comb?: { cells: number }; dateFormat?: string }[];
 
   for (const label of ["תעודת זהות", "תאריך חתימה", "חתימה", "חותמת", "תשובה קצרה"]) {
-    await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
+    await addOnPdf(page, label);
   }
   const stamps = await mapping();
   expect(stamps.map((s) => s.kind)).toEqual(["comb", "date_signed", "signature", "signature", "text"]);
@@ -67,7 +67,7 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { id: string; x: number; y: number; width: number }[];
 
-  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  for (let i = 0; i < 3; i++) await addOnPdf(page, "תשובה קצרה");
   expect(await mapping()).toHaveLength(3);
   // All three were dropped at the same spot; spread them by dragging two away.
   const boxes = page.locator("[data-stamp]");
@@ -108,7 +108,7 @@ test("selects several stamps, aligns them, copies and undoes", async ({ page }) 
 test("all boxes share one colour; the step chosen to view stands out in green", async ({ page }) => {
   await login(page, "/preview/pdf-placement");
   await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await addOnPdf(page, "תשובה קצרה");
   const box = page.locator("[data-stamp]").first();
   await expect(page.getByLabel("מקרא תפקידים")).toHaveCount(0);
   await expect(box).not.toHaveClass(/border-success/);
@@ -124,7 +124,7 @@ test("copying a box adds nothing until a click on the document pastes there a ne
   const pdfPage = page.getByTestId("pdf-page-0");
   await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
   const mapping = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string; x: number; y: number }[];
-  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await addOnPdf(page, "תשובה קצרה");
   await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
   expect(await mapping()).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להדביק" })).toBeVisible();
@@ -149,7 +149,7 @@ test("a pasted box undoes and redoes together with its new field", async ({ page
   await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
   const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { fieldId: string }[];
   const fieldIds = async () => JSON.parse((await page.getByTestId("field-ids").textContent())!) as string[];
-  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await addOnPdf(page, "תשובה קצרה");
   await page.getByRole("button", { name: "העתקת התיבה" }).first().click();
   const area = (await pdfPage.boundingBox())!;
   await pdfPage.click({ position: { x: 150, y: area.height - 150 } });
@@ -171,7 +171,7 @@ test("undoing a box move keeps a field edited after it", async ({ page }) => {
   const pdfPage = page.getByTestId("pdf-page-0");
   await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
   const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { x: number }[];
-  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await addOnPdf(page, "תשובה קצרה");
   const box = page.locator("[data-stamp]").first();
   const x0 = (await stamps())[0]!.x;
   await box.click();
@@ -184,4 +184,39 @@ test("undoing a box move keeps a field edited after it", async ({ page }) => {
   await expect.poll(async () => (await stamps())[0]!.x).toBeCloseTo(x0, 1); // the move is undone
   await box.click(); // undo clears the selection; select the box again to see its field
   await expect(label).toHaveValue("שם שנערך"); // the label edited after it stays
+});
+
+test("a field type is chosen first, then a click on the document puts it exactly there", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  const pdfPage = page.getByTestId("pdf-page-0");
+  await expect(pdfPage.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const stamps = async () => JSON.parse((await page.getByTestId("mapping").textContent())!) as { x: number; y: number }[];
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  expect(await stamps()).toHaveLength(0); // nothing yet: it waits for the place
+  await expect(page.getByRole("status").filter({ hasText: "לחצו במסמך במקום שבו להציב" })).toBeVisible();
+  const area = (await pdfPage.boundingBox())!;
+  await pdfPage.click({ position: { x: 100, y: area.height - 100 } });
+  await expect.poll(async () => (await stamps()).length).toBe(1);
+  expect((await stamps())[0]!.y).toBeLessThan(150); // near the bottom, where it was clicked
+  // Esc cancels a chosen type.
+  await page.getByRole("button", { name: "הוספת תאריך", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await pdfPage.click({ position: { x: 300, y: 300 } });
+  expect(await stamps()).toHaveLength(1);
+});
+
+test("a field's name can be chosen from the organization fields, and then it fills from it", async ({ page }) => {
+  await login(page, "/preview/pdf-placement");
+  await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const fieldIds = async () => JSON.parse((await page.getByTestId("field-ids").textContent())!) as string[];
+  const prefills = async () => JSON.parse((await page.getByTestId("field-prefills").textContent())!) as (string | null)[];
+  await addOnPdf(page, "תשובה קצרה");
+  const before = await fieldIds();
+  await page.getByLabel("שם מזהה משדות העמותה").selectOption("deductionsFile");
+  await expect.poll(fieldIds).toContain("deductionsFile");
+  const ids = await fieldIds();
+  expect(ids).toHaveLength(before.length); // renamed, not added
+  expect((await prefills())[ids.indexOf("deductionsFile")]).toBe("org.fields.deductionsFile");
+  await expect(page.locator("#stamp-field-id")).toHaveValue("deductionsFile");
+  await expect(page.getByText("השדה מתמלא אוטומטית בערך של העמותה שבבקשה.")).toBeVisible();
 });

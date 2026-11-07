@@ -33,6 +33,8 @@ const ELEMENT_DRAG = "application/x-pdf-element";
 
 export interface PdfPlacementProps {
   definition: FormDefinition;
+  /** The fields defined in the organizations page: a field's "שם מזהה" can be one of them (then it fills from it). */
+  orgFields?: { key: string; label: string }[];
   source: PdfSource;
   pages: { width: number; height: number }[];
   mapping: PdfMapping;
@@ -62,7 +64,7 @@ export interface PdfPlacementProps {
   /** The fields of the selected boxes, for the editor's single step picker. When given, the in-viewer "העברה לשלב" bar is not shown. */
 }
 
-export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, pick, onTransform, steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
+export function PdfPlacement({ definition, source, pages, mapping, onMappingChange, onPreview, previewBusy, onDrawElement, onFieldPatch, onCloneField, onSuggest, pick, onTransform, orgFields = [], steps = [{ index: 0, role: "requester", label: "שלב 1 · השולח" }, { index: 1, role: "employee", label: "שלב 2 · העובד" }], focusRole }: PdfPlacementProps) {
   const { doc, error } = usePdfDocument(source);
 
   const [scale, setScale] = useState(1);
@@ -291,6 +293,20 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     reveal(added[0]!.id);
   }
 
+  /**
+   * Adding from the list of field types: the type is chosen first, then a click on the document puts it exactly there
+   * (as with a pasted box). "במקום פנוי" keeps the old way, and is how the keyboard adds one. Esc cancels.
+   */
+  const [placing, setPlacing] = useState<PaletteEntry | null>(null);
+  /** The point under the pointer on page `pi`, as the top corner of a box of the entry's size (like a drop). */
+  function drawAtPointer(entry: PaletteEntry, pi: number, clientX: number, clientY: number) {
+    const pg = pages[pi]!;
+    const r = pageRefs.current[pi]!.getBoundingClientRect();
+    const d = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
+    const b = screenBoxToPdf({ x: clientX - r.left, y: clientY - r.top, width: d.width * scale, height: d.height * scale }, pg.height, scale);
+    draw(entry, pi, { x: round1(b.x), y: round1(b.y) });
+  }
+
   function draw(entry: PaletteEntry, page: number, at?: { x: number; y: number }) {
     if (!onDrawElement) return;
     const dims = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
@@ -433,7 +449,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     const tag = (e.target as HTMLElement).tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     const mod = e.ctrlKey || e.metaKey;
-    if (e.key === "Escape" && boxCopy) { e.preventDefault(); setBoxCopy(null); return; }
+    if (e.key === "Escape" && (boxCopy || placing)) { e.preventDefault(); setBoxCopy(null); setPlacing(null); return; }
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
     if (mod && e.key.toLowerCase() === "c" && group.length) { clipboard.current = selectedBoxes() as PdfStamp[]; return; }
@@ -496,9 +512,13 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                         type="button"
                         draggable
                         onDragStart={(e) => { e.dataTransfer.setData(ELEMENT_DRAG, entry.id); e.dataTransfer.effectAllowed = "copy"; }}
-                        onClick={() => draw(entry, activePage)}
+                        onClick={() => { setBoxCopy(null); setPlacing(placing?.id === entry.id ? null : entry); }}
                         aria-label={`הוספת ${entry.label}`}
-                        className="flex min-h-10 w-full items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                        aria-pressed={placing?.id === entry.id}
+                        className={cn(
+                          "flex min-h-10 w-full items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
+                          placing?.id === entry.id && "border-primary bg-primary/10 ring-1 ring-primary",
+                        )}
                       >
                         {entry.fieldType ? <FieldIcon type={entry.fieldType} className="size-4 shrink-0 text-muted-foreground" /> : <Plus className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                         <span className="truncate">{entry.label}</span>
@@ -578,6 +598,14 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
             <li className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-primary/40" />בשלבים אחרים</li>
           </ul>
         )}
+        {placing && (
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+            <Plus className="size-4 text-primary" aria-hidden />
+            <span>לחצו במסמך במקום שבו להציב <bdi className="font-medium">{placing.label}</bdi>.</span>
+            <Button variant="outline" size="sm" onClick={() => { draw(placing, activePage); setPlacing(null); }}>במקום פנוי בעמוד</Button>
+            <Button variant="ghost" size="sm" onClick={() => setPlacing(null)}>ביטול (Esc)</Button>
+          </div>
+        )}
         {boxCopy && (
           <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
             <Copy className="size-4 text-primary" aria-hidden />
@@ -595,10 +623,15 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 key={pi}
                 ref={(el) => { pageRefs.current[pi] = el; }}
                 data-testid={`pdf-page-${pi}`}
-                className={cn("relative mx-auto shadow", boxCopy && "cursor-copy")}
+                className={cn("relative mx-auto shadow", boxCopy && "cursor-copy", placing && "cursor-crosshair")}
                 style={{ width: pg.width * scale, height: pg.height * scale }}
                 onPointerDown={(e) => {
                   setActivePage(pi);
+                  if (placing) {
+                    drawAtPointer(placing, pi, e.clientX, e.clientY);
+                    setPlacing(null);
+                    return;
+                  }
                   if (boxCopy) {
                     const r = pageRefs.current[pi]!.getBoundingClientRect();
                     const at = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: 0, height: 0 }, pg.height, scale);
@@ -612,10 +645,8 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                   e.preventDefault();
                   const entry = pdfPaletteEntry(e.dataTransfer.getData(ELEMENT_DRAG));
                   if (entry) {
-                    const r = pageRefs.current[pi]!.getBoundingClientRect();
-                    const d = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
-                    const b = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: d.width * scale, height: d.height * scale }, pg.height, scale);
-                    draw(entry, pi, { x: round1(b.x), y: round1(b.y) });
+                    setPlacing(null);
+                    drawAtPointer(entry, pi, e.clientX, e.clientY);
                     return;
                   }
                   const item = items.find((i) => i.key === e.dataTransfer.getData(ITEM_DRAG));
@@ -664,7 +695,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                           aria-pressed={boxCopy?.id === s.id}
                           title="העתקה: אחר כך לוחצים במקום במסמך, ושם יודבק שדה חדש זהה"
                           onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); setBoxCopy(boxCopy?.id === s.id ? null : s); }}
+                          onClick={(e) => { e.stopPropagation(); setPlacing(null); setBoxCopy(boxCopy?.id === s.id ? null : s); }}
                           className={cn(
                             "absolute top-0 -start-5 flex size-4 items-center justify-center rounded-sm border border-primary/50 bg-card text-primary hover:border-primary focus-visible:outline-2 focus-visible:outline-ring",
                             boxCopy?.id === s.id && "border-primary bg-primary text-primary-foreground",
@@ -721,6 +752,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 onFieldPatch={(patch) => onFieldPatch(selectedStamp.fieldId, patch)}
                 definition={definition}
                 onTransform={onTransform}
+                orgFields={orgFields}
                 onStampPatch={(patch) => patchStamp(selectedStamp.id, patch)}
                 onPlaceOptions={(values) => placeMany(
                   values.map((v) => items.find((i) => i.key === stampKey({ fieldId: selectedStamp.fieldId, whenValue: v }))).filter((i): i is PlaceableItem => !!i),

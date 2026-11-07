@@ -33,6 +33,7 @@ const overlap = (a: { x: number; y: number; width: number; height: number }, b: 
   Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
 
 export function PdfTab({
+  orgFields = [],
   definition,
   pdf,
   onChange,
@@ -43,6 +44,8 @@ export function PdfTab({
   pick,
   onDefinitionAndPdf,
 }: {
+  /** The fields defined in the organizations page, offered as a field's "שם מזהה". */
+  orgFields?: { key: string; label: string }[];
   pick?: PickMode;
   /** Change the form and its boxes in one step (one undo). */
   onDefinitionAndPdf?: (d: FormDefinition, p: PdfState) => void;
@@ -270,6 +273,7 @@ export function PdfTab({
       {pdf && (
         <PdfPlacement
           definition={definition}
+          orgFields={orgFields}
           steps={steps}
           focusRole={pick ? undefined : focusRole}
           pick={pick}
