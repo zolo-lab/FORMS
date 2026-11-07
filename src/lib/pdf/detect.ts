@@ -708,6 +708,14 @@ function labelOnlyFields(page: GuessPage, labels: PageLabel[]): Omit<DetectedFie
     if (label.height > usual * 1.12 && !/:\s*$/.test(label.str)) continue;
     const text = cleanLabel(label.str);
     if (!text || text.length > 30 || text.split(" ").length > 4) continue;
+    // Text is not a field. With nothing drawn, a line only asks for something when it says so: it ends with ":", its
+    // words name an answer (חתימה, תאריך, ת"ז, טלפון…, or "אישור …"), or it is a short name standing on its own row.
+    // A line with text right above or below it (a wrapped sentence, a list, a title over a paragraph) is text,
+    // unless it ends with ":".
+    const colon = /:\s*$/.test(label.str);
+    const type: FieldType = /^אישור/.test(text) ? "signature" : typeFromLabel(text);
+    const inBlock = page.labels.some((o) => o !== label && Math.abs(mid(o) - mid(label)) > label.height * 0.6 && Math.abs(mid(o) - mid(label)) <= label.height * 1.9 && overlapsX(label.x, label.x + label.width, o));
+    if (!colon && (inBlock || (type === "short_text" && text.split(" ").length > 3))) continue;
     // The row ends at the nearest text to its left (another name or a value already printed).
     const leftEdge = page.labels
       .filter((o) => o !== label && Math.abs(mid(o) - mid(label)) <= label.height * 0.6 && o.x + o.width <= label.x + 2)
@@ -715,7 +723,6 @@ function labelOnlyFields(page: GuessPage, labels: PageLabel[]): Omit<DetectedFie
     const right = label.x - 6;
     const width = Math.min(LABEL_ONLY_WIDTH, right - leftEdge);
     if (width < 60) continue;
-    const type: FieldType = /^אישור/.test(text) ? "signature" : typeFromLabel(text);
     // As tall as a written answer, and never into the rows above or below.
     const others = page.labels.filter((o) => o !== label && overlapsX(right - width, right, o) && Math.abs(mid(o) - mid(label)) > label.height * 0.6);
     const room = others.reduce((m, o) => Math.min(m, Math.abs(mid(o) - mid(label)) * 2 - o.height - 2), Infinity);

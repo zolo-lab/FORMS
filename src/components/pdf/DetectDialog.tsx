@@ -22,6 +22,7 @@ export function DetectDialog({
   fields,
   pageCount,
   canSplit,
+  canAddText,
   onConfirm,
   onClose,
 }: {
@@ -29,19 +30,22 @@ export function DetectDialog({
   pageCount: number;
   /** The form is empty and the PDF has several pages: offer one step per page. */
   canSplit: boolean;
-  onConfirm: (fields: DetectedField[], opts: { stepPerPage: boolean }) => void;
+  onConfirm: (fields: DetectedField[], opts: { stepPerPage: boolean; withText: boolean }) => void;
+  /** The form is new: the document's other text can go into the responsive form as text. */
+  canAddText?: boolean;
   onClose: () => void;
 }) {
   return (
     <Dialog open={!!fields} onClose={onClose} title="שדות שזוהו ב-PDF" className="w-[min(96vw,44rem)]" fullScreenOnMobile>
-      {fields && <Body key={fields.map((f) => f.id).join(",")} fields={fields} pageCount={pageCount} canSplit={canSplit} onConfirm={onConfirm} onClose={onClose} />}
+      {fields && <Body key={fields.map((f) => f.id).join(",")} fields={fields} pageCount={pageCount} canSplit={canSplit} canAddText={!!canAddText} onConfirm={onConfirm} onClose={onClose} />}
     </Dialog>
   );
 }
 
-function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: DetectedField[]; pageCount: number; canSplit: boolean; onConfirm: (f: DetectedField[], o: { stepPerPage: boolean }) => void; onClose: () => void }) {
+function Body({ fields, pageCount, canSplit, canAddText, onConfirm, onClose }: { fields: DetectedField[]; pageCount: number; canSplit: boolean; canAddText: boolean; onConfirm: (f: DetectedField[], o: { stepPerPage: boolean; withText: boolean }) => void; onClose: () => void }) {
   const [rows, setRows] = useState<Row[]>(() => fields.map((f) => ({ include: !f.skip, label: f.label, type: f.type, key: f.key ?? "" })));
   const [split, setSplit] = useState(canSplit);
+  const [withText, setWithText] = useState(canAddText);
   const [q, setQ] = useState("");
   const [onlyOff, setOnlyOff] = useState(false);
   const needle = q.trim().toLowerCase();
@@ -62,7 +66,7 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
       const r = rows[i]!;
       return r.include && r.label.trim() ? [{ ...f, label: r.label.trim(), type: r.type, key: r.key.trim() || undefined }] : [];
     });
-    onConfirm(out, { stepPerPage: split });
+    onConfirm(out, { stepPerPage: split, withText: canAddText && withText });
   }
 
   return (
@@ -159,9 +163,20 @@ function Body({ fields, pageCount, canSplit, onConfirm, onClose }: { fields: Det
           <span>עמוד נפרד בטופס לכל עמוד ב-PDF (נוח למילוי בחלקים)</span>
         </label>
       )}
+      {canAddText && (
+        <label className="flex items-start gap-2">
+          <Checkbox checked={withText} onChange={(e) => setWithText(e.target.checked)} className="mt-0.5" />
+          <span>
+            להכניס לטופס הרספונסיבי גם את שאר הטקסט של המסמך (כותרות ופסקאות), כטקסט במקומו בין השדות
+            <span className="block text-xs text-muted-foreground">שורות שלא סימנתם כשדה נכנסות כטקסט ולא כשדה למילוי.</span>
+          </span>
+        </label>
+      )}
       {badKey && <p className="text-destructive">מזהה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות.</p>}
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <Button onClick={confirm} disabled={chosen === 0 || badKey} className="min-h-11">הוספת {chosen} שדות לטופס</Button>
+        <Button onClick={confirm} disabled={(chosen === 0 && !(canAddText && withText)) || badKey} className="min-h-11">
+          {chosen === 0 ? "הוספת הטקסט בלבד" : `הוספת ${chosen} שדות לטופס`}
+        </Button>
         <Button variant="outline" onClick={onClose} className="min-h-11">אבנה ידנית</Button>
       </div>
     </div>

@@ -208,6 +208,11 @@ export function cloneField(def: FormDefinition, fieldId: string): { definition: 
 export interface AddDetectedOptions {
   /** One form step per PDF page (only when the form has no fields yet). */
   stepPerPage?: boolean;
+  /**
+   * The document's own text (titles, paragraphs), added to the responsive form as headings and text blocks in reading
+   * order between the fields (only when the form has no fields yet). Shown in the form only, never drawn on the PDF.
+   */
+  texts?: { page: number; box: { x: number; y: number; width: number; height: number }; text: string; heading: boolean }[];
 }
 
 const YES_NO_VALUE: Record<string, string> = { [normalizeText("כן")]: "yes", [normalizeText("לא")]: "no" };
@@ -274,6 +279,17 @@ export function addDetectedFields(
     all.push(...stamps);
     added.push(...stamps);
     pageOf.set(fieldId, d.page);
+  }
+  if (wasEmpty && opts.texts?.length) {
+    for (const t of [...opts.texts].sort((a, b) => readingOrder({ page: a.page, ...a.box }, { page: b.page, ...b.box }))) {
+      const id = uniqueFieldId(definition, t.heading ? "pdf_heading_" : "pdf_text_");
+      const field: FormField = { id, type: t.heading ? "heading" : "info_text", label: t.text };
+      const at = { page: t.page, ...t.box };
+      definition = insertFieldByPosition(definition, field, at, all);
+      // Only to place the next blocks and fields around it; not a stamp (nothing is drawn on the PDF).
+      all.push({ ...at, fieldId: id } as PdfStamp);
+      pageOf.set(id, t.page);
+    }
   }
   if (wasEmpty && opts.stepPerPage && pageOf.size > 0) {
     const fields = definition.pages.flatMap((p) => p.fields);

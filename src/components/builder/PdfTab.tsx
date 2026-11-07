@@ -11,6 +11,7 @@ import { usePdfDocument } from "@/components/pdf/usePdfDocument";
 import { extractPageData } from "@/components/pdf/extract-page-data";
 import { guessOne, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import { detectFields, type DetectedField } from "@/lib/pdf/detect";
+import { documentTextBlocks } from "@/lib/pdf/text-blocks";
 import { applyRefinements, type Refinement } from "@/lib/pdf/refine";
 import { applyLearned, feedbackFrom, type Learned } from "@/lib/pdf/learn";
 import { DetectDialog } from "@/components/pdf/DetectDialog";
@@ -67,6 +68,8 @@ export function PdfTab({
   const [guessBusy, setGuessBusy] = useState(false);
   /** The page text and drawing, read once per document (a suggestion for a single field reuses it). */
   const pageData = useRef<{ key: string; pages: Promise<GuessPage[]> } | null>(null);
+  /** The pages read for the last detection, for the document's text when the proposals are confirmed. */
+  const pagesRef = useRef<GuessPage[] | null>(null);
   const readPages = (): Promise<GuessPage[]> | null => {
     if (!pdf || !doc || docKey !== pdf.file.url) return null;
     if (pageData.current?.key !== pdf.file.url) pageData.current = { key: pdf.file.url, pages: extractPageData(doc, pdf.file.pages) };
@@ -140,12 +143,19 @@ export function PdfTab({
     setGuessNote(null);
     try {
       const pages = (await readPages()) ?? [];
+      pagesRef.current = pages;
       if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
       // A form with no fields yet: propose them from the document.
       if (allFields(defRef.current).length === 0) {
         const local = detectFields(pages);
         let detected = local;
-        if (detected.length === 0) { setGuessNote("לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך."); return; }
+        if (detected.length === 0) {
+          // Nothing to fill: the document's text still goes into the responsive form, so the form reads like the PDF.
+          const texts = documentTextBlocks(pages, []);
+          if (texts.length) changeDefinition(addDetectedFields(defRef.current, [], pdf.mapping.stamps, () => nanoid(8), { texts }).definition);
+          setGuessNote(`לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך.${texts.length ? ` הטקסט של המסמך נוסף לטופס הרספונסיבי (${texts.length} קטעים).` : ""}`);
+          return;
+        }
         try {
           const res = await fetch("/api/admin/pdf-detect", {
             method: "POST",
@@ -322,6 +332,7 @@ export function PdfTab({
         fields={found}
         pageCount={pdf?.file.pages.length ?? 1}
         canSplit={allFields(definition).length === 0 && (pdf?.file.pages.length ?? 1) > 1}
+        canAddText={allFields(definition).length === 0}
         onClose={() => setFound(null)}
         onConfirm={(chosen, opts) => {
           if (!pdf) return;
@@ -330,14 +341,17 @@ export function PdfTab({
           if (items.length) {
             void fetch("/api/admin/pdf-detect/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ templateId, items }) }).catch(() => {});
           }
-          const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), opts);
+          // The document's other text (and the lines not kept as fields) goes into the responsive form as text.
+          const texts = opts.withText && pagesRef.current ? documentTextBlocks(pagesRef.current, chosen) : undefined;
+          const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), { stepPerPage: opts.stepPerPage, texts });
           changeDefinition(added.definition);
           const stamps = [...pdf.mapping.stamps, ...added.stamps];
           onChange({ ...pdf, mapping: { ...pdf.mapping, stamps } });
           setFound(null);
           setExtra([]);
           // Say what happened (silent success is easy to miss).
-          setGuessNote(`נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך. אפשר לעבור ללשונית העריכה כדי לראות אותם.`);
+          const textCount = texts?.length ?? 0;
+          setGuessNote(`${chosen.length ? `נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך` : "לא נוספו שדות"}${textCount ? `, ו-${textCount} קטעי טקסט מהמסמך לטופס הרספונסיבי` : ""}. אפשר לעבור ללשונית "רספונסיבי" כדי לראות.`);
           const suggested = suggestCheckboxLinks(added.definition, stamps);
           if (suggested.length) setLinks(suggested);
         }}
