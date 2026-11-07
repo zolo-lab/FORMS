@@ -136,3 +136,17 @@ describe("the general rule (start → add → round)", () => {
     expect(describeExpiryRule({ kind: "calc", base: field("s"), addMonths: 1, snap: { day: 1, mode: "next" } }, () => "תאריך תחילה")).toBe('ה-1 בחודש שאחרי חודש אחרי "תאריך תחילה"');
   });
 });
+
+describe("old step rules keep counting from the step's start", () => {
+  const sentAt = new Date("2026-11-01T08:00:00Z");
+  const start = new Date("2026-11-21T08:00:00Z");
+  it("an old 7-day step rule is 7 days from the step's start, not from sending", () => {
+    const rule = stepExpiryRule({ expiry: { kind: "days", days: 7 } }, null)!;
+    expect(rule).toEqual({ kind: "calc", base: { from: "stepStart" }, addDays: 7 });
+    expect(stepLinkDeadline(rule, {}, start, sentAt)).toEqual(new Date(start.getTime() + 7 * 86_400_000));
+  });
+  it("a date rule with the date missing falls back from the step's start", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const }, fallbackDays: 30 };
+    expect(stepLinkDeadline(rule, {}, start, sentAt)).toEqual(new Date(start.getTime() + 30 * 86_400_000));
+  });
+});

@@ -72,7 +72,8 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   let date: { y: number; m: number; d: number };
   if (rule.base.from === "field") {
     const fromField = parseDate(answers[rule.base.fieldId]);
-    if (!fromField) return plusDays(sent, rule.fallbackDays ?? DEFAULT_EXPIRY_DAYS);
+    // No date to count from: a number of days from the start (the step's, or the sending for the request).
+    if (!fromField) return plusDays(start, rule.fallbackDays ?? DEFAULT_EXPIRY_DAYS);
     date = fromField;
   } else {
     const instant = rule.base.from === "sent" ? sent : start;
@@ -119,6 +120,16 @@ export function normalizeExpiryRule(raw: unknown): ExpiryRule | null {
   return { kind: "calc", base, ...(addDays ? { addDays } : {}), ...(addMonths ? { addMonths } : {}), ...(snap ? { snap } : {}), ...(pos(o.fallbackDays, 3650) ? { fallbackDays: pos(o.fallbackDays, 3650) } : {}) };
 }
 
+/**
+ * A step's stored rule. Step rules saved before the general rule counted "N days" from the step's start (not from
+ * the sending), so an old `days` rule on a step reads as "N days from the step's start".
+ */
+export function normalizeStepExpiryRule(raw: unknown): ExpiryRule | null {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  if (o?.kind === "days") return pos(o.days, 3650) ? { kind: "calc", base: { from: "stepStart" }, addDays: pos(o.days, 3650) } : null;
+  return normalizeExpiryRule(raw);
+}
+
 /** Hebrew, as a sentence: "ה-7 בחודש שאחרי „תאריך תחילה"", "30 ימים מהשליחה"… */
 export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefined, fieldLabel?: (id: string) => string): string {
   if (!raw) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
@@ -137,7 +148,7 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
 
 /** A step's link rule: its organization's exception, else its own; null = the step follows the request's expiry. */
 export function stepExpiryRule(step: { expiry?: unknown; expiryByOrg?: Record<string, unknown> }, organizationId: string | null | undefined): ExpiryRule | null {
-  return normalizeExpiryRule((organizationId ? step.expiryByOrg?.[organizationId] : undefined) ?? step.expiry);
+  return normalizeStepExpiryRule((organizationId ? step.expiryByOrg?.[organizationId] : undefined) ?? step.expiry);
 }
 
 /** A step's link never ends sooner than this after the step starts (a past start date would otherwise kill it at once). */
@@ -161,7 +172,7 @@ export function normalizeExpiryByOrg(raw: unknown): Record<string, ExpiryRule> |
   if (!raw || typeof raw !== "object") return undefined;
   const out: Record<string, ExpiryRule> = {};
   for (const [org, r] of Object.entries(raw as Record<string, unknown>)) {
-    const rule = normalizeExpiryRule(r);
+    const rule = normalizeStepExpiryRule(r);
     if (rule && /^[0-9a-f-]{36}$/i.test(org)) out[org] = rule;
   }
   return Object.keys(out).length ? out : undefined;

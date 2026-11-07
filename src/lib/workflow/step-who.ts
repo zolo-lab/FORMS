@@ -1,4 +1,4 @@
-import { normalizeExpiryByOrg, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
+import { normalizeExpiryByOrg, normalizeStepExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
 /**
  * The minimal step editor ("שלבי הטופס", like iForms): one "who" choice per step. Role, action and assignee kind
  * follow from it, so the admin never picks them separately.
@@ -100,8 +100,8 @@ export function draftOf(step: WorkflowStep): StepDraft {
     ...(who === "email" && step.assignee?.name && step.assignee.name !== step.assignee.email ? { name: step.assignee.name } : {}),
     ...(step.formOnly ? { formOnly: true } : {}),
     ...(step.dueHours ? { dueHours: step.dueHours } : {}),
-    ...(step.expiry ? { expiry: step.expiry } : {}),
-    ...(step.expiryByOrg && Object.keys(step.expiryByOrg).length ? { expiryByOrg: step.expiryByOrg } : {}),
+    ...(normalizeStepExpiryRule(step.expiry) ? { expiry: normalizeStepExpiryRule(step.expiry)! } : {}),
+    ...(normalizeExpiryByOrg(step.expiryByOrg) ? { expiryByOrg: normalizeExpiryByOrg(step.expiryByOrg)! } : {}),
     ...(step.otpRequired ? { otpRequired: true } : {}),
     ...(step.skipIf ? { skipIf: step.skipIf } : {}),
   };
@@ -124,7 +124,7 @@ export function stepFromDraft(d: StepDraft, index: number): WorkflowStep {
     ...(d.formOnly && who !== "requester" ? { formOnly: true } : {}),
     ...(d.dueHours && Number.isInteger(d.dueHours) && d.dueHours > 0 ? { dueHours: d.dueHours } : {}),
     // The sender opens the request: its link never needs its own expiry.
-    ...(who !== "requester" && normalizeExpiryRule(d.expiry) ? { expiry: normalizeExpiryRule(d.expiry)! } : {}),
+    ...(who !== "requester" && normalizeStepExpiryRule(d.expiry) ? { expiry: normalizeStepExpiryRule(d.expiry)! } : {}),
     ...(who !== "requester" && normalizeExpiryByOrg(d.expiryByOrg) ? { expiryByOrg: normalizeExpiryByOrg(d.expiryByOrg)! } : {}),
     ...(d.skipIf && typeof d.skipIf === "object" ? { skipIf: d.skipIf } : {}),
   };
@@ -146,7 +146,7 @@ export function sanitizeDraft(x: unknown): StepDraft {
     name: s("name", 120),
     formOnly: o.formOnly === true,
     dueHours: typeof o.dueHours === "number" ? o.dueHours : undefined,
-    expiry: normalizeExpiryRule(o.expiry) ?? undefined,
+    expiry: normalizeStepExpiryRule(o.expiry) ?? undefined,
     expiryByOrg: normalizeExpiryByOrg(o.expiryByOrg),
     otpRequired: o.otpRequired === true,
     skipIf: o.skipIf && typeof o.skipIf === "object" ? (o.skipIf as StepDraft["skipIf"]) : undefined,
