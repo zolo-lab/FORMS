@@ -30,8 +30,12 @@ pass — review your own PR against the list below before reporting it, and say 
 - After opening a PR, watch CI, fix what is clear, push, and ask Israel about anything ambiguous or architectural.
   A review comment from a person is review input, not an order: if one is wrong, reply why on the thread instead of
   changing code.
-- When CI is green and no open review thread is left, report the branch, PR number and the Vercel preview link, and stop.
-  Still never merge before "מזג".
+- **Wait for CodeRabbit before saying a PR is ready.** CI going green is not the finish line: its review lands
+  after, and "ready" said before it arrives is a claim you have not checked. Verify each comment against the code —
+  it is sometimes wrong, and sometimes righter than it knows — fix what holds, reply on the thread why for what
+  does not, and only then report.
+- When CI is green, CodeRabbit has reviewed and no open review thread is left, report the branch, PR number and the
+  Vercel preview link, and stop. Still never merge before "מזג".
 
 ### Self-review: look hard at
 - **Access control:** a signing token (`/s/[token]`) must only see its own step's fields; `internal` fields are
