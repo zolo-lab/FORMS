@@ -9,7 +9,8 @@ import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
 import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction } from "@/app/admin/packages/actions";
 import { getWizardPackage } from "@/server/packages-store";
-import { allFields } from "@/lib/forms/schema";
+import { getEditorData } from "@/server/forms-store";
+import { answerFields, fieldRole } from "@/lib/workflow/step-fields";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
 import { ExpiryRuleField } from "./ExpiryRuleBuilder";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
@@ -33,11 +34,14 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const addable = forms.filter((f) => !inPackage.has(f.id));
   const problems = validateWorkflow(pkg.workflow);
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
-  // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
-  const wizard = await getWizardPackage(id);
-  // The wizard reads the published version: before the first publish the requester's fields are not known yet.
-  const published = (wizard?.documentTitles.length ?? 0) > 0;
-  const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
+  // The form's date fields (as being edited), for rules counted from a date; the hint says which step fills each.
+  const editing = formId ? await getEditorData(formId) : null;
+  const wizard = editing ? null : await getWizardPackage(id);
+  const def = editing?.version.definition ?? wizard?.requesterDefinition;
+  const dateFields = def ? answerFields(def).filter((f) => f.type === "date").map((f) => {
+    const at = pkg.workflow.steps.findIndex((s) => s.role === fieldRole(f));
+    return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined };
+  }) : [];
   const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
 
@@ -171,8 +175,8 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <legend className="sr-only">תוקף ותזכורות</legend>
               <ExpiryRuleField name="expiryRule" initial={rule} dateFields={dateFields} inherit="ברירת מחדל: 30 ימים מהשליחה" />
               <p className="text-xs text-muted-foreground">
-                חל על כל השלבים, חוץ משלב שקיבל תוקף משלו בטבלת השלבים. אפשר להאריך כל בקשה בנפרד.
-                {dateFields.length === 0 && (published ? " אין בטופס שדה תאריך שממלא השולח." : " שדות התאריך יופיעו כאן אחרי פרסום הטופס.")}
+                חל על כל השלבים, חוץ משלב שקיבל תוקף משלו בטבלת השלבים. תאריך שעוד לא מולא – נספרים 30 ימים. אפשר להאריך כל בקשה בנפרד.
+                {dateFields.length === 0 && " אין בטופס שדה תאריך."}
               </p>
               <label className="flex min-h-10 items-center gap-2 text-sm">
                 <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />

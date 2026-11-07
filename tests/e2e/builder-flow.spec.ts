@@ -86,13 +86,17 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // What is missing shows on the step itself, and nothing can be saved until it is fixed.
   await expect(step3).toContainText("בחרו משתמש");
   await expect(page.getByRole("button", { name: "שמירת השלבים" })).toBeDisabled();
-  await step3.getByLabel("למי השלב הולך").selectOption({ label: "מייל קבוע (למשל גורם חיצוני)" });
-  await step3.getByLabel("מייל").fill("payroll@example.test");
-  await expect(step3).toContainText("שלב 3 · payroll@example.test");
+  // A new step opens its settings right away.
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("למי השלב הולך").selectOption({ label: "מייל קבוע (למשל גורם חיצוני)" });
+  await dialog.getByLabel("מייל").fill("payroll@example.test");
+  await expect(dialog.getByRole("heading")).toContainText("שלב 3 · payroll@example.test");
+  await dialog.getByRole("button", { name: "סיום" }).click();
+  await expect(step3).toContainText("payroll@example.test");
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
-  await expect(page.getByRole("row", { name: "שלב 3", exact: true }).getByLabel("מייל")).toHaveValue("payroll@example.test");
+  await expect(page.getByRole("row", { name: "שלב 3", exact: true })).toContainText("payroll@example.test");
 
   // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();

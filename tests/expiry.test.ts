@@ -150,3 +150,15 @@ describe("old step rules keep counting from the step's start", () => {
     expect(stepLinkDeadline(rule, {}, start, sentAt)).toEqual(new Date(start.getTime() + 30 * 86_400_000));
   });
 });
+
+describe("snap to a day of the same month", () => {
+  it("the 5th of the date's month, even when the date is later in it", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "d" }, snap: { day: 5, mode: "same" as const } };
+    expect(expiryFor(rule, { d: "2026-11-20" }, new Date("2026-11-01T08:00:00Z"))).toEqual(endOfDayIsrael(2026, 11, 5));
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+  });
+  it("day 31 is the last day of the month", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "d" }, snap: { day: 31, mode: "same" as const } };
+    expect(expiryFor(rule, { d: "2027-02-10" }, new Date("2027-02-01T08:00:00Z"))).toEqual(endOfDayIsrael(2027, 2, 28));
+  });
+});

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Check, GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GripVertical, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
@@ -11,9 +11,9 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { describeExpiryRule, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
 import { STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
-import { defaultEmailField, draftProblems, stepLabel } from "@/lib/workflow/step-fields";
+import { defaultEmailField, draftProblems, stepLabel, stepTarget } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
-import { ExpiryRuleBuilder } from "./ExpiryRuleBuilder";
+import { ExpiryRuleBuilder, type DateFieldOption } from "./ExpiryRuleBuilder";
 
 type Option = { id: string; label: string };
 /** An email field (or group list) of the form, with the step role that fills it. */
@@ -37,14 +37,23 @@ function expiryProblem(rule: ExpiryRule | undefined): string | null {
   return normalizeExpiryRule(rule) ? null : "תוקף הקישור: הכלל לא שלם (למשל לא נבחר שדה תאריך)";
 }
 
-const COLS = "md:grid-cols-[2rem_2.25rem_minmax(9rem,1fr)_minmax(10rem,1.3fr)_minmax(11rem,1.2fr)_auto]";
+const COLS = "grid-cols-[2rem_2.25rem_minmax(10rem,1.3fr)_minmax(8rem,0.8fr)_minmax(12rem,1.3fr)_auto]";
+const SHORT_WHO: Record<StepWho, string> = {
+  requester: "פותח את הבקשה",
+  employee: "העובד שהטופס עליו",
+  contact: "משתמש מוגדר",
+  group_any: "קבוצה – אחד חותם",
+  group_all: "קבוצה – כולם חותמים",
+  email: "מייל קבוע",
+  from_field: "מייל משדה בטופס",
+};
 
 /**
- * "שלבי הטופס" as a table: one row per step, in order. Rows are dragged by their handle (or moved with the arrows);
- * step 1, the sender, stays first. Each row: who the step goes to, the one detail that needs, and the link expiry
- * (opens the rule builder). On a phone each row is a card.
- * `orgView`: an organization that follows this route – everything is read-only except the expiry column, which edits
- * that organization's own expiry for the step (stored on the route as `expiryByOrg`).
+ * "שלבי הטופס" as a list of records: one row per step, in order – who fills it, what they fill and when its link
+ * expires. Rows are dragged by their handle (or moved with the arrows); step 1, the sender, stays first. A row opens
+ * a dialog with all of the step's settings. On a narrow screen the table scrolls sideways.
+ * `orgView`: an organization that follows this route – the dialog edits only that organization's own expiry for the
+ * step (stored on the route as `expiryByOrg`).
  */
 export function StepsEditor({
   drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts, dateFields = [], defaultExpiry, orgView,
@@ -62,7 +71,7 @@ export function StepsEditor({
   /** How many fields each step edits (by role): a step with none only looks the document over and approves it. */
   fieldCounts?: Partial<Record<string, number>>;
   /** Date fields of the form, for expiry rules counted from a date. */
-  dateFields?: Option[];
+  dateFields?: DateFieldOption[];
   /** The form's default expiry, in words ("30 ימים מהשליחה"). */
   defaultExpiry?: string;
   orgView?: Option;
@@ -92,7 +101,9 @@ export function StepsEditor({
   const total = problems.reduce((n, p) => n + p.length, 0);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
-  const [editing, setEditing] = useState<number | null>(null);
+  // The step open in the dialog, by key (it keeps following the step when rows move).
+  const [editKey, setEditKey] = useState<string | null>(null);
+  const editing = editKey ? drafts.findIndex((d) => d.key === editKey) : -1;
 
   const inheritText = (d: EditorDraft) =>
     orgView ? `כמו במסלול הכללי (${d.expiry ? describeExpiryRule(d.expiry, fieldLabel) : formDefault})` : `כמו בהגדרות השליחה (${formDefault})`;
@@ -105,198 +116,190 @@ export function StepsEditor({
     patch(i, { expiryByOrg: Object.keys(byOrg).length ? byOrg : undefined });
   };
   const firstPeopleStep = drafts.findIndex((d) => d.who === "contact" || d.who === "group_all" || d.who === "group_any");
+  const addStep = () => {
+    const key = crypto.randomUUID();
+    onChange([...drafts, { key, who: "contact", role: "approver" }]);
+    setEditKey(key);
+  };
+
+  const ed = editing >= 0 ? drafts[editing]! : null;
+  const edId = `s${editing}`;
 
   return (
     <div className="space-y-3">
-      <div role="table" aria-label="שלבי הטופס" className="overflow-hidden rounded-lg border bg-card">
-        <div role="row" className={cn("hidden gap-3 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground md:grid", COLS)}>
-          <span role="columnheader"><span className="sr-only">גרירה</span></span>
-          <span role="columnheader">#</span>
-          <span role="columnheader">למי השלב הולך</span>
-          <span role="columnheader">פרטים</span>
-          <span role="columnheader">תוקף הקישור{orgView ? ` · ${orgView.label}` : ""}</span>
-          <span role="columnheader"><span className="sr-only">פעולות</span></span>
-        </div>
-        {drafts.map((s, i) => {
-          const n = i + 1;
-          const id = `s${i}`;
-          const earlier = new Set(drafts.slice(0, i).map((x) => x.role));
-          const missing = problems[i]!;
-          const isSender = s.who === "requester";
-          const movable = !isSender && !orgView;
-          const own = expiryOf(s);
-          const count = fieldCounts?.[s.role];
-          return (
-            <div
-              key={s.key}
-              role="row"
-              aria-label={`שלב ${n}`}
-              onDragOver={(e) => { if (dragFrom !== null && i >= pinned) { e.preventDefault(); setDropAt(i); } }}
-              onDrop={(e) => { e.preventDefault(); if (dragFrom !== null) moveTo(dragFrom, i); setDragFrom(null); setDropAt(null); }}
-              className={cn(
-                "grid gap-3 border-b p-3 last:border-b-0 md:items-center",
-                COLS,
-                missing.length > 0 && "bg-destructive/5",
-                dragFrom === i && "opacity-50",
-                dropAt === i && dragFrom !== null && dragFrom !== i && (dragFrom < i ? "border-b-2 border-b-primary" : "border-t-2 border-t-primary"),
-              )}
-            >
-              <span role="cell" className="hidden md:flex">
-                {movable && (
-                  <span
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragFrom(i); }}
-                    onDragEnd={() => { setDragFrom(null); setDropAt(null); }}
-                    className="flex size-8 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent active:cursor-grabbing"
-                    title="גררו כדי לשנות את הסדר"
-                    aria-hidden
-                  >
-                    <GripVertical className="size-4" />
-                  </span>
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <div role="table" aria-label="שלבי הטופס" className="min-w-[46rem]">
+          <div role="row" className={cn("grid items-center gap-3 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground", COLS)}>
+            <span role="columnheader"><span className="sr-only">גרירה</span></span>
+            <span role="columnheader">#</span>
+            <span role="columnheader">מי ממלא</span>
+            <span role="columnheader">מה ממלא</span>
+            <span role="columnheader">תוקף הקישור{orgView ? ` · ${orgView.label}` : ""}</span>
+            <span role="columnheader"><span className="sr-only">פעולות</span></span>
+          </div>
+          {drafts.map((s, i) => {
+            const n = i + 1;
+            const missing = problems[i]!;
+            const isSender = s.who === "requester";
+            const movable = !isSender && !orgView;
+            const own = expiryOf(s);
+            const count = fieldCounts?.[s.role];
+            const editable = !isSender || !orgView;
+            return (
+              <div
+                key={s.key}
+                role="row"
+                aria-label={`שלב ${n}`}
+                onDragOver={(e) => { if (dragFrom !== null && i >= pinned) { e.preventDefault(); setDropAt(i); } }}
+                onDrop={(e) => { e.preventDefault(); if (dragFrom !== null) moveTo(dragFrom, i); setDragFrom(null); setDropAt(null); }}
+                className={cn(
+                  "grid items-center gap-x-3 gap-y-1 border-b px-3 py-2 last:border-b-0 hover:bg-muted/30",
+                  COLS,
+                  missing.length > 0 && "bg-destructive/5",
+                  dragFrom === i && "opacity-50",
+                  dropAt === i && dragFrom !== null && dragFrom !== i && (dragFrom < i ? "border-b-2 border-b-primary" : "border-t-2 border-t-primary"),
                 )}
-              </span>
-              <span role="cell" className="flex items-center gap-2">
-                <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold", isSender ? "bg-primary text-primary-foreground" : "bg-secondary")} aria-hidden>{n}</span>
-                <span className="font-semibold md:sr-only">{isSender ? "השולח" : stepLabel(s, i, ctx)}</span>
-              </span>
-
-              <div role="cell" className="space-y-1">
-                <Label htmlFor={`${id}-who`} className="text-xs text-muted-foreground md:sr-only">למי השלב הולך</Label>
-                {isSender ? (
-                  <p className="text-sm font-medium">השולח <span className="font-normal text-muted-foreground">– פותח את הבקשה וממלא את השדות שלו</span></p>
-                ) : orgView ? (
-                  <p className="text-sm font-medium">{stepLabel(s, i, ctx)}</p>
-                ) : (
-                  <Select id={`${id}-who`} value={s.who} onChange={(e) => choose(i, e.target.value as StepWho)}>
-                    {STEP_WHO.filter((w) => w !== "requester").map((w) => (
-                      <option key={w} value={w} disabled={w === "employee" && employeeAt >= 0 && employeeAt !== i}>{STEP_WHO_LABELS[w]}</option>
-                    ))}
-                  </Select>
-                )}
-                {!isSender && count !== undefined && s.who !== "employee" && (
-                  <p className="text-xs text-muted-foreground">{count === 0 ? "רק אישור: רואה את המסמך ומאשר" : `${count} שדות למילוי`}</p>
-                )}
-              </div>
-
-              <div role="cell" className="space-y-1">
-                {isSender || orgView ? (
-                  <p className="text-sm text-muted-foreground">{isSender ? "—" : (HINT[s.who] ?? "")}</p>
-                ) : (
-                  <>
-                    {s.who === "contact" && (
-                      <>
-                        <Label htmlFor={`${id}-contact`} className="text-xs text-muted-foreground">המשתמש</Label>
-                        <Select id={`${id}-contact`} value={s.contactId ?? ""} onChange={(e) => patch(i, { contactId: e.target.value || undefined })}>
-                          <option value="">בחרו…</option>
-                          {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </Select>
-                      </>
-                    )}
-                    {(s.who === "group_all" || s.who === "group_any") && (
-                      <>
-                        <Label htmlFor={`${id}-group`} className="text-xs text-muted-foreground">הקבוצה</Label>
-                        <Select id={`${id}-group`} value={s.groupId ?? ""} onChange={(e) => patch(i, { groupId: e.target.value || undefined })}>
-                          <option value="">בחרו…</option>
-                          {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-                        </Select>
-                        <p className="text-xs text-muted-foreground">{HINT[s.who]}</p>
-                      </>
-                    )}
-                    {s.who === "email" && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label htmlFor={`${id}-email`} className="text-xs text-muted-foreground">מייל</Label>
-                          <Input id={`${id}-email`} type="email" dir="ltr" value={s.email ?? ""} onChange={(e) => patch(i, { email: e.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor={`${id}-name`} className="text-xs text-muted-foreground">שם (לא חובה)</Label>
-                          <Input id={`${id}-name`} value={s.name ?? ""} onChange={(e) => patch(i, { name: e.target.value })} />
-                        </div>
-                      </div>
-                    )}
-                    {s.who === "from_field" && (
-                      <>
-                        <Label htmlFor={`${id}-field`} className="text-xs text-muted-foreground">שדה המייל</Label>
-                        <Select id={`${id}-field`} value={s.fieldId ?? ""} onChange={(e) => patch(i, { fieldId: e.target.value || undefined })}>
-                          <option value="">בחרו…</option>
-                          {s.fieldId && !emailFields.some((f) => f.id === s.fieldId) && <option value={s.fieldId}>שדה שכבר לא קיים</option>}
-                          {emailFields.map((f) => {
-                            const at = drafts.findIndex((d) => d.role === f.role);
-                            return <option key={f.id} value={f.id} disabled={!earlier.has(f.role)}>{f.label} · {at >= 0 ? `שלב ${at + 1}` : "לא משויך לשלב"}</option>;
-                          })}
-                        </Select>
-                      </>
-                    )}
-                    {s.who === "employee" && <p className="text-sm text-muted-foreground">{HINT.employee}</p>}
-                    <label className="flex min-h-9 items-center gap-2 text-xs text-muted-foreground">
-                      <Checkbox checked={!!s.formOnly} onChange={(e) => patch(i, { formOnly: e.target.checked })} />
-                      ממלא רק בטופס (בלי מילוי על גבי המסמך)
-                    </label>
-                  </>
-                )}
-              </div>
-
-              <div role="cell" className="space-y-1">
-                <span className="text-xs text-muted-foreground md:sr-only">תוקף הקישור</span>
-                {isSender ? (
-                  <p className="text-sm text-muted-foreground">—</p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setEditing(i)}
-                    className={cn("flex min-h-10 w-full items-center rounded-md border px-3 py-1.5 text-start text-sm hover:bg-accent", own ? "border-primary/40 bg-primary/5" : "text-muted-foreground")}
-                    aria-label={`תוקף הקישור של שלב ${n}: ${own ? describeExpiryRule(own, fieldLabel) : inheritText(s)}. לחצו לעריכה`}
-                  >
-                    {own ? describeExpiryRule(own, fieldLabel) : orgView ? "כמו במסלול הכללי" : "כמו בהגדרות השליחה"}
+              >
+                <span role="cell" className="flex">
+                  {movable && (
+                    <span
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragFrom(i); }}
+                      onDragEnd={() => { setDragFrom(null); setDropAt(null); }}
+                      className="flex size-8 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent active:cursor-grabbing"
+                      title="גררו כדי לשנות את הסדר"
+                      aria-hidden
+                    >
+                      <GripVertical className="size-4" />
+                    </span>
+                  )}
+                </span>
+                <span role="cell" className={cn("flex size-8 items-center justify-center rounded-full text-sm font-semibold", isSender ? "bg-primary text-primary-foreground" : "bg-secondary")}>{n}</span>
+                <span role="cell" className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{isSender ? "השולח" : stepTarget(s, ctx)}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{SHORT_WHO[s.who]}</span>
+                </span>
+                <span role="cell" className="text-sm">
+                  {isSender ? "השדות שלו ושליחה" : s.who === "employee" ? "השדות שלו וחתימה" : count === undefined ? "—" : count === 0 ? "רק אישור" : `${count} שדות`}
+                  {s.formOnly && <span className="block text-xs text-muted-foreground">רק בטופס</span>}
+                </span>
+                <span role="cell" className={cn("min-w-0 text-sm", !own && "text-muted-foreground")}>
+                  {isSender ? "—" : own ? describeExpiryRule(own, fieldLabel) : orgView ? "כמו במסלול הכללי" : `ברירת מחדל · ${formDefault}`}
+                </span>
+                <span role="cell" className="flex items-center justify-end gap-0.5">
+                  {movable && (
+                    <>
+                      <Button type="button" variant="ghost" size="icon" disabled={i <= pinned} onClick={() => moveTo(i, i - 1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
+                      <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => moveTo(i, i + 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>
+                    </>
+                  )}
+                  {editable && !isSender && (
+                    <Button type="button" variant="ghost" size="icon" onClick={() => setEditKey(s.key)} aria-label={`עריכת שלב ${n}`}><Pencil className="size-4" aria-hidden /></Button>
+                  )}
+                  {!orgView && (
+                    <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={isSender ? "מחיקת שלב השולח" : `מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
+                  )}
+                </span>
+                {missing.length > 0 && (
+                  <button role="cell" type="button" onClick={() => setEditKey(s.key)} className="col-span-full flex flex-wrap gap-x-3 ps-[5.25rem] text-start text-sm text-destructive underline-offset-2 hover:underline">
+                    {missing.map((m) => <span key={m}>{m}</span>)}
                   </button>
                 )}
               </div>
-
-              <div role="cell" className="flex items-center justify-end gap-1">
-                {movable && (
-                  <>
-                    <Button type="button" variant="ghost" size="icon" disabled={i <= pinned} onClick={() => moveTo(i, i - 1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
-                    <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => moveTo(i, i + 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>
-                  </>
-                )}
-                {!orgView && (
-                  <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={isSender ? "מחיקת שלב השולח" : `מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
-                )}
-              </div>
-
-              {missing.length > 0 && (
-                <ul role="cell" className="space-y-0.5 text-sm text-destructive md:col-span-full">{missing.map((m) => <li key={m}>{m}</li>)}</ul>
-              )}
-              {!orgView && i === firstPeopleStep && missing.length === 0 && (
-                <p role="cell" className="text-xs text-muted-foreground md:col-span-full">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {!orgView && (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => onChange([...drafts, { key: crypto.randomUUID(), who: "contact", role: "approver" }])}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
+          <Button type="button" variant="outline" onClick={addStep}><Plus className="size-4" aria-hidden />הוספת שלב</Button>
           {drafts[0]?.who !== "requester" && (
             <Button type="button" variant="ghost" onClick={() => onChange([{ key: crypto.randomUUID(), who: "requester", role: "requester" }, ...drafts])}><Plus className="size-4" aria-hidden />החזרת שלב השולח בהתחלה</Button>
           )}
         </div>
       )}
 
-      <Dialog open={editing !== null} onClose={() => setEditing(null)} title={editing !== null ? `תוקף הקישור – שלב ${editing + 1}${orgView ? ` · ${orgView.label}` : ""}` : ""} className="w-[min(94vw,44rem)]">
-        {editing !== null && drafts[editing] && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">אחרי התאריך הקישור של השלב לא נפתח, והבקשה מסומנת &quot;פג תוקף&quot; (אפשר להאריך). הקישור נשאר פתוח לפחות 3 ימים מתחילת השלב.</p>
-            <ExpiryRuleBuilder
-              id={`exp-${editing}`}
-              value={expiryOf(drafts[editing]!)}
-              onChange={(r) => setExpiry(editing, r)}
-              dateFields={dateFields}
-              bases={["stepStart", "sent", "field"]}
-              inherit={inheritText(drafts[editing]!)}
-            />
-            <div className="flex justify-end"><Button type="button" onClick={() => setEditing(null)}>סיום</Button></div>
+      <Dialog open={!!ed} onClose={() => setEditKey(null)} title={ed ? `${stepLabel(ed, editing, ctx)}${orgView ? ` · ${orgView.label}` : ""}` : ""} className="w-[min(94vw,44rem)]">
+        {ed && (
+          <div className="space-y-5">
+            {!orgView && (
+              <fieldset className="space-y-3">
+                <legend className="mb-1 text-sm font-semibold">מי ממלא</legend>
+                <div className="space-y-1">
+                  <Label htmlFor={`${edId}-who`}>למי השלב הולך</Label>
+                  <Select id={`${edId}-who`} value={ed.who} onChange={(e) => choose(editing, e.target.value as StepWho)}>
+                    {STEP_WHO.filter((w) => w !== "requester").map((w) => (
+                      <option key={w} value={w} disabled={w === "employee" && employeeAt >= 0 && employeeAt !== editing}>{STEP_WHO_LABELS[w]}</option>
+                    ))}
+                  </Select>
+                  {HINT[ed.who] && <p className="text-xs text-muted-foreground">{HINT[ed.who]}</p>}
+                </div>
+                {ed.who === "contact" && (
+                  <div className="space-y-1">
+                    <Label htmlFor={`${edId}-contact`}>המשתמש</Label>
+                    <Select id={`${edId}-contact`} value={ed.contactId ?? ""} onChange={(e) => patch(editing, { contactId: e.target.value || undefined })}>
+                      <option value="">בחרו…</option>
+                      {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </Select>
+                  </div>
+                )}
+                {(ed.who === "group_all" || ed.who === "group_any") && (
+                  <div className="space-y-1">
+                    <Label htmlFor={`${edId}-group`}>הקבוצה</Label>
+                    <Select id={`${edId}-group`} value={ed.groupId ?? ""} onChange={(e) => patch(editing, { groupId: e.target.value || undefined })}>
+                      <option value="">בחרו…</option>
+                      {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                    </Select>
+                  </div>
+                )}
+                {ed.who === "email" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`${edId}-email`}>מייל</Label>
+                      <Input id={`${edId}-email`} type="email" dir="ltr" value={ed.email ?? ""} onChange={(e) => patch(editing, { email: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${edId}-name`}>שם (לא חובה)</Label>
+                      <Input id={`${edId}-name`} value={ed.name ?? ""} onChange={(e) => patch(editing, { name: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+                {ed.who === "from_field" && (
+                  <div className="space-y-1">
+                    <Label htmlFor={`${edId}-field`}>שדה המייל</Label>
+                    <Select id={`${edId}-field`} value={ed.fieldId ?? ""} onChange={(e) => patch(editing, { fieldId: e.target.value || undefined })}>
+                      <option value="">בחרו…</option>
+                      {ed.fieldId && !emailFields.some((f) => f.id === ed.fieldId) && <option value={ed.fieldId}>שדה שכבר לא קיים</option>}
+                      {emailFields.map((f) => {
+                        const at = drafts.findIndex((d) => d.role === f.role);
+                        return <option key={f.id} value={f.id} disabled={at < 0 || at >= editing}>{f.label} · {at >= 0 ? `שלב ${at + 1}` : "לא משויך לשלב"}</option>;
+                      })}
+                    </Select>
+                  </div>
+                )}
+                <label className="flex min-h-10 items-center gap-2 text-sm">
+                  <Checkbox checked={!!ed.formOnly} onChange={(e) => patch(editing, { formOnly: e.target.checked })} />
+                  ממלא רק בטופס (בלי מילוי על גבי המסמך)
+                </label>
+                {editing === firstPeopleStep && <p className="text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
+              </fieldset>
+            )}
+            <div className={cn(!orgView && "border-t pt-4")}>
+              <ExpiryRuleBuilder
+                id={`exp-${editing}`}
+                value={expiryOf(ed)}
+                onChange={(r) => setExpiry(editing, r)}
+                dateFields={dateFields}
+                bases={["stepStart", "sent"]}
+                inherit={inheritText(ed)}
+              />
+              <p className="mt-3 text-xs text-muted-foreground">אחרי התאריך הקישור של השלב לא נפתח והבקשה מסומנת &quot;פג תוקף&quot; (אפשר להאריך). הקישור פתוח לפחות 3 ימים מתחילת השלב.</p>
+            </div>
+            {problems[editing]!.length > 0 && (
+              <ul className="space-y-0.5 text-sm text-destructive">{problems[editing]!.map((m) => <li key={m}>{m}</li>)}</ul>
+            )}
+            <div className="flex justify-end"><Button type="button" onClick={() => setEditKey(null)}>סיום</Button></div>
           </div>
         )}
       </Dialog>

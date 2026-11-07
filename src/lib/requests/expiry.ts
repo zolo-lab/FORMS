@@ -9,7 +9,7 @@
  * Without a valid date in the field, the deadline is `fallbackDays` after sending (default 30).
  */
 export type ExpiryBase = { from: "sent" } | { from: "stepStart" } | { from: "field"; fieldId: string };
-export type ExpirySnap = { day: number; mode: "sameOrNext" | "next" };
+export type ExpirySnap = { day: number; mode: "sameOrNext" | "next" | "same" };
 export type ExpiryRule =
   | { kind: "none" }
   | { kind: "calc"; base: ExpiryBase; addDays?: number; addMonths?: number; snap?: ExpirySnap; fallbackDays?: number };
@@ -88,7 +88,8 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   }
   if (rule.snap) {
     const want = Math.min(31, Math.max(1, Math.round(rule.snap.day)));
-    const next = rule.snap.mode === "next" || date.d > want;
+    // "same": that day of the same month even if it already passed; "sameOrNext": the next such day; "next": next month.
+    const next = rule.snap.mode === "next" || (rule.snap.mode === "sameOrNext" && date.d > want);
     const target = next ? addMonths(date.y, date.m, 1, 1) : { y: date.y, m: date.m, d: 1 };
     date = { y: target.y, m: target.m, d: Math.min(want, daysIn(target.y, target.m)) };
   }
@@ -112,7 +113,7 @@ export function normalizeExpiryRule(raw: unknown): ExpiryRule | null {
   const base: ExpiryBase | null = b.from === "sent" ? { from: "sent" } : b.from === "stepStart" ? { from: "stepStart" } : b.from === "field" && typeof b.fieldId === "string" && b.fieldId ? { from: "field", fieldId: b.fieldId.slice(0, 80) } : null;
   if (!base) return null;
   const sn = o.snap && typeof o.snap === "object" ? (o.snap as Record<string, unknown>) : null;
-  const snap: ExpirySnap | undefined = sn && pos(sn.day, 31) && (sn.mode === "next" || sn.mode === "sameOrNext") ? { day: pos(sn.day, 31)!, mode: sn.mode } : undefined;
+  const snap: ExpirySnap | undefined = sn && pos(sn.day, 31) && (sn.mode === "next" || sn.mode === "sameOrNext" || sn.mode === "same") ? { day: pos(sn.day, 31)!, mode: sn.mode } : undefined;
   const addDays = pos(o.addDays, 3650);
   const addMonths = pos(o.addMonths, 120);
   // From a moment with nothing added or rounded would expire at once: not a rule.
@@ -141,9 +142,9 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
   const plus = parts.join(" ו-");
   if (!rule.snap) return `${plus} ${rule.base.from === "field" ? "אחרי" : "מ"}${from}`.trim();
   const after = plus ? ` ${plus} אחרי ${from}` : ` ${from}`;
-  return rule.snap.mode === "next"
-    ? `ה-${rule.snap.day} בחודש שאחרי${after}`
-    : `ה-${rule.snap.day} בחודש לפי${after} (אותו חודש אם לא עבר, אחרת הבא)`;
+  if (rule.snap.mode === "next") return `ה-${rule.snap.day} בחודש שאחרי${after}`;
+  if (rule.snap.mode === "same") return `ה-${rule.snap.day} באותו חודש של${after}`;
+  return `ה-${rule.snap.day} בחודש לפי${after} (אותו חודש אם לא עבר, אחרת הבא)`;
 }
 
 /** A step's link rule: its organization's exception, else its own; null = the step follows the request's expiry. */

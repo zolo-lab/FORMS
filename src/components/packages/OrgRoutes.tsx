@@ -11,6 +11,8 @@ import { stepLabel } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
 import { StepsEditor, type EditorDraft, type EmailField, type StepsSaveState } from "./StepsEditor";
 
+import type { DateFieldOption } from "./ExpiryRuleBuilder";
+
 type Option = { id: string; label: string };
 export type SaveRoute = (organizationId: string, drafts: StepDraft[] | null) => Promise<{ ok: true } | { ok: false; errors: string[] }>;
 
@@ -36,7 +38,7 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
 export function OrgRoutes({
   org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, defaultExpiry, general, heldRoles, save, onRoutesChange,
 }: {
-  dateFields?: Option[];
+  dateFields?: DateFieldOption[];
   defaultExpiry?: string;
   /**
    * The general route, editable for this organization's link expiry only (an organization – not a project – that

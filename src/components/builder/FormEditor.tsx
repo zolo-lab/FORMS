@@ -89,7 +89,10 @@ export interface FormEditorProps {
 
 /** A draft as the server takes it (without the editor's own keys). */
 /** The form's date fields, for a step's "the Nth of the month after…" link expiry. */
-const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
+const dateFieldsOf = (def: FormDefinition, steps: { role: string }[] = []) => answerFields(def).filter((f) => f.type === "date").map((f) => {
+  const at = steps.findIndex((d) => d.role === fieldRole(f));
+  return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined };
+});
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
@@ -682,7 +685,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   contacts={flow.contacts}
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}
-                  dateFields={dateFieldsOf(def)}
+                  dateFields={dateFieldsOf(def, stepWork)}
                   defaultExpiry={flow.defaultExpiry}
                   general={routeTargets.find((o) => o.id === routeOrg)?.sub ? undefined : {
                     drafts: stepWork,
@@ -703,7 +706,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 contacts={flow.contacts}
                 groups={flow.groups}
                 emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
-                dateFields={dateFieldsOf(def)}
+                dateFields={dateFieldsOf(def, stepWork)}
                 defaultExpiry={flow.defaultExpiry}
                 dirty={stepsDirty}
                 state={stepState}
