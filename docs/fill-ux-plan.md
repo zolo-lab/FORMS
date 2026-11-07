@@ -57,5 +57,5 @@ Today: static list of 17 banks (`src/lib/forms/lookups.ts`), branch is free text
 - Same component in the request wizard, the signing page and the public link.
 
 ## Review loop
-See `AGENTS.md` and `CLAUDE.md`: Claude Code opens the PR, reviews it against the self-review list, watches CI, and
-Israel approves the preview. There is no automatic reviewer.
+See `AGENTS.md` and `CLAUDE.md`: Claude Code opens the PR and reviews it against the self-review list, CodeRabbit
+reviews it too, CI runs, and Israel approves the preview.
