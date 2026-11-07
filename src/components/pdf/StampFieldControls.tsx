@@ -10,6 +10,7 @@ import { CHARSET_LABELS, type Charset } from "@/lib/forms/charset";
 import { FIELD_TYPE_META, type FieldType } from "@/lib/forms/field-types";
 import { SWITCHABLE_TYPES, canSwitchType, renameFieldId, typeChangePatch } from "@/lib/forms/builder";
 import { renameStamps } from "@/lib/forms/field-dictionary";
+import { linkToOrgField, orgFieldKey, takesOrgField } from "@/lib/forms/prefill";
 import type { PdfStamp } from "@/lib/forms/pdf-mapping";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { boxSwitchTargets, moveOption, optionMoveTargets, switchBoxType, type FixResult } from "@/lib/forms/detect-fixes";
@@ -38,7 +39,10 @@ export function StampFieldControls({
   onPlaceOptions,
   definition,
   onTransform,
+  orgFields = [],
 }: {
+  /** The fields defined in the organizations page, offered as names for this field. */
+  orgFields?: { key: string; label: string }[];
   /** The whole form, for fixes that touch other fields (moving an option to the field it belongs to). */
   definition?: FormDefinition;
   /** Change the form and its boxes together; returns an error to show, if any. */
@@ -134,10 +138,20 @@ export function StampFieldControls({
         </div>
       )}
       {onTransform ? (
-        <FieldIdInput key={field.id} id={field.id} onRename={(to) => onTransform((d, st) => {
-          const r = renameFieldId(d, field.id, to);
-          return r.error ? { error: r.error } : { def: r.def, stamps: renameStamps(st, field.id, to) };
-        })} />
+        <FieldIdInput
+          key={field.id}
+          id={field.id}
+          onRename={(to) => onTransform((d, st) => {
+            const r = renameFieldId(d, field.id, to);
+            return r.error ? { error: r.error } : { def: r.def, stamps: renameStamps(st, field.id, to) };
+          })}
+          orgFields={takesOrgField(field.type) ? orgFields : []}
+          linkedOrg={orgFieldKey(field.prefill)}
+          onLinkOrg={(key) => onTransform((d, st) => {
+            const r = linkToOrgField(d, field.id, key);
+            return r.error || !r.def ? { error: r.error ?? "" } : { def: r.def, stamps: renameStamps(st, field.id, r.id!) };
+          })}
+        />
       ) : (
         <p className="text-xs text-muted-foreground">שם מזהה: <bdi dir="ltr" className="font-mono">{field.id}</bdi></p>
       )}
@@ -199,7 +213,14 @@ const ID_HELP =
   "שם כמו ב-iForms מאפשר לשלוח את אותם נתונים לשתי המערכות. עדיף לא לשנות אחרי שמתחילים למלא את הטופס.";
 
 /** "שם מזהה": the field's id, edited in place; the boxes on the document follow it. */
-function FieldIdInput({ id, onRename }: { id: string; onRename: (to: string) => string | undefined }) {
+function FieldIdInput({ id, onRename, orgFields, linkedOrg, onLinkOrg }: {
+  id: string;
+  onRename: (to: string) => string | undefined;
+  orgFields: { key: string; label: string }[];
+  /** The organization field this one fills from, if any. */
+  linkedOrg?: string;
+  onLinkOrg: (key: string) => string | undefined;
+}) {
   const [draft, setDraft] = useState(id);
   const [error, setError] = useState<string | undefined>();
   const save = () => {
@@ -226,6 +247,22 @@ function FieldIdInput({ id, onRename }: { id: string; onRename: (to: string) => 
         onBlur={save}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { setDraft(id); setError(undefined); } }}
       />
+      {orgFields.length > 0 && (
+        <>
+          <Select
+            className="h-9"
+            aria-label="שם מזהה משדות העמותה"
+            value={linkedOrg && orgFields.some((f) => f.key === linkedOrg) ? linkedOrg : ""}
+            onChange={(e) => { if (e.target.value) setError(onLinkOrg(e.target.value)); }}
+          >
+            <option value="">בחירה משדות העמותה…</option>
+            {orgFields.map((f) => <option key={f.key} value={f.key}>{f.label} · {f.key}</option>)}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {linkedOrg ? "השדה מתמלא אוטומטית בערך של העמותה שבבקשה." : "בחירה משדות העמותה נותנת לשדה את השם, והוא יתמלא אוטומטית בערך של העמותה."}
+          </p>
+        </>
+      )}
       <p id="stamp-field-id-help" className={error ? "text-xs text-destructive" : "sr-only"}>{error ?? ID_HELP}</p>
     </div>
   );

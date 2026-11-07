@@ -724,7 +724,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             pageCount={typeof pdf?.file.pages === "number" ? pdf.file.pages : (pdf?.file.pages?.length ?? 0)}
           />
         )}
-        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} steps={views} focusRole={focusRole} pick={pick} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
+        {tab === "pdf" && <div className="p-4"><PdfTab templateId={templateId} orgFields={orgFields} steps={views} focusRole={focusRole} pick={pick} definition={def} pdf={pdf} onChange={changePdf} onDefinitionChange={(d) => commit(d)} onDefinitionAndPdf={(d, p) => commit(d, p)} /></div>}
 
         {tab === "json" && (
           <div className="mx-auto max-w-4xl space-y-3 p-4">

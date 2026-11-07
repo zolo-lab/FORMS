@@ -1,5 +1,6 @@
 /** Initial values for fields with `prefill`, taken from the request's subject (the employee the request is about). */
 import type { Answers } from "./conditions";
+import { renameFieldId, updateField } from "./builder";
 import { allFields, type FormDefinition, type FormField } from "./schema";
 
 export interface PrefillSubject {
@@ -46,6 +47,24 @@ export const takesOrgField = (type: string) => !COMPOSITE_TYPES.has(type);
 export function prefillKeys(orgFields: { key: string; label: string }[] = [], type?: string): { key: string; label: string }[] {
   if (type !== undefined && !takesOrgField(type)) return [...PREFILL_KEYS];
   return [...PREFILL_KEYS, ...orgFields.map((f) => ({ key: `${ORG_FIELD_PREFIX}${f.key}`, label: `${f.label} (שדה של העמותה)` }))];
+}
+
+/**
+ * "שם מזהה" chosen from the fields defined in the organizations: the field is named after one (a dash becomes "_",
+ * as field ids take none; a number is added when another field of the form already has that name) and is filled
+ * from it, with the value of the request's organization.
+ */
+export function linkToOrgField(def: FormDefinition, fieldId: string, orgKey: string): { def?: FormDefinition; id?: string; error?: string } {
+  const field = allFields(def).find((f) => f.id === fieldId);
+  if (!field) return { error: "השדה לא נמצא" };
+  if (!takesOrgField(field.type)) return { error: "שדה מהסוג הזה לא מתמלא משדה של העמותה (ערך של שורה אחת)" };
+  const base = orgKey.replace(/-/g, "_");
+  const taken = new Set(allFields(def).map((f) => f.id).filter((id) => id !== fieldId));
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}${n}`;
+  const renamed = renameFieldId(def, fieldId, id);
+  if (renamed.error) return { error: renamed.error };
+  return { def: updateField(renamed.def, id, { prefill: `${ORG_FIELD_PREFIX}${orgKey}` }), id };
 }
 
 /** The same list split in two, for a picker that shows the organizations’ own fields as a group of their own. */
