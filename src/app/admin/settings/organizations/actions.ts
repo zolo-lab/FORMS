@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { currentUser } from "@/server/users-store";
@@ -142,6 +142,17 @@ export async function saveOrgFieldsAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!UUID.test(id)) redirect(PATH);
+
+  // Renames first, and only the ones this admin actually changed: `was.` carries what the panel was opened with,
+  // so saving values from a panel opened earlier cannot put an old name back for everyone.
+  for (const [k, v] of formData.entries()) {
+    if (!k.startsWith("key.") || typeof v !== "string") continue;
+    const defId = k.slice("key.".length);
+    if (!UUID.test(defId) || v === String(formData.get(`was.${defId}`) ?? "")) continue;
+    const res = await renameOrgFieldDef(defId, v);
+    if (!res.ok) redirect(`${PATH}?edit=${id}&error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
+  }
+
   const values: Record<string, string> = {};
   for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
   await setOrgFieldValues(id, values);

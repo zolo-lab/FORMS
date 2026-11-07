@@ -149,7 +149,8 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <h3 className="font-semibold">שדות מזהים של העמותה</h3>
                 <p className="text-sm text-muted-foreground">
                   ערכים קבועים של העמותה (תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
-                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו, ולכן אי אפשר לשנות אותו אחרי היצירה.
+                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו. אפשר לשנות אותו – כל הטפסים שמצביעים
+                  עליו והערכים של כל העמותות יתעדכנו יחד איתו.
                   בבונה הטפסים בוחרים אותו תחת &quot;מילוי אוטומטי&quot;: הוא מתמלא לפי העמותה שממנה יצאה הבקשה ומוצג לקריאה בלבד.
                 </p>
               </div>
@@ -169,8 +170,21 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <tbody>
                         {orgFields.map((f) => (
                           <tr key={f.id} className="border-t">
-                            {/* The name is the key the forms point at, so it is shown, never edited. */}
-                            <td className="px-3 py-1.5 font-mono text-xs" dir="ltr">{f.key}</td>
+                            <td className="px-3 py-1.5">
+                              {/* `was.` is what the panel was opened with: only a name the admin changed is renamed. */}
+                              <input type="hidden" name={`was.${f.id}`} value={f.key} />
+                              <Input
+                                name={`key.${f.id}`}
+                                defaultValue={f.key}
+                                required
+                                maxLength={40}
+                                pattern="[a-zA-Z][a-zA-Z0-9_-]*"
+                                title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
+                                dir="ltr"
+                                aria-label={`שם השדה – ${f.key}`}
+                                className="h-9 font-mono text-xs"
+                              />
+                            </td>
                             <td className="px-3 py-1.5">
                               <Input name={`f.${f.key}`} defaultValue={(o.fieldValues ?? {})[f.key] ?? ""} maxLength={200} aria-label={`${f.label} – ${o.name}`} className="h-9" />
                             </td>

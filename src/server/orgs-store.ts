@@ -3,10 +3,12 @@ import type { OrgInput } from "@/lib/orgs/input";
 import { projectSlug } from "@/lib/forms/public-link";
 import { labelKey } from "@/lib/forms/field-keys";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
+import { renameOrgFieldInDefinition } from "@/lib/orgs/rename-prefill";
+import { ORG_FIELD_PREFIX } from "@/lib/forms/prefill";
 import { db, schema } from "@/db";
 import type { ReminderPolicy } from "@/lib/workflow/types";
 
-const { organizations, organizationFieldDefs, projects } = schema;
+const { formTemplateVersions, organizations, organizationFieldDefs, projects } = schema;
 
 export async function listOrgs() {
   return db.select().from(organizations).orderBy(asc(organizations.name));
@@ -141,6 +143,43 @@ export async function createOrgFieldDef(name: string): Promise<{ ok: true; key: 
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(organizationFieldDefs);
   await db.insert(organizationFieldDefs).values({ key, label: key, order: Number(n) });
   return { ok: true, key };
+}
+
+/**
+ * Renames a field everywhere at once: the definition, the value every organization filled in for it, and every
+ * form version that points at it (drafts and published alike, so published forms keep filling the same value).
+ */
+export async function renameOrgFieldDef(id: string, name: string): Promise<{ ok: true; forms: number } | { ok: false; reason: "key" | "exists" | "missing" }> {
+  const to = normalizeOrgFieldKey(name);
+  if (!to) return { ok: false, reason: "key" };
+  const [row] = await db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs).where(eq(organizationFieldDefs.id, id));
+  if (!row) return { ok: false, reason: "missing" };
+  const from = row.key;
+  if (from === to) return { ok: true, forms: 0 };
+  const [dup] = await db.select({ id: organizationFieldDefs.id }).from(organizationFieldDefs).where(eq(organizationFieldDefs.key, to));
+  if (dup) return { ok: false, reason: "exists" };
+
+  // The forms first: a form left on the old key would silently stop filling, while a form already moved to the new
+  // key simply finds nothing until the values follow a moment later.
+  const versions = await db
+    .select({ id: formTemplateVersions.id, definition: formTemplateVersions.definition })
+    .from(formTemplateVersions)
+    .where(sql`${formTemplateVersions.definition}::text LIKE ${`%"${ORG_FIELD_PREFIX}${from}"%`}`);
+  let forms = 0;
+  for (const v of versions) {
+    const next = renameOrgFieldInDefinition(v.definition, from, to);
+    if (!next) continue;
+    await db.update(formTemplateVersions).set({ definition: next }).where(eq(formTemplateVersions.id, v.id));
+    forms++;
+  }
+
+  // Then the values of every organization, and last the definition itself.
+  await db
+    .update(organizations)
+    .set({ fieldValues: sql`(${organizations.fieldValues} - ${from}) || jsonb_build_object(${to}::text, ${organizations.fieldValues} -> ${from})` })
+    .where(sql`${organizations.fieldValues} ? ${from}`);
+  await db.update(organizationFieldDefs).set({ key: to, label: to, updatedAt: new Date() }).where(eq(organizationFieldDefs.id, id));
+  return { ok: true, forms };
 }
 
 /** Drops a field everywhere, and the values the organizations filled in for it. */
