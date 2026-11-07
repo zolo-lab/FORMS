@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, updateOrgFieldDef, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, updateOrgFieldDef, setOrgFieldValues, setOrgsActive, takenFieldKeys, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
@@ -166,10 +166,13 @@ export async function saveOrgFieldsAction(formData: FormData) {
     // Everything is checked before anything is written: a save that cannot go through in full changes nothing,
     // so the admin is never left guessing which half of it was applied.
     const keys = (await listOrgFieldDefs()).map((d) => d.key);
-    const after = new Set(keys.filter((k) => !wanted.some((w) => w.from === k)));
+    // The central dictionary's names count too (one namespace), and case does not make a name different.
+    const orgKeys = new Set(keys);
+    const dictKeys = [...(await takenFieldKeys())].filter((k) => !orgKeys.has(k));
+    const after = new Set([...keys.filter((k) => !wanted.some((w) => w.from === k)), ...dictKeys].map((k) => k.toLowerCase()));
     for (const w of wanted) {
-      if (after.has(w.to)) redirect(`${PATH}?edit=${id}&error=orgFieldExists`);
-      after.add(w.to);
+      if (after.has(w.to.toLowerCase())) redirect(`${PATH}?edit=${id}&error=orgFieldExists`);
+      after.add(w.to.toLowerCase());
     }
     // Renames whose new name is still taken by a field that is itself moving wait their turn; a plain swap has no
     // such turn, so the one in the way steps aside through a name nobody can have typed.
