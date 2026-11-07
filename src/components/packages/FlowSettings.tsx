@@ -11,6 +11,7 @@ import { archivePackageAction, documentAction, savePackageAction, savePackageSet
 import { getWizardPackage } from "@/server/packages-store";
 import { getEditorData } from "@/server/forms-store";
 import { answerFields, fieldRole } from "@/lib/workflow/step-fields";
+import { fillsIn } from "@/lib/forms/schema";
 import { normalizeExpiryRule } from "@/lib/requests/expiry";
 import { ExpiryRuleField } from "./ExpiryRuleBuilder";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
@@ -34,11 +35,11 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const addable = forms.filter((f) => !inPackage.has(f.id));
   const problems = validateWorkflow(pkg.workflow);
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
-  // The form's date fields (as being edited), for rules counted from a date; the hint says which step fills each.
+  // Date fields the sender fills (the request's deadline is set when it is sent), from the form as being edited.
   const editing = formId ? await getEditorData(formId) : null;
   const wizard = editing ? null : await getWizardPackage(id);
   const def = editing?.version.definition ?? wizard?.requesterDefinition;
-  const dateFields = def ? answerFields(def).filter((f) => f.type === "date").map((f) => {
+  const dateFields = def ? answerFields(def).filter((f) => f.type === "date" && fillsIn(f, "requester")).map((f) => {
     const at = pkg.workflow.steps.findIndex((s) => s.role === fieldRole(f));
     return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined };
   }) : [];
@@ -175,8 +176,8 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               <legend className="sr-only">תוקף ותזכורות</legend>
               <ExpiryRuleField name="expiryRule" initial={rule} dateFields={dateFields} inherit="ברירת מחדל: 30 ימים מהשליחה" />
               <p className="text-xs text-muted-foreground">
-                חל על כל השלבים, חוץ משלב שקיבל תוקף משלו בטבלת השלבים. תאריך שעוד לא מולא – נספרים 30 ימים. אפשר להאריך כל בקשה בנפרד.
-                {dateFields.length === 0 && " אין בטופס שדה תאריך."}
+                חל על כל השלבים, חוץ משלב שקיבל תוקף משלו בטבלת השלבים. כאן רק תאריכים שהשולח ממלא; לפי תאריך של שלב מאוחר – בתוקף של השלב עצמו. אפשר להאריך כל בקשה בנפרד.
+                {dateFields.length === 0 && " אין בטופס שדה תאריך שהשולח ממלא."}
               </p>
               <label className="flex min-h-10 items-center gap-2 text-sm">
                 <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />

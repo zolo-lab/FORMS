@@ -80,9 +80,12 @@ export function StepsEditor({
   const fieldLabel = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? fid;
   const formDefault = defaultExpiry ?? "30 ימים מהשליחה";
   const expiryOf = (d: EditorDraft) => (orgView ? d.expiryByOrg?.[orgView.id] : d.expiry);
+  // Every rule on the step blocks saving when incomplete: its own and each organization's (the route is shared).
   const problems = draftProblems(drafts, emailFields).map((p, i) => {
-    const more = expiryProblem(expiryOf(drafts[i]!));
-    return more ? [...p, more] : p;
+    const d = drafts[i]!;
+    const own = expiryProblem(d.expiry);
+    const byOrg = Object.values(d.expiryByOrg ?? {}).some((r) => expiryProblem(r)) ? "תוקף מיוחד לעמותה: הכלל לא שלם" : null;
+    return [...p, ...(own ? [own] : []), ...(byOrg ? [byOrg] : [])];
   });
   const patch = (i: number, p: Partial<EditorDraft>) => onChange(drafts.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const choose = (i: number, who: StepWho) => {
