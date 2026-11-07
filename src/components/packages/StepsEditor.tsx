@@ -89,7 +89,8 @@ export function StepsEditor({
     const r = rule && normalizeExpiryRule(rule);
     if (r?.kind !== "calc" || r.base.from !== "field") return null;
     const fid = r.base.fieldId;
-    return dateFields.some((f) => f.id === fid) && !datesBefore(i).some((f) => f.id === fid) ? "תוקף הקישור: התאריך נבחר משלב שעוד לא מולא כשהשלב מתחיל" : null;
+    if (!dateFields.some((f) => f.id === fid)) return "תוקף הקישור: שדה התאריך כבר לא קיים בטופס – בחרו שוב";
+    return !datesBefore(i).some((f) => f.id === fid) ? "תוקף הקישור: התאריך נבחר משלב שעוד לא מולא כשהשלב מתחיל" : null;
   };
   // Every rule on the step blocks saving when incomplete: its own and each organization's (the route is shared).
   const problems = draftProblems(drafts, emailFields).map((p, i) => {
