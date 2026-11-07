@@ -11,6 +11,7 @@ import { usePdfDocument } from "@/components/pdf/usePdfDocument";
 import { extractPageData } from "@/components/pdf/extract-page-data";
 import { guessOne, planGuess, unplacedSimpleFields, type GuessPage } from "@/lib/pdf/guess";
 import { detectFields, type DetectedField } from "@/lib/pdf/detect";
+import { documentTextBlocks } from "@/lib/pdf/text-blocks";
 import { applyRefinements, type Refinement } from "@/lib/pdf/refine";
 import { applyLearned, feedbackFrom, type Learned } from "@/lib/pdf/learn";
 import { DetectDialog } from "@/components/pdf/DetectDialog";
@@ -21,7 +22,7 @@ import { nanoid } from "nanoid";
 import type { PdfMapping, PdfStamp } from "@/lib/forms/pdf-mapping";
 import { mergeAcroImport, type AcroImport } from "@/lib/pdf/acroform";
 import { tableCellOf } from "@/lib/forms/pdf-items";
-import { addDetectedFields, addDrawnElement, cloneField } from "@/lib/forms/pdf-draw";
+import { addDetectedFields, addDrawnElement, cloneField, isDocumentText } from "@/lib/forms/pdf-draw";
 import { allFields, type FormDefinition, type FormField } from "@/lib/forms/schema";
 
 export interface PdfState {
@@ -31,6 +32,9 @@ export interface PdfState {
 
 const overlap = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
   Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+
+/** Nothing to fill yet: text taken from a document (headings, paragraphs) does not make a form "started". */
+const noFieldsYet = (def: FormDefinition) => allFields(def).every((f) => isDocumentText(f.id));
 
 export function PdfTab({
   definition,
@@ -67,18 +71,29 @@ export function PdfTab({
   const [guessBusy, setGuessBusy] = useState(false);
   /** The page text and drawing, read once per document (a suggestion for a single field reuses it). */
   const pageData = useRef<{ key: string; pages: Promise<GuessPage[]> } | null>(null);
+  /** The pages read for the last detection, for the document's text when the proposals are confirmed. */
+  const pagesRef = useRef<GuessPage[] | null>(null);
+  /** The document now open: an analysis of a document that was replaced meanwhile is dropped. */
+  const openUrl = useRef(pdf?.file.url);
   const readPages = (): Promise<GuessPage[]> | null => {
     if (!pdf || !doc || docKey !== pdf.file.url) return null;
     if (pageData.current?.key !== pdf.file.url) pageData.current = { key: pdf.file.url, pages: extractPageData(doc, pdf.file.pages) };
     return pageData.current.pages;
   };
   /** Set after an upload: ask about automatic placement as soon as the new document is open. */
-  const askAfterUpload = useRef(!!pdf && allFields(definition).length === 0 && pdf.mapping.stamps.length === 0);
+  const askAfterUpload = useRef(!!pdf && noFieldsYet(definition) && pdf.mapping.stamps.length === 0);
   /** Fields the PDF seems to ask for, waiting for the admin's choice. */
-  const [found, setFound] = useState<DetectedField[] | null>(null);
+  // Kept with the document they came from: proposals for a document that was replaced meanwhile are not shown.
+  const [foundFor, setFound] = useState<{ url: string; list: DetectedField[] } | null>(null);
+  const found = foundFor && foundFor.url === pdf?.file.url ? foundFor.list : null;
   /** The proposals as the local detection read them, before memory and model: what the admin's decisions are about. */
   const proposed = useRef<DetectedField[]>([]);
-  const offer = (list: DetectedField[], source: DetectedField[] = list) => { proposed.current = source; setFound(list); };
+  const offer = (list: DetectedField[], source: DetectedField[] = list) => { proposed.current = source; if (pdf) setFound({ url: pdf.file.url, list }); };
+  useEffect(() => {
+    openUrl.current = pdf?.file.url;
+    // A new document: text read from the previous one no longer applies.
+    pagesRef.current = null;
+  }, [pdf?.file.url]);
   /** Places to write the existing fields did not claim (offered after the placement question). */
   const [extra, setExtra] = useState<DetectedField[]>([]);
   /** After detection: fields that sit next to a box, offered "show only when ticked" (applied only on approval). */
@@ -139,13 +154,23 @@ export function PdfTab({
     setGuessBusy(true);
     setGuessNote(null);
     try {
+      const analyzed = pdf.file.url;
+      const stale = () => openUrl.current !== analyzed;
       const pages = (await readPages()) ?? [];
+      if (stale()) return;
+      pagesRef.current = pages;
       if (pages.every((p) => p.labels.length === 0)) { setGuessNote("ה-PDF סרוק או שאין בו טקסט, לכן השיבוץ ידני."); return; }
       // A form with no fields yet: propose them from the document.
-      if (allFields(defRef.current).length === 0) {
+      if (noFieldsYet(defRef.current)) {
         const local = detectFields(pages);
         let detected = local;
-        if (detected.length === 0) { setGuessNote("לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך."); return; }
+        if (detected.length === 0) {
+          // Nothing to fill: the document's text still goes into the responsive form, so the form reads like the PDF.
+          const texts = documentTextBlocks(pages, []);
+          if (texts.length) changeDefinition(addDetectedFields(defRef.current, [], pdf.mapping.stamps, () => nanoid(8), { texts }).definition);
+          setGuessNote(`לא זיהינו ב-PDF מקומות למילוי, לכן בונים ידנית: הוסיפו שדות מהפלטה והציבו אותם על המסמך.${texts.length ? ` הטקסט של המסמך נוסף לטופס הרספונסיבי (${texts.length} קטעים).` : ""}`);
+          return;
+        }
         try {
           const res = await fetch("/api/admin/pdf-detect", {
             method: "POST",
@@ -160,6 +185,7 @@ export function PdfTab({
             if (answer.refinements) detected = applyRefinements(detected, answer.refinements.filter((r) => !decided.has(r.id)));
           }
         } catch { /* local detection stands */ }
+        if (stale()) return;
         offer(detected, local);
         return;
       }
@@ -228,7 +254,7 @@ export function PdfTab({
           </Button>
         )}
         {pdf && <span className="text-sm text-muted-foreground"><bdi>{pdf.file.name}</bdi> · {pdf.file.pages.length} עמודים</span>}
-        {pdf && pending === 0 && allFields(definition).length === 0 && (
+        {pdf && pending === 0 && noFieldsYet(definition) && (
           <Button variant="outline" size="sm" disabled={!doc || guessBusy} onClick={() => void analyze()}>
             {guessBusy ? "מנתח את ה-PDF…" : "זיהוי שדות מה-PDF"}
           </Button>
@@ -321,7 +347,8 @@ export function PdfTab({
       <DetectDialog
         fields={found}
         pageCount={pdf?.file.pages.length ?? 1}
-        canSplit={allFields(definition).length === 0 && (pdf?.file.pages.length ?? 1) > 1}
+        canSplit={noFieldsYet(definition) && (pdf?.file.pages.length ?? 1) > 1}
+        canAddText={noFieldsYet(definition)}
         onClose={() => setFound(null)}
         onConfirm={(chosen, opts) => {
           if (!pdf) return;
@@ -330,14 +357,19 @@ export function PdfTab({
           if (items.length) {
             void fetch("/api/admin/pdf-detect/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ templateId, items }) }).catch(() => {});
           }
-          const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), opts);
+          // The document's other text (and the lines not kept as fields) goes into the responsive form as text.
+          // Each kept field also under the name it was found with: a renamed field's printed name is not text.
+          const kept = chosen.map((c) => ({ ...c, aliases: proposed.current.filter((p) => p.id === c.id).map((p) => p.label) }));
+          const texts = opts.withText && pagesRef.current ? documentTextBlocks(pagesRef.current, kept) : undefined;
+          const added = addDetectedFields(defRef.current, chosen, pdf.mapping.stamps, () => nanoid(8), { stepPerPage: opts.stepPerPage, texts });
           changeDefinition(added.definition);
           const stamps = [...pdf.mapping.stamps, ...added.stamps];
           onChange({ ...pdf, mapping: { ...pdf.mapping, stamps } });
           setFound(null);
           setExtra([]);
           // Say what happened (silent success is easy to miss).
-          setGuessNote(`נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך. אפשר לעבור ללשונית העריכה כדי לראות אותם.`);
+          const textCount = texts?.length ?? 0;
+          setGuessNote(`${chosen.length ? `נוספו ${chosen.length} שדות לטופס וממוקמים על המסמך` : "לא נוספו שדות"}${textCount ? `, ו-${textCount} קטעי טקסט מהמסמך לטופס הרספונסיבי` : ""}. אפשר לעבור ללשונית "רספונסיבי" כדי לראות.`);
           const suggested = suggestCheckboxLinks(added.definition, stamps);
           if (suggested.length) setLinks(suggested);
         }}

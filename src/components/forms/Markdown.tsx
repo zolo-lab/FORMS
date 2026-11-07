@@ -19,7 +19,7 @@ export function Markdown({ text, className }: { text: string; className?: string
       {parseMarkdown(text).map((b, i) =>
         b.t === "p" ? <p key={i} className="mb-2 last:mb-0">{renderInline(b.c)}</p>
         : b.t === "ul" ? <ul key={i} className="mb-2 list-disc ps-5 last:mb-0">{b.items.map((it, j) => <li key={j}>{renderInline(it)}</li>)}</ul>
-        : <ol key={i} className="mb-2 list-decimal ps-5 last:mb-0">{b.items.map((it, j) => <li key={j}>{renderInline(it)}</li>)}</ol>,
+        : <ol key={i} className="mb-2 list-decimal ps-5 last:mb-0">{b.items.map((it, j) => <li key={j} value={b.nums[j]}>{renderInline(it)}</li>)}</ol>,
       )}
     </div>
   );
