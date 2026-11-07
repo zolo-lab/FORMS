@@ -9,7 +9,7 @@ import { withOrgFields } from "@/lib/forms/prefill";
 import { afterResponse } from "./after";
 import { insertNotifications } from "./notifications";
 import { nearestDue } from "@/lib/requests/list";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
 import type { Answers } from "@/lib/forms/conditions";
@@ -235,7 +235,10 @@ async function persist(
     };
     if (prev) {
       if (prev.status !== s.status || activatedIds.has(s.id) || Object.keys(patch).length) {
-        writes.push(db.update(signingSteps).set(common).where(eq(signingSteps.id, s.id)));
+        // Only over the row as it was loaded (or already at its new status, as the acting step is after its own
+        // compare-and-set): a concurrent action on another step of the request (a group member declining while
+        // another submits) is not overwritten by this result, which was computed from an older read.
+        writes.push(db.update(signingSteps).set(common).where(and(eq(signingSteps.id, s.id), or(eq(signingSteps.status, prev.status), eq(signingSteps.status, s.status)))));
       }
     } else {
       writes.push(
@@ -455,6 +458,10 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
   const [row] = await db.select().from(signingSteps).where(eq(signingSteps.id, stepId));
   if (!row) throw new Error("step not found");
   const before = await loadSteps(row.requestId);
+  // The step was closed between the first read and now (another member of its group signed, an admin acted):
+  // a conflict, not an engine error, so the caller can say what happened.
+  const current = before.find((s) => s.id === stepId);
+  if (action.type !== "open" && current && current.status !== "active" && current.status !== "in_progress") throw new StepConflictError();
   const steps = before.map(toEngine);
   let answers = await collectedAnswers(row.requestId);
   let result: EngineResult;
@@ -501,7 +508,16 @@ export async function applyStepAction(stepId: string, action: StepAction, actor:
     const claimed = await db
       .update(signingSteps)
       .set({ status: sql`CASE WHEN ${signingSteps.id} = ${stepId} THEN 'completed'::step_status ELSE 'skipped'::step_status END` })
-      .where(and(eq(signingSteps.requestId, row.requestId), eq(signingSteps.order, row.order), eq(signingSteps.anyOf, true), inArray(signingSteps.status, ["active", "in_progress"])))
+      .where(
+        and(
+          eq(signingSteps.requestId, row.requestId),
+          eq(signingSteps.order, row.order),
+          eq(signingSteps.anyOf, true),
+          inArray(signingSteps.status, ["active", "in_progress"]),
+          // Nothing moves unless this member's own step is still open: no sibling is released by a submit that loses.
+          sql`exists (select 1 from ${signingSteps} as me where me.id = ${stepId} and me.status in ('active', 'in_progress'))`,
+        ),
+      )
       .returning({ id: signingSteps.id });
     if (!claimed.some((c) => c.id === stepId)) throw new StepConflictError();
   } else if (target && target !== row.status) {

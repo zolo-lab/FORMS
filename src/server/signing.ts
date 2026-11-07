@@ -52,7 +52,12 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   if (!tok) return { state: "invalid" };
   const [step] = await db.select().from(signingSteps).where(eq(signingSteps.id, tok.stepId));
   const [request] = step ? await db.select().from(requests).where(eq(requests.id, step.requestId)) : [];
-  const state = tokenState({ token: tok, stepStatus: step?.status, requestStatus: request?.status, stepAnyOf: step?.anyOf, now });
+  // A released group member (another member signed) is told so; a step an admin skipped is just closed.
+  const releasedBySibling =
+    !!step?.anyOf &&
+    step.status === "skipped" &&
+    (await db.select({ id: signingSteps.id }).from(signingSteps).where(and(eq(signingSteps.requestId, step.requestId), eq(signingSteps.order, step.order), eq(signingSteps.anyOf, true), eq(signingSteps.status, "completed"))).limit(1)).length > 0;
+  const state = tokenState({ token: tok, stepStatus: step?.status, requestStatus: request?.status, releasedBySibling, now });
   if (state !== "ok" || !step || !request) return { state: state === "ok" ? "invalid" : state };
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, request.organizationId));
