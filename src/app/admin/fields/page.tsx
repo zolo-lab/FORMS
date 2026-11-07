@@ -27,8 +27,8 @@ const CATEGORY_LABELS = { org: "עמותה", general: "כללי" } as const;
  * lists of suppliers, work places… are built from. People work with the Hebrew name; the internal name is made from
  * it and can be changed.
  */
-export default async function FieldsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; key?: string; q?: string }> }) {
-  const { error, saved, key, q } = await searchParams;
+export default async function FieldsPage({ searchParams }: { searchParams: Promise<{ error?: string; nerror?: string; saved?: string; key?: string; q?: string; types?: string }> }) {
+  const { error, nerror, saved, key, q, types } = await searchParams;
   const all = await listDictionary();
   const query = q?.trim().toLowerCase() ?? "";
   const rows = query ? all.filter((f) => f.label.toLowerCase().includes(query) || f.key.toLowerCase().includes(query)) : all;
@@ -39,7 +39,11 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
         title="שדות מזהים"
         description="כל השדות המזהים במקום אחד: שדות העמותה (לכל עמותה הערך שלה) ושדות כלליים (שם ספק, ח״פ, בנק…) שמהם בונים רשימות. כותבים שם בעברית – השם הפנימי שהטפסים מצביעים עליו נוצר ממנו אוטומטית, ואפשר לשנות אותו."
       />
-      {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
+      {error && (
+        <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {error === "inUse" ? `אי אפשר למחוק: השדה בשימוש בסוגי הרשימות ${types ?? ""}. הסירו אותו משם קודם.` : (ERRORS[error] ?? "שגיאה")}
+        </p>
+      )}
       {saved === "new" && <p role="status" className="text-sm text-success">השדה נוסף{key ? <> בשם הפנימי <bdi dir="ltr" className="font-mono">{key}</bdi></> : null}.</p>}
       {saved === "deleted" && <p role="status" className="text-sm text-success">השדה נמחק.</p>}
 
@@ -47,7 +51,7 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
       <section aria-labelledby="list-title" className="space-y-3">
         <h2 id="list-title" className="font-semibold">כל השדות ({all.length})</h2>
         <div className="flex flex-wrap items-center justify-start gap-2">
-          <NewFieldDialog initialOpen={!!error} error={error ? (ERRORS[error] ?? "שגיאה") : null} />
+          <NewFieldDialog initialOpen={!!nerror} error={nerror ? (ERRORS[nerror] ?? "שגיאה") : null} />
           <form className="flex items-center gap-2" role="search">
             <Label htmlFor="fq" className="sr-only">חיפוש</Label>
             <Input id="fq" name="q" defaultValue={q ?? ""} placeholder="חיפוש בשם" className="w-56" />

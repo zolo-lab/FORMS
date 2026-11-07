@@ -8,6 +8,7 @@ import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
 import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
 import { createOrgFieldDef, listOrgFieldDefs, renameOrgFieldDef, takenFieldKeys, updateOrgFieldDef } from "./orgs-store";
+import { renameKeyInTypes, typesUsingKey } from "./list-types-store";
 
 const { fieldDictionary } = schema;
 
@@ -41,7 +42,7 @@ export async function listDictionary(): Promise<DictionaryEntry[]> {
   ];
 }
 
-export type DictionaryResult = { ok: true; key: string } | { ok: false; reason: "label" | "key" | "exists" | "missing" | "type" };
+export type DictionaryResult = { ok: true; key: string } | { ok: false; reason: "label" | "key" | "exists" | "missing" | "type" | "inUse" };
 
 /** A new field: the Hebrew name, a type, and an internal name (made from the name unless typed). */
 export async function createDictionaryEntry(input: { label: string; key?: string; type?: string; category: FieldCategory }): Promise<DictionaryResult> {
@@ -95,9 +96,17 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
   }
   // A type left out keeps the current one.
   await db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
+  // The list types that list the field follow its new internal name.
+  if (key !== cur.key) await renameKeyInTypes(cur.key, key);
   return { ok: true, key };
 }
 
-export async function deleteDictionaryEntry(id: string) {
+/** Deletes a general field, unless a list type uses it (it would silently drop a column of that list). */
+export async function deleteDictionaryEntry(id: string): Promise<{ ok: true } | { ok: false; reason: "inUse"; types: string[] }> {
+  const [cur] = await db.select().from(fieldDictionary).where(eq(fieldDictionary.id, id));
+  if (!cur) return { ok: true };
+  const using = await typesUsingKey(cur.key);
+  if (using.length) return { ok: false, reason: "inUse", types: using.map((t) => t.name) };
   await db.delete(fieldDictionary).where(eq(fieldDictionary.id, id));
+  return { ok: true };
 }
