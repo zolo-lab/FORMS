@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Check, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,15 +24,12 @@ export function TypeEditor({
   fields: initialFields,
   displayKey: initialDisplay,
   all,
-  children,
 }: {
   typeId: string;
   name: string;
   fields: string[];
   displayKey: string | null;
   all: FieldOption[];
-  /** The "new field" form: disabled while there are unsaved changes, since adding a field reloads this editor. */
-  children?: React.ReactNode;
 }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -77,12 +75,6 @@ export function TypeEditor({
 
   return (
     <div className="space-y-5">
-      {children && (
-        <div className="space-y-2">
-          <fieldset disabled={dirty} className="disabled:opacity-60">{children}</fieldset>
-          {dirty && <p className="text-sm text-muted-foreground">שמרו את השינויים לפני יצירת שדה חדש.</p>}
-        </div>
-      )}
       <div className="max-w-md space-y-1">
         <Label htmlFor="t-name">שם סוג הרשימה</Label>
         <Input id="t-name" value={name} onChange={(e) => { setName(e.target.value); touch(); }} maxLength={80} />
@@ -154,6 +146,7 @@ export function TypeEditor({
             <Plus className="size-4" aria-hidden />הוספה
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">שדה שאין ברשימה? יוצרים אותו בלשונית <Link href="/admin/fields" className="underline">שדות</Link>.</p>
       </section>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur lg:-mx-8 lg:px-8">

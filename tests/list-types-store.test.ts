@@ -38,8 +38,5 @@ describe.skipIf(!hasDb)("list types (dev DB)", () => {
 
     const del = await dict.deleteDictionaryEntry(entry.id);
     expect(del).toMatchObject({ ok: false, reason: "inUse" });
-
-    await types.appendFieldToType(id, `renamed${stamp}`);
-    expect((await types.getListType(id))!.fields).toHaveLength(2);
   });
 });
