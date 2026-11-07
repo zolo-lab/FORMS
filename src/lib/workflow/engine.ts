@@ -297,7 +297,9 @@ export function reopenExpired(input: EngineStep[]): EngineResult {
     }
     if (s.status === "expired") {
       s.status = "active";
-      events.push({ type: "step_activated", stepId: s.id, payload: { order: s.order, role: s.role, reactivated: true } });
+      // A step that was being asked for a correction gets the request back with the reason, as when it was returned.
+      const waiting = input.find((t) => t.returnedToStepId === s.id && t.status === "expired" && t.returnReason);
+      events.push({ type: "step_activated", stepId: s.id, payload: { order: s.order, role: s.role, reactivated: true, ...(waiting ? { returnReason: waiting.returnReason } : {}) } });
     }
   }
   return { steps, events };

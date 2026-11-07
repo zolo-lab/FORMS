@@ -300,5 +300,7 @@ describe("reopenExpired (extending an expired request)", () => {
     expect(byOrder(r.steps)).toBe("1:active 2:pending 3:returned");
     expect(requestStatus(r.steps)).toBe("returned");
     expect(r.events.map((e) => e.stepId)).toEqual(["s1"]);
+    // The corrector is asked again with the reason, not with a plain invitation.
+    expect(r.events[0]!.payload).toMatchObject({ reactivated: true, returnReason: "חסר תלוש" });
   });
 });

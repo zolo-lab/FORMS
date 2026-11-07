@@ -224,11 +224,13 @@ async function persist(
    */
   const linkByStep = new Map<string, { ownLinkExpiry: boolean; linkExpiresAt: Date | null }>();
   if (activatedIds.size && pkg) {
-    const routed = routeFor(pkg, req.organizationId, req.projectId);
+    // The steps this request actually runs: the chain set for it when it was created, else its package's route.
+    const override = (req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride;
+    const routed = override ?? routeFor(pkg, req.organizationId, req.projectId);
     const route = routed.steps;
-    // Per-organization exceptions belong to the general route; an organization's (or project's) own route is already
-    // specific, so only its steps' own rule counts there.
-    const exceptionsFor = routed === pkg.workflow ? req.organizationId : null;
+    // Per-organization exceptions belong to the general route; an organization's (or project's) own route, or a chain
+    // set for this request, is already specific, so only its steps' own rule counts there.
+    const exceptionsFor = !override && routed === pkg.workflow ? req.organizationId : null;
     let answers: Answers | null = null;
     for (const s of result.steps.filter((x) => activatedIds.has(x.id))) {
       const w = route.find((x) => x.order === s.order && x.role === s.role);
@@ -310,7 +312,9 @@ async function persist(
     tokensToLink.push({ stepId: id, token });
     const targets = deliveryTargets({ email: s.assigneeEmail, phone: s.assigneePhone });
     // A step that was sent back for correction gets the "returned" text with the reason, not the plain invitation.
-    const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason;
+    // (A correction reopened by an extension carries the reason on its activation.)
+    const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason
+      ?? result.events.find((e) => e.type === "step_activated" && e.stepId === id)?.payload?.returnReason;
     const key = returnReason ? "returned" : "step_invite";
     mail ??= await triggersFor(req.organizationId);
     if (targets.length && mail.trigger(key).enabled) {
