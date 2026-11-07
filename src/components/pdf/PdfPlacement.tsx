@@ -307,6 +307,24 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     draw(entry, pi, { x: round1(b.x), y: round1(b.y) });
   }
 
+  /**
+   * A chosen type (or a copied box) goes where the document was pressed, also on top of another box (then that box
+   * is not dragged). Only the main button: a right click opens the menu and places nothing. True when it was used.
+   */
+  function putChosenAt(e: React.PointerEvent, pi: number): boolean {
+    if (!placing && !boxCopy) return false;
+    if (e.button !== 0) return true;
+    if (placing) {
+      drawAtPointer(placing, pi, e.clientX, e.clientY);
+      setPlacing(null);
+    } else {
+      const r = pageRefs.current[pi]!.getBoundingClientRect();
+      const at = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: 0, height: 0 }, pages[pi]!.height, scale);
+      pasteBoxAt(pi, { x: at.x, y: at.y });
+    }
+    return true;
+  }
+
   function draw(entry: PaletteEntry, page: number, at?: { x: number; y: number }) {
     if (!onDrawElement) return;
     const dims = entry.size ?? DEFAULT_SIZE[entry.stamp.kind];
@@ -324,6 +342,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
 
   function startDrag(e: React.PointerEvent, stamp: PdfStamp, mode: "move" | "resize") {
     e.preventDefault();
+    if (putChosenAt(e, stamp.page)) { e.stopPropagation(); return; }
     e.stopPropagation();
     // preventDefault stops the browser focusing the stamp, so keep keyboard shortcuts working explicitly.
     rootRef.current?.focus({ preventScroll: true });
@@ -627,17 +646,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
                 style={{ width: pg.width * scale, height: pg.height * scale }}
                 onPointerDown={(e) => {
                   setActivePage(pi);
-                  if (placing) {
-                    drawAtPointer(placing, pi, e.clientX, e.clientY);
-                    setPlacing(null);
-                    return;
-                  }
-                  if (boxCopy) {
-                    const r = pageRefs.current[pi]!.getBoundingClientRect();
-                    const at = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: 0, height: 0 }, pg.height, scale);
-                    pasteBoxAt(pi, { x: at.x, y: at.y });
-                    return;
-                  }
+                  if (putChosenAt(e, pi)) return;
                   select(null);
                 }}
                 onDragOver={(e) => e.preventDefault()}
@@ -854,7 +863,7 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
               size="sm"
               title="שדה חדש זהה (אותו סוג, שם והגדרות). אחרי ההעתקה לוחצים במקום במסמך שבו להדביק אותו."
               aria-pressed={boxCopy?.id === selectedStamp.id}
-              onClick={() => setBoxCopy(boxCopy?.id === selectedStamp.id ? null : selectedStamp)}
+              onClick={() => { setPlacing(null); setBoxCopy(boxCopy?.id === selectedStamp.id ? null : selectedStamp); }}
             >
               <Copy className="size-4" aria-hidden />
               העתקת התיבה

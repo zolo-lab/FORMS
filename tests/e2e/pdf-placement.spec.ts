@@ -198,11 +198,17 @@ test("a field type is chosen first, then a click on the document puts it exactly
   await pdfPage.click({ position: { x: 100, y: area.height - 100 } });
   await expect.poll(async () => (await stamps()).length).toBe(1);
   expect((await stamps())[0]!.y).toBeLessThan(150); // near the bottom, where it was clicked
+  // Pressing on top of a box places there too (the box under it is not dragged); a right click places nothing.
+  await page.getByRole("button", { name: "הוספת תשובה קצרה", exact: true }).click();
+  await page.locator("[data-stamp]").first().click({ button: "right" });
+  expect(await stamps()).toHaveLength(1);
+  await page.locator("[data-stamp]").first().click();
+  await expect.poll(async () => (await stamps()).length).toBe(2);
   // Esc cancels a chosen type.
   await page.getByRole("button", { name: "הוספת תאריך", exact: true }).click();
   await page.keyboard.press("Escape");
   await pdfPage.click({ position: { x: 300, y: 300 } });
-  expect(await stamps()).toHaveLength(1);
+  expect(await stamps()).toHaveLength(2);
 });
 
 test("a field's name can be chosen from the organization fields, and then it fills from it", async ({ page }) => {
