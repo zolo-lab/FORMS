@@ -93,8 +93,8 @@ describe("organization and project access", () => {
 
 describe("grants (iForms-style extra permissions)", () => {
   it("normalizes stored JSON", () => {
-    expect(normalizeGrants(null)).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: false, followUp: false, trackOnly: false });
-    expect(normalizeGrants({ export: true, cancel: "yes", junk: 1 })).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: true, followUp: false, trackOnly: false });
+    expect(normalizeGrants(null)).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: false, followUp: false, manageFields: false, trackOnly: false });
+    expect(normalizeGrants({ export: true, cancel: "yes", junk: 1 })).toEqual({ viewAll: false, openAll: false, cancel: false, manageForms: false, export: true, followUp: false, manageFields: false, trackOnly: false });
   });
   it("admin and open mode have every grant; a manager only what was ticked", () => {
     expect(hasGrant(admin, "export")).toBe(true);

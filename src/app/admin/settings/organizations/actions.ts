@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, updateOrgFieldDef, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
@@ -129,8 +129,8 @@ export async function createOrgFieldAction(formData: FormData) {
   await requireAdmin();
   const org = String(formData.get("org") ?? "");
   const back = UUID.test(org) ? `${PATH}?edit=${org}` : PATH;
-  const res = await createOrgFieldDef(String(formData.get("key") ?? ""));
-  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
+  const res = await createOrgFieldDef({ label: String(formData.get("label") ?? ""), key: String(formData.get("key") ?? ""), type: String(formData.get("type") ?? "") });
+  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : res.reason === "label" ? "orgFieldLabel" : "orgFieldKey"}`);
   revalidatePath(PATH);
   redirect(`${back}&saved=orgfield`);
 }
@@ -189,6 +189,13 @@ export async function saveOrgFieldsAction(formData: FormData) {
       taken.delete(next.from);
       taken.add(next.to);
     }
+  }
+
+  // The Hebrew names (and types) of the fields, for every organization.
+  for (const [k, v] of formData.entries()) {
+    if (!k.startsWith("label.") || typeof v !== "string") continue;
+    const defId = k.slice("label.".length);
+    if (UUID.test(defId) && v.trim() && v !== formData.get(`wasLabel.${defId}`)) await updateOrgFieldDef(defId, { label: v });
   }
 
   // The values come in under the names the panel was opened with, so a field renamed just now keeps its value.

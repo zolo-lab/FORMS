@@ -4,7 +4,7 @@ import { AdminNav } from "@/components/admin/AdminNav";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { devLoginEnabled } from "@/lib/auth/dev-login";
-import { isAdmin, isTrackOnly } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin, isTrackOnly } from "@/lib/auth/permissions";
 import { currentUser, viewerFormAccess } from "@/server/users-store";
 import { queryRequests } from "@/server/dashboard-store";
 import { cookies } from "next/headers";
@@ -39,6 +39,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           settings={[
             // Everyone has their own notification settings, admin or not.
             { title: "אישי", items: [{ href: "/admin/notifications", label: "ההתראות שלי" }] },
+            // The identifying fields (and, later, the lists built on them): whoever has the grant.
+            ...(hasGrant(user, "manageFields") ? [{ title: "נתונים", items: [{ href: "/admin/fields", label: "שדות מזהים" }] }] : []),
             ...(admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },

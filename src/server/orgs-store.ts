@@ -3,6 +3,8 @@ import type { OrgInput } from "@/lib/orgs/input";
 import { projectSlug } from "@/lib/forms/public-link";
 import { labelKey } from "@/lib/forms/field-keys";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
+import { suggestKey } from "@/lib/fields/key";
+import { dictionaryType } from "@/lib/fields/types";
 import { renameOrgFieldInDefinition } from "@/lib/orgs/rename-prefill";
 import { ORG_FIELD_PREFIX } from "@/lib/forms/prefill";
 import { db, schema } from "@/db";
@@ -130,19 +132,43 @@ export async function listOrgFieldDefs(): Promise<OrgFieldDef[]> {
   return db.select().from(organizationFieldDefs).orderBy(asc(organizationFieldDefs.order), asc(organizationFieldDefs.label));
 }
 
+/** Every internal name in use: the organizations' fields and the central dictionary share one namespace. */
+export async function takenFieldKeys(): Promise<Set<string>> {
+  const [orgKeys, dictKeys] = await Promise.all([
+    db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs),
+    db.select({ key: schema.fieldDictionary.key }).from(schema.fieldDictionary).catch(() => [] as { key: string }[]),
+  ]);
+  return new Set([...orgKeys, ...dictKeys].map((r) => r.key));
+}
+
 /**
  * Adds a field for ALL organizations at once: one definition, and every organization fills in its own value later.
- * The name is the key the forms point at, so it is typed in English and cannot be changed afterwards - a field
- * that turned out wrong is deleted and added again, while no form points at it yet.
+ * People type the Hebrew name; the internal name (the key the forms point at) is made from it unless one is given,
+ * and can be renamed later (`renameOrgFieldDef` moves the forms and the values with it).
  */
-export async function createOrgFieldDef(name: string): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" }> {
-  const key = normalizeOrgFieldKey(name);
-  if (!key) return { ok: false, reason: "key" };
-  const [dup] = await db.select({ id: organizationFieldDefs.id }).from(organizationFieldDefs).where(eq(organizationFieldDefs.key, key));
-  if (dup) return { ok: false, reason: "exists" };
+export async function createOrgFieldDef(input: { label: string; key?: string; type?: string }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" }> {
+  const label = input.label.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!label) return { ok: false, reason: "label" };
+  const taken = await takenFieldKeys();
+  let key: string;
+  if (input.key?.trim()) {
+    const typed = normalizeOrgFieldKey(input.key);
+    if (!typed) return { ok: false, reason: "key" };
+    if ([...taken].some((k) => k.toLowerCase() === typed.toLowerCase())) return { ok: false, reason: "exists" };
+    key = typed;
+  } else key = suggestKey(label, taken);
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(organizationFieldDefs);
-  await db.insert(organizationFieldDefs).values({ key, label: key, order: Number(n) });
+  await db.insert(organizationFieldDefs).values({ key, label, type: dictionaryType(input.type, true), order: Number(n) });
   return { ok: true, key };
+}
+
+/** The Hebrew name and the type of an organization field (the internal name has its own rename). */
+export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string }) {
+  const label = patch.label?.replace(/\s+/g, " ").trim().slice(0, 80);
+  await db
+    .update(organizationFieldDefs)
+    .set({ ...(label ? { label } : {}), ...(patch.type !== undefined ? { type: dictionaryType(patch.type, true) } : {}), updatedAt: new Date() })
+    .where(eq(organizationFieldDefs.id, id));
 }
 
 /**
@@ -156,8 +182,7 @@ export async function renameOrgFieldDef(id: string, name: string): Promise<{ ok:
   if (!row) return { ok: false, reason: "missing" };
   const from = row.key;
   if (from === to) return { ok: true, forms: 0 };
-  const [dup] = await db.select({ id: organizationFieldDefs.id }).from(organizationFieldDefs).where(eq(organizationFieldDefs.key, to));
-  if (dup) return { ok: false, reason: "exists" };
+  if ((await takenFieldKeys()).has(to)) return { ok: false, reason: "exists" };
 
   // The forms first: a form left on the old key would silently stop filling, while a form already moved to the new
   // key simply finds nothing until the values follow a moment later.
@@ -178,7 +203,11 @@ export async function renameOrgFieldDef(id: string, name: string): Promise<{ ok:
     .update(organizations)
     .set({ fieldValues: sql`(${organizations.fieldValues} - ${from}) || jsonb_build_object(${to}::text, ${organizations.fieldValues} -> ${from})` })
     .where(sql`${organizations.fieldValues} ? ${from}`);
-  await db.update(organizationFieldDefs).set({ key: to, label: to, updatedAt: new Date() }).where(eq(organizationFieldDefs.id, id));
+  // The Hebrew name stays; only a field that never had one (its name was the key) follows the new key.
+  await db
+    .update(organizationFieldDefs)
+    .set({ key: to, label: sql`CASE WHEN ${organizationFieldDefs.label} = ${from} THEN ${to} ELSE ${organizationFieldDefs.label} END`, updatedAt: new Date() })
+    .where(eq(organizationFieldDefs.id, id));
   return { ok: true, forms };
 }
 
