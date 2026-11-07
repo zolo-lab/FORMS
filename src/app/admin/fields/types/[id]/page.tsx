@@ -33,31 +33,32 @@ export default async function ListTypePage({ params, searchParams }: { params: P
       {saved === "field" && <p role="status" className="text-sm text-success">השדה נוצר בשדות המזהים ונוסף לסוג.</p>}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
 
-      <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">שדה חדש</h2>
-        <p className="text-sm text-muted-foreground">שדה שאין עדיין בשדות המזהים: הוא נוצר שם (וזמין לכל סוג רשימה) ונוסף לסוג הזה.</p>
-        <form action={addNewFieldToTypeAction} className="grid gap-3 sm:grid-cols-[2fr_1fr_1.5fr_auto] sm:items-end">
-          <input type="hidden" name="typeId" value={type.id} />
-          <div className="space-y-1">
-            <Label htmlFor="tf-label">שם השדה</Label>
-            <Input id="tf-label" name="label" required maxLength={80} placeholder="למשל: סוג הלינה" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="tf-type">סוג</Label>
-            <Select id="tf-type" name="type" defaultValue="short_text">
-              {DICTIONARY_TYPES.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="tf-key">שם פנימי (לא חובה)</Label>
-            <Input id="tf-key" name="key" maxLength={40} dir="ltr" placeholder="ייווצר אוטומטית" pattern="[a-zA-Z][a-zA-Z0-9_]*" className="font-mono text-sm" />
-          </div>
-          <SubmitButton variant="outline">יצירה והוספה</SubmitButton>
-        </form>
-      </Card>
 
       {/* Remounted after every save (and after a new field), so it starts from what is stored. */}
-      <TypeEditor key={`${type.updatedAt.toISOString()}#${general.length}`} typeId={type.id} name={type.name} fields={type.fields} displayKey={type.displayKey} all={general} />
+      <TypeEditor key={`${type.updatedAt.toISOString()}#${general.length}`} typeId={type.id} name={type.name} fields={type.fields} displayKey={type.displayKey} all={general}>
+        <Card className="space-y-3 p-4">
+          <h2 className="font-semibold">שדה חדש</h2>
+          <p className="text-sm text-muted-foreground">שדה שאין עדיין בשדות המזהים: הוא נוצר שם (וזמין לכל סוג רשימה) ונוסף לסוג הזה.</p>
+          <form action={addNewFieldToTypeAction} className="grid gap-3 sm:grid-cols-[2fr_1fr_1.5fr_auto] sm:items-end">
+            <input type="hidden" name="typeId" value={type.id} />
+            <div className="space-y-1">
+              <Label htmlFor="tf-label">שם השדה</Label>
+              <Input id="tf-label" name="label" required maxLength={80} placeholder="למשל: סוג הלינה" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="tf-type">סוג</Label>
+              <Select id="tf-type" name="type" defaultValue="short_text">
+                {DICTIONARY_TYPES.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="tf-key">שם פנימי (לא חובה)</Label>
+              <Input id="tf-key" name="key" maxLength={40} dir="ltr" placeholder="ייווצר אוטומטית" pattern="[a-zA-Z][a-zA-Z0-9_]*" className="font-mono text-sm" />
+            </div>
+            <SubmitButton variant="outline">יצירה והוספה</SubmitButton>
+          </form>
+        </Card>
+      </TypeEditor>
 
       <section aria-labelledby="del-type" className="space-y-2 border-t py-6">
         <h2 id="del-type" className="font-semibold">מחיקת סוג הרשימה</h2>

@@ -16,7 +16,22 @@ export type FieldOption = { key: string; label: string; type: DictionaryType };
  * The fields of one list type, in order, picked from the general identifying fields, and the one that names a
  * record. One save button; nothing is written before it is pressed.
  */
-export function TypeEditor({ typeId, name: initialName, fields: initialFields, displayKey: initialDisplay, all }: { typeId: string; name: string; fields: string[]; displayKey: string | null; all: FieldOption[] }) {
+export function TypeEditor({
+  typeId,
+  name: initialName,
+  fields: initialFields,
+  displayKey: initialDisplay,
+  all,
+  children,
+}: {
+  typeId: string;
+  name: string;
+  fields: string[];
+  displayKey: string | null;
+  all: FieldOption[];
+  /** The "new field" form: disabled while there are unsaved changes, since adding a field reloads this editor. */
+  children?: React.ReactNode;
+}) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [fields, setFields] = useState<string[]>(initialFields);
@@ -61,6 +76,12 @@ export function TypeEditor({ typeId, name: initialName, fields: initialFields, d
 
   return (
     <div className="space-y-5">
+      {children && (
+        <div className="space-y-2">
+          <fieldset disabled={dirty} className="disabled:opacity-60">{children}</fieldset>
+          {dirty && <p className="text-sm text-muted-foreground">שמרו את השינויים לפני יצירת שדה חדש.</p>}
+        </div>
+      )}
       <div className="max-w-md space-y-1">
         <Label htmlFor="t-name">שם סוג הרשימה</Label>
         <Input id="t-name" value={name} onChange={(e) => { setName(e.target.value); touch(); }} maxLength={80} />
