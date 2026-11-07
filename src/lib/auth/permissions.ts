@@ -62,9 +62,11 @@ export interface UserGrants {
   trackOnly: boolean;
   /** May tick the handling steps after signing ("עודכן בשכר"). */
   followUp: boolean;
+  /** May manage the identifying fields and the data lists built on them (suppliers, work places…). */
+  manageFields: boolean;
 }
 
-export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "export", "followUp", "trackOnly"] as const satisfies readonly (keyof UserGrants)[];
+export const GRANT_KEYS = ["viewAll", "openAll", "cancel", "manageForms", "export", "followUp", "manageFields", "trackOnly"] as const satisfies readonly (keyof UserGrants)[];
 
 export const GRANT_LABELS: Record<keyof UserGrants, string> = {
   viewAll: "רואה את כל הבקשות (לא רק את שלו)",
@@ -73,13 +75,14 @@ export const GRANT_LABELS: Record<keyof UserGrants, string> = {
   manageForms: "יכול לבנות טפסים",
   export: "רשאי לייצא דוחות (Excel / CSV / PDF חתומים)",
   followUp: "מסמן טיפול אחרי חתימה (למשל \"עודכן בשכר\")",
+  manageFields: "מנהל שדות מזהים ומאגרי נתונים (ספקים, מקומות עבודה…)",
   trackOnly: "מעקב בלבד – רואה מי ממתין ושולח תזכורת, בלי גישה לתוכן הטפסים",
 };
 
 /** Stored JSON (possibly partial or junk) to a full set of booleans. */
 export function normalizeGrants(raw: unknown): UserGrants {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  return { viewAll: o.viewAll === true, openAll: o.openAll === true, cancel: o.cancel === true, manageForms: o.manageForms === true, export: o.export === true, followUp: o.followUp === true, trackOnly: o.trackOnly === true };
+  return { viewAll: o.viewAll === true, openAll: o.openAll === true, cancel: o.cancel === true, manageForms: o.manageForms === true, export: o.export === true, followUp: o.followUp === true, manageFields: o.manageFields === true, trackOnly: o.trackOnly === true };
 }
 
 export interface SessionUser {

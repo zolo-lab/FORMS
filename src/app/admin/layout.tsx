@@ -4,7 +4,7 @@ import { AdminNav } from "@/components/admin/AdminNav";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { authDisabled } from "@/lib/auth/open-mode";
 import { devLoginEnabled } from "@/lib/auth/dev-login";
-import { isAdmin, isTrackOnly } from "@/lib/auth/permissions";
+import { hasGrant, isAdmin, isTrackOnly } from "@/lib/auth/permissions";
 import { currentUser, viewerFormAccess } from "@/server/users-store";
 import { queryRequests } from "@/server/dashboard-store";
 import { cookies } from "next/headers";
@@ -34,6 +34,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: "/admin/campaigns", label: "קמפיינים" },
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
             ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
+            // The identifying fields (and the lists built on them): whoever has the grant.
+            ...(hasGrant(user, "manageFields") ? [{ href: "/admin/fields", label: "שדות מזהים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={[

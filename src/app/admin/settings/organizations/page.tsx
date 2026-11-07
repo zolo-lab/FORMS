@@ -3,7 +3,8 @@ import { Trash2, X } from "lucide-react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { AutoSaveForm } from "@/components/ui/auto-save-form";
 import { PageHeader } from "@/components/ui/page-header";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
+import { DICTIONARY_TYPE_LABELS, ORG_FIELD_TYPES } from "@/lib/fields/types";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { buttonVariants } from "@/components/ui/button";
@@ -19,8 +20,10 @@ export const dynamic = "force-dynamic";
 const ERRORS: Record<string, string> = {
   ...ORG_ERRORS,
   color: "צבע לא תקין (פורמט #RRGGBB)",
-  orgFieldKey: "שם השדה חייב להיות באנגלית: אות ראשונה, ואחריה אותיות, ספרות, מקף או קו תחתון (עד 40 תווים)",
-  orgFieldExists: "כבר קיים שדה בשם הזה",
+  orgFieldKey: "השם הפנימי חייב להיות באנגלית: אות ראשונה, ואחריה אותיות, ספרות, מקף או קו תחתון (עד 40 תווים)",
+  orgFieldExists: "השם הפנימי הזה כבר תפוס (בעמותות או בשדות המזהים)",
+  orgFieldLabel: "צריך שם לשדה",
+  orgFieldType: "שדה עמותה מקבל רק סוג של שורה אחת",
   email: "כתובת שולח לא תקינה",
   logo: "הלוגו חייב להיות PNG / JPG / WEBP עד 1MB",
 };
@@ -161,8 +164,8 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <h3 className="font-semibold">שדות מזהים של העמותה</h3>
                 <p className="text-sm text-muted-foreground">
                   ערכים קבועים של העמותה (תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
-                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו. אפשר לשנות אותו – כל הטפסים שמצביעים
-                  עליו והערכים של כל העמותות יתעדכנו יחד איתו.
+                  כותבים שם בעברית; השם הפנימי (באנגלית, מה שהטפסים מצביעים עליו) נוצר ממנו אוטומטית, ואפשר לשנות
+                  אותו – כל הטפסים והערכים יתעדכנו יחד איתו. כל השדות המזהים מרוכזים גם ב<Link href="/admin/fields" className="underline">שדות מזהים</Link>.
                   בבונה הטפסים בוחרים אותו תחת &quot;מילוי אוטומטי&quot;: הוא מתמלא לפי העמותה שממנה יצאה הבקשה ומוצג לקריאה בלבד.
                 </p>
               </div>
@@ -170,11 +173,12 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               <form action={saveOrgFieldsAction} id={`orgfields-${o.id}`} className="space-y-3">
                 <input type="hidden" name="id" value={o.id} />
                 {orgFields.length > 0 && (
-                  <div className="overflow-hidden rounded-lg border">
+                  <div className="overflow-x-auto rounded-lg border">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
                           <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה</th>
+                          <th scope="col" className="px-3 py-2 text-start font-medium">שם פנימי</th>
                           <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
                           <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
                         </tr>
@@ -182,6 +186,10 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <tbody>
                         {orgFields.map((f) => (
                           <tr key={f.id} className="border-t">
+                            <td className="px-3 py-1.5">
+                              <input type="hidden" name={`wasLabel.${f.id}`} value={f.label} />
+                              <Input name={`label.${f.id}`} defaultValue={f.label} required maxLength={80} aria-label={`שם השדה – ${f.label}`} className="h-9 min-w-40" />
+                            </td>
                             <td className="px-3 py-1.5">
                               {/* `was.` is what the panel was opened with: only a name the admin changed is renamed. */}
                               <input type="hidden" name={`was.${f.id}`} value={f.key} />
@@ -193,8 +201,8 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                                 pattern="[a-zA-Z][a-zA-Z0-9_-]*"
                                 title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
                                 dir="ltr"
-                                aria-label={`שם השדה – ${f.key}`}
-                                className="h-9 font-mono text-xs"
+                                aria-label={`שם פנימי – ${f.label}`}
+                                className="h-9 min-w-32 font-mono text-xs"
                               />
                             </td>
                             <td className="px-3 py-1.5">
@@ -235,17 +243,23 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
 
               <form action={createOrgFieldAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="org" value={o.id} />
-                <Field label="שדה חדש באנגלית (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
+                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
+                  <Input id={`new-orgfield-${o.id}`} name="label" required maxLength={80} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
+                </Field>
+                <Field label="סוג" htmlFor={`new-orgfield-type-${o.id}`}>
+                  <Select id={`new-orgfield-type-${o.id}`} name="type" defaultValue="short_text" className="min-w-32">
+                    {ORG_FIELD_TYPES.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
+                  </Select>
+                </Field>
+                <Field label="שם פנימי (לא חובה – ייווצר אוטומטית)" htmlFor={`new-orgfield-key-${o.id}`}>
                   <Input
-                    id={`new-orgfield-${o.id}`}
+                    id={`new-orgfield-key-${o.id}`}
                     name="key"
-                    required
                     maxLength={40}
                     pattern="[a-zA-Z][a-zA-Z0-9_-]*"
                     title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
-                    placeholder="deductionsFile"
                     dir="ltr"
-                    className="min-w-56 font-mono"
+                    className="min-w-40 font-mono text-xs"
                   />
                 </Field>
                 <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספת שדה</SubmitButton>
