@@ -108,7 +108,7 @@ export function OrgRoutes({
         </div>
         {general ? (
           <>
-            <p className="text-sm">אפשר לתת ל{org.label} תוקף קישור משלה לכל שלב, בלי מסלול נפרד: לחצו על &quot;תוקף הקישור&quot; בשורה.</p>
+            <p className="text-sm">אפשר לתת ל{org.label} תוקף קישור משלה לכל שלב, בלי מסלול נפרד: לחצו על שם השלב או על כפתור העריכה בשורה.</p>
             <StepsEditor
               drafts={general.drafts}
               onChange={general.onChange}

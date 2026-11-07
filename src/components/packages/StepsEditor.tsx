@@ -176,8 +176,10 @@ export function StepsEditor({
                 </span>
                 <span role="cell" className={cn("flex size-8 items-center justify-center rounded-full text-sm font-semibold", isSender ? "bg-primary text-primary-foreground" : "bg-secondary")}>{n}</span>
                 <span role="cell" className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{isSender ? "השולח" : stepTarget(s, ctx)}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{SHORT_WHO[s.who]}</span>
+                  <button type="button" disabled={isSender} onClick={() => setEditKey(s.key)} className="block min-h-10 w-full rounded text-start hover:underline disabled:cursor-default disabled:no-underline">
+                    <span className="block truncate text-sm font-medium">{isSender ? "השולח" : stepTarget(s, ctx)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{SHORT_WHO[s.who]}</span>
+                  </button>
                 </span>
                 <span role="cell" className="text-sm">
                   {isSender ? "השדות שלו ושליחה" : s.who === "employee" ? "השדות שלו וחתימה" : count === undefined ? "—" : count === 0 ? "רק אישור" : `${count} שדות`}

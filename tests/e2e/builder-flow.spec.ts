@@ -97,6 +97,10 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
   await expect(page.getByRole("row", { name: "שלב 3", exact: true })).toContainText("payroll@example.test");
+  // An existing step opens from its name, without scrolling the table sideways.
+  await page.getByRole("row", { name: "שלב 3", exact: true }).getByRole("button", { name: /payroll@example\.test/ }).click();
+  await expect(page.getByRole("dialog").getByLabel("מייל")).toHaveValue("payroll@example.test");
+  await page.getByRole("dialog").getByRole("button", { name: "סיום" }).click();
 
   // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
