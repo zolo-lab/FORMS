@@ -34,13 +34,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: "/admin/campaigns", label: "קמפיינים" },
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
             ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
+            // The identifying fields (and the lists built on them): whoever has the grant.
+            ...(hasGrant(user, "manageFields") ? [{ href: "/admin/fields", label: "שדות מזהים" }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={[
             // Everyone has their own notification settings, admin or not.
             { title: "אישי", items: [{ href: "/admin/notifications", label: "ההתראות שלי" }] },
-            // The identifying fields (and, later, the lists built on them): whoever has the grant.
-            ...(hasGrant(user, "manageFields") ? [{ title: "נתונים", items: [{ href: "/admin/fields", label: "שדות מזהים" }] }] : []),
             ...(admin ? [
             { title: "ארגון", items: [
               { href: "/admin/settings/organizations", label: "עמותות ועסקים" },

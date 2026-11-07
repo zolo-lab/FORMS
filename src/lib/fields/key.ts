@@ -62,6 +62,7 @@ const LETTERS: Record<string, string> = {
 /** Quotes, geresh and gershayim dropped, punctuation to spaces, spaces collapsed. */
 const normalize = (label: string) =>
   label
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "")
     .replace(/["'״׳`]/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
@@ -83,7 +84,8 @@ function transliterate(text: string): string {
 export function keyFromLabel(label: string): string {
   const n = normalize(label);
   if (!n) return "field";
-  const known = KNOWN[n];
+  // "שם הספק" is "שם ספק": the definite article does not change the name.
+  const known = KNOWN[n] ?? KNOWN[n.split(" ").map((w) => (w.length > 2 && w.startsWith("ה") ? w.slice(1) : w)).join(" ")];
   if (known) return known;
   let key = transliterate(n);
   if (!key) return "field";

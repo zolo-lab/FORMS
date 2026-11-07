@@ -43,3 +43,10 @@ describe("normalizeFieldKey", () => {
     expect(normalizeFieldKey("")).toBeNull();
   });
 });
+
+describe("keyFromLabel edge cases", () => {
+  it("ignores the definite article for known names and invisible direction marks", () => {
+    expect(keyFromLabel("שם הספק")).toBe("supplierName");
+    expect(keyFromLabel("ש‏ם ספק")).toBe("supplierName");
+  });
+});

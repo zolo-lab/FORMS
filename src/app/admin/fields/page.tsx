@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card, Badge } from "@/components/ui/card";
+import { Badge } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DICTIONARY_TYPES, DICTIONARY_TYPE_LABELS, ORG_FIELD_TYPES } from "@/lib/fields/types";
 import { listDictionary } from "@/server/field-dictionary-store";
-import { createFieldAction, deleteFieldAction, updateFieldAction } from "./actions";
+import { deleteFieldAction, updateFieldAction } from "./actions";
+import { NewFieldDialog } from "./NewFieldDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -42,39 +43,12 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
       {saved === "new" && <p role="status" className="text-sm text-success">השדה נוסף{key ? <> בשם הפנימי <bdi dir="ltr" className="font-mono">{key}</bdi></> : null}.</p>}
       {saved === "deleted" && <p role="status" className="text-sm text-success">השדה נמחק.</p>}
 
-      <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">שדה חדש</h2>
-        <form action={createFieldAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1.5fr_auto] lg:items-end">
-          <div className="space-y-1">
-            <Label htmlFor="nf-label">שם השדה</Label>
-            <Input id="nf-label" name="label" required maxLength={80} placeholder="למשל: שם ספק" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="nf-type">סוג</Label>
-            <Select id="nf-type" name="type" defaultValue="short_text">
-              {DICTIONARY_TYPES.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="nf-cat">שייך ל</Label>
-            <Select id="nf-cat" name="category" defaultValue="general">
-              <option value="general">כללי</option>
-              <option value="org">עמותה (ערך לכל עמותה)</option>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="nf-key">שם פנימי (לא חובה)</Label>
-            <Input id="nf-key" name="key" maxLength={40} dir="ltr" placeholder="ייווצר אוטומטית" pattern="[a-zA-Z][a-zA-Z0-9_]*" title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות או קו תחתון" className="font-mono text-sm" />
-          </div>
-          <SubmitButton>הוספה</SubmitButton>
-        </form>
-        <p className="text-xs text-muted-foreground">שדה עמותה מקבל רק סוגים של שורה אחת (טקסט, מספר, ת״ז, טלפון, מייל, תאריך…). את הערך של כל עמותה ממלאים במסך העמותות.</p>
-      </Card>
 
       <section aria-labelledby="list-title" className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 id="list-title" className="font-semibold">כל השדות ({all.length})</h2>
-          <form className="flex items-end gap-2" role="search">
+        <h2 id="list-title" className="font-semibold">כל השדות ({all.length})</h2>
+        <div className="flex flex-wrap items-center justify-start gap-2">
+          <NewFieldDialog initialOpen={!!error} error={error ? (ERRORS[error] ?? "שגיאה") : null} />
+          <form className="flex items-center gap-2" role="search">
             <Label htmlFor="fq" className="sr-only">חיפוש</Label>
             <Input id="fq" name="q" defaultValue={q ?? ""} placeholder="חיפוש בשם" className="w-56" />
             <SubmitButton variant="outline">חיפוש</SubmitButton>
