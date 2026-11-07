@@ -298,6 +298,10 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
    * (as with a pasted box). "במקום פנוי" keeps the old way, and is how the keyboard adds one. Esc cancels.
    */
   const [placing, setPlacing] = useState<PaletteEntry | null>(null);
+  // For a tap on a touch screen, decided when the finger lifts: what is chosen by then, and the pointer waiting.
+  const chosenNow = useRef<{ placing: PaletteEntry | null; boxCopy: PdfStamp | null }>({ placing: null, boxCopy: null });
+  const pendingTap = useRef<number | null>(null);
+  useEffect(() => { chosenNow.current = { placing, boxCopy }; });
   /** The point under the pointer on page `pi`, as the top corner of a box of the entry's size (like a drop). */
   function drawAtPointer(entry: PaletteEntry, pi: number, clientX: number, clientY: number) {
     const pg = pages[pi]!;
@@ -325,14 +329,25 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
       }
     };
     if (e.pointerType === "mouse") { put(e.clientX, e.clientY); return true; }
-    // A finger or a pen may be starting to scroll: place only on a tap (lifted without moving), never on a swipe.
-    const x0 = e.clientX, y0 = e.clientY;
-    const up = (ev: PointerEvent) => {
+    // A finger or a pen may be starting to scroll: place only on a tap (that same pointer lifted without moving),
+    // never on a swipe. One pending tap at a time (a second finger does nothing), and it is dropped when the chosen
+    // type or copy is cancelled meanwhile (Esc).
+    if (pendingTap.current !== null) return true;
+    const id = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+    const chosen = { placing, boxCopy };
+    const done = () => {
+      pendingTap.current = null;
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cancel);
-      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) put(ev.clientX, ev.clientY);
     };
-    const cancel = () => { window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", cancel); };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      done();
+      const still = chosenNow.current.placing === chosen.placing && chosenNow.current.boxCopy === chosen.boxCopy;
+      if (still && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) put(ev.clientX, ev.clientY);
+    };
+    const cancel = (ev: PointerEvent) => { if (ev.pointerId === id) done(); };
+    pendingTap.current = id;
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", cancel);
     return true;
