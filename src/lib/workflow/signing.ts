@@ -1,16 +1,20 @@
 /** Pure helpers for the public signing page. */
 import type { RequestStatus, StepStatus } from "./types";
 
-export type TokenState = "ok" | "invalid" | "revoked" | "expired" | "closed";
+export type TokenState = "ok" | "invalid" | "revoked" | "released" | "expired" | "closed";
 
 export function tokenState(input: {
   token: { revokedAt: Date | null; expiresAt: Date | null } | null;
   stepStatus?: StepStatus;
   requestStatus?: RequestStatus;
+  /** A group_any step closed because another member of the group signed (not skipped by an admin). */
+  releasedBySibling?: boolean;
   now: Date;
 }): TokenState {
   const { token, stepStatus, requestStatus, now } = input;
   if (!token) return "invalid";
+  // Another member of the group already signed: say so, rather than "the link was replaced".
+  if (input.releasedBySibling && stepStatus === "skipped") return "released";
   if (token.revokedAt) return "revoked";
   if ((token.expiresAt && token.expiresAt < now) || stepStatus === "expired" || requestStatus === "expired") return "expired";
   if (stepStatus !== "active" && stepStatus !== "in_progress") return "closed";

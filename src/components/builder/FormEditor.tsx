@@ -86,6 +86,8 @@ export interface FormEditorProps {
 }
 
 /** A draft as the server takes it (without the editor's own keys). */
+/** The form's date fields, for a step's "the Nth of the month after…" link expiry. */
+const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
@@ -678,6 +680,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   contacts={flow.contacts}
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}
+                  dateFields={dateFieldsOf(def)}
                   heldRoles={[...new Set([...answerFields(def).map(fieldRole), ...stepWork.map((d) => d.role)])]}
                   save={(org, drafts) => flow.saveOrgRoute!(flow.packageId, org, drafts)}
                   onRoutesChange={setOrgRoutes}
@@ -689,6 +692,8 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 contacts={flow.contacts}
                 groups={flow.groups}
                 emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
+                dateFields={dateFieldsOf(def)}
+                orgs={flow.orgs?.map((o) => ({ id: o.id, label: o.label }))}
                 dirty={stepsDirty}
                 state={stepState}
                 onSave={() => void saveSteps()}

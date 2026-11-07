@@ -35,9 +35,11 @@ export function stepTarget(s: NamedStep, ctx: StepNameContext = {}): string {
       const c = ctx.contacts?.find((x) => x.id === s.contactId);
       return c ? nameOf(c.label) : "משתמש (לא נבחר)";
     }
-    case "group_all": {
+    case "group_all":
+    case "group_any": {
       const g = ctx.groups?.find((x) => x.id === s.groupId);
-      return g ? `קבוצה: ${nameOf(g.label)}` : "קבוצה (לא נבחרה)";
+      const who = s.who === "group_any" ? "אחד מ" : "קבוצה: ";
+      return g ? `${who}${nameOf(g.label)}` : "קבוצה (לא נבחרה)";
     }
     case "email": return s.name?.trim() || s.email?.trim() || "מייל (לא הוזן)";
     case "from_field": {
@@ -145,7 +147,7 @@ export function draftProblems(
       if (first !== i) out.push(`העובד כבר מופיע בשלב ${first + 1}`);
     }
     if (d.who === "contact" && !d.contactId) out.push("בחרו משתמש");
-    if (d.who === "group_all" && !d.groupId) out.push("בחרו קבוצה");
+    if ((d.who === "group_all" || d.who === "group_any") && !d.groupId) out.push("בחרו קבוצה");
     if (d.who === "email") {
       if (!d.email?.trim()) out.push("הזינו מייל");
       else if (!EMAIL.test(d.email.trim())) out.push("המייל לא תקין");

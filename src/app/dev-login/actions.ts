@@ -1,4 +1,5 @@
 "use server";
+import { linkExpiryOf } from "@/lib/requests/expiry";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -53,7 +54,7 @@ export async function devSignAsAction(fd: FormData) {
   const waiting = row && ["active", "in_progress"].includes(row.step.status) && ["in_progress", "returned"].includes(row.request.status);
   if (!row || !waiting || !secret || !devSignAllows(row.step.assigneeEmail)) redirect("/dev-login?error=step");
   const { token, hash } = createToken();
-  await db.insert(schema.stepTokens).values({ stepId: row.step.id, tokenHash: hash, expiresAt: row.request.expiresAt });
+  await db.insert(schema.stepTokens).values({ stepId: row.step.id, tokenHash: hash, expiresAt: linkExpiryOf(row.step, row.request) });
   if (row.step.otpRequired) {
     (await cookies()).set(otpCookieName(row.step.id), otpCookieValue(secret, row.step.id, Date.now() + OTP_COOKIE_TTL_MS), { ...cookieOpts, maxAge: OTP_COOKIE_TTL_MS / 1000 });
   }

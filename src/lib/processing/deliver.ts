@@ -114,15 +114,13 @@ export function recipientsFor(refs: RecipientRef[], look: PeopleLookup): Recipie
 }
 
 /** One line naming where a delivery went, stored on the row so the request page needs no second lookup. */
-export function describeTarget(d: Destination, to: Recipient[]): string {
-  if (d.kind === "drive") return d.path || "תיקייה בדרייב";
-  if (d.kind === "webhook") return "webhook";
+export function describeTarget(_d: Destination, to: Recipient[]): string {
   return to.map((p) => (p.name && p.name !== p.email ? `${p.name} <${p.email}>` : p.email)).join(", ");
 }
 
 /** Why a destination has nothing to do, in Hebrew — recorded instead of a silent no-op. */
 export function skipReason(d: Destination, files: SendableFile[], to: Recipient[]): string | null {
   if (files.length === 0) return "אין קבצים לשלוח (החלק לא נוצר או שההעלאה חסרה)";
-  if (d.kind === "email" && to.length === 0) return "אין נמען תקין";
+  if (to.length === 0) return "אין נמען תקין";
   return null;
 }

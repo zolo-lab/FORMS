@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeExpiryRule, endOfDayIsrael, expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { describeExpiryRule, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -47,5 +47,59 @@ describe("normalizeExpiryRule / describe", () => {
   it("describes in Hebrew", () => {
     expect(describeExpiryRule({ kind: "dayOfNextMonth", day: 4, dateFieldId: "s" }, () => "תאריך תחילה")).toBe('ה-4 בחודש שאחרי "תאריך תחילה"');
     expect(describeExpiryRule({ kind: "none" })).toBe("ללא תפוגה");
+  });
+});
+
+describe("dayOfMonth: the Nth on or after the date (Make's Shivat Zion rule: the 20th)", () => {
+  const rule = { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" };
+  it("a start on or before the 20th expires on the 20th of the same month", () => {
+    expect(expiryFor(rule, { start: "2026-11-05" }, sent)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(rule, { start: "2026-11-20" }, sent)).toEqual(endOfDayIsrael(2026, 11, 20));
+  });
+  it("a start after the 20th expires on the 20th of the next month", () => {
+    expect(expiryFor(rule, { start: "2026-11-21" }, sent)).toEqual(endOfDayIsrael(2026, 12, 20));
+    expect(expiryFor(rule, { start: "21/12/2026" }, sent)).toEqual(endOfDayIsrael(2027, 1, 20));
+  });
+  it("without a date falls back to days after sending", () => {
+    expect(expiryFor({ ...rule, fallbackDays: 5 }, {}, sent)).toEqual(new Date(sent.getTime() + 5 * 86_400_000));
+  });
+  it("normalizes and describes", () => {
+    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20, dateFieldId: "start" })).toEqual(rule);
+    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20 })).toBeNull();
+    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('ה-20 בחודש לפי "תאריך תחילה" (אותו חודש עד ה-20, אחרת החודש הבא)');
+  });
+});
+
+describe("linkExpiryOf: a step's own deadline wins over the request's", () => {
+  const req = { expiresAt: new Date("2026-12-01T00:00:00Z") };
+  it("a step without its own rule uses the request's", () => {
+    expect(linkExpiryOf({ ownLinkExpiry: false, linkExpiresAt: null }, req)).toEqual(req.expiresAt);
+  });
+  it("a step with its own rule uses its own date, or none", () => {
+    const own = new Date("2026-11-20T21:59:00Z");
+    expect(linkExpiryOf({ ownLinkExpiry: true, linkExpiresAt: own }, req)).toEqual(own);
+    expect(linkExpiryOf({ ownLinkExpiry: true, linkExpiresAt: null }, req)).toBeNull();
+  });
+});
+
+describe("stepExpiryRule: the organization's exception wins", () => {
+  const step = { expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { "org-sz": { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
+  it("picks the exception for its organization, the step rule otherwise", () => {
+    expect(stepExpiryRule(step, "org-sz")).toEqual(step.expiryByOrg["org-sz"]);
+    expect(stepExpiryRule(step, "org-other")).toEqual(step.expiry);
+    expect(stepExpiryRule({}, "org-sz")).toBeNull();
+  });
+});
+
+describe("stepLinkDeadline: never dead on arrival", () => {
+  const rule = { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" };
+  it("keeps the rule's date when it is far enough", () => {
+    expect(stepLinkDeadline(rule, { start: "2026-10-15" }, sent)).toEqual(endOfDayIsrael(2026, 11, 7));
+  });
+  it("a start date long past still leaves the link open for a few days", () => {
+    expect(stepLinkDeadline(rule, { start: "2026-01-15" }, sent)).toEqual(new Date(sent.getTime() + MIN_STEP_LINK_DAYS * 86_400_000));
+  });
+  it("none stays none", () => {
+    expect(stepLinkDeadline({ kind: "none" }, {}, sent)).toBeNull();
   });
 });

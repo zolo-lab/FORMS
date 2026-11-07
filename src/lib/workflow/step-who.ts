@@ -1,3 +1,4 @@
+import { normalizeExpiryByOrg, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
 /**
  * The minimal step editor ("שלבי הטופס", like iForms): one "who" choice per step. Role, action and assignee kind
  * follow from it, so the admin never picks them separately.
@@ -5,14 +6,15 @@
 import type { AssigneeKind, StepActionKind, StepRole, WorkflowStep } from "./types";
 import { assigneeKindOf } from "./assignee";
 
-export const STEP_WHO = ["requester", "employee", "contact", "group_all", "email", "from_field"] as const;
+export const STEP_WHO = ["requester", "employee", "contact", "group_any", "group_all", "email", "from_field"] as const;
 export type StepWho = (typeof STEP_WHO)[number];
 
 export const STEP_WHO_LABELS: Record<StepWho, string> = {
   requester: "השולח (ממלא את הטופס ושולח)",
   employee: "העובד שהטופס עליו (פרטיו מוזנים בשליחה)",
   contact: "משתמש מוגדר",
-  group_all: "קבוצה (כולם במקביל)",
+  group_any: "קבוצה (אחד מהם חותם – הראשון שמסיים)",
+  group_all: "קבוצה (כולם חותמים במקביל)",
   email: "מייל קבוע (למשל גורם חיצוני)",
   from_field: "המייל שמולא בשדה של שלב קודם",
 };
@@ -56,7 +58,7 @@ export function stepWhoOf(step: Pick<WorkflowStep, "role" | "assigneeKind" | "as
   if (step.role === "employee") return "employee";
   const kind = assigneeKindOf(step);
   if (kind === "fixed") return "email";
-  return kind === "group_all" || kind === "from_field" ? kind : "contact";
+  return kind === "group_all" || kind === "group_any" || kind === "from_field" ? kind : "contact";
 }
 
 /** The hidden values the step form submits for a "who" choice (`role` only matters for a chosen person). */
@@ -77,6 +79,9 @@ export interface StepDraft {
   email?: string;
   name?: string;
   formOnly?: boolean;
+  /** The step's own link expiry, and per-organization exceptions. */
+  expiry?: ExpiryRule;
+  expiryByOrg?: Record<string, ExpiryRule>;
   /** Kept as they were (not edited in this screen). */
   dueHours?: number;
   otpRequired?: boolean;
@@ -95,6 +100,8 @@ export function draftOf(step: WorkflowStep): StepDraft {
     ...(who === "email" && step.assignee?.name && step.assignee.name !== step.assignee.email ? { name: step.assignee.name } : {}),
     ...(step.formOnly ? { formOnly: true } : {}),
     ...(step.dueHours ? { dueHours: step.dueHours } : {}),
+    ...(step.expiry ? { expiry: step.expiry } : {}),
+    ...(step.expiryByOrg && Object.keys(step.expiryByOrg).length ? { expiryByOrg: step.expiryByOrg } : {}),
     ...(step.otpRequired ? { otpRequired: true } : {}),
     ...(step.skipIf ? { skipIf: step.skipIf } : {}),
   };
@@ -111,11 +118,14 @@ export function stepFromDraft(d: StepDraft, index: number): WorkflowStep {
     action: f.action,
     ...(f.assigneeKind ? { assigneeKind: f.assigneeKind } : {}),
     ...(who === "contact" && d.contactId ? { contactId: d.contactId } : {}),
-    ...(who === "group_all" && d.groupId ? { groupId: d.groupId } : {}),
+    ...((who === "group_all" || who === "group_any") && d.groupId ? { groupId: d.groupId } : {}),
     ...(who === "from_field" && d.fieldId ? { assigneeFromFieldId: d.fieldId } : {}),
     ...(who === "email" ? { assignee: { name: d.name?.trim() || email, ...(email ? { email } : {}) }, otpRequired: true } : d.otpRequired ? { otpRequired: true } : {}),
     ...(d.formOnly && who !== "requester" ? { formOnly: true } : {}),
     ...(d.dueHours && Number.isInteger(d.dueHours) && d.dueHours > 0 ? { dueHours: d.dueHours } : {}),
+    // The sender opens the request: its link never needs its own expiry.
+    ...(who !== "requester" && normalizeExpiryRule(d.expiry) ? { expiry: normalizeExpiryRule(d.expiry)! } : {}),
+    ...(who !== "requester" && normalizeExpiryByOrg(d.expiryByOrg) ? { expiryByOrg: normalizeExpiryByOrg(d.expiryByOrg)! } : {}),
     ...(d.skipIf && typeof d.skipIf === "object" ? { skipIf: d.skipIf } : {}),
   };
 }
@@ -136,6 +146,8 @@ export function sanitizeDraft(x: unknown): StepDraft {
     name: s("name", 120),
     formOnly: o.formOnly === true,
     dueHours: typeof o.dueHours === "number" ? o.dueHours : undefined,
+    expiry: normalizeExpiryRule(o.expiry) ?? undefined,
+    expiryByOrg: normalizeExpiryByOrg(o.expiryByOrg),
     otpRequired: o.otpRequired === true,
     skipIf: o.skipIf && typeof o.skipIf === "object" ? (o.skipIf as StepDraft["skipIf"]) : undefined,
   };

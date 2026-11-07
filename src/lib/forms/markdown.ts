@@ -13,7 +13,8 @@ export type Inline =
 export type Block =
   | { t: "p"; c: Inline[] }
   | { t: "ul"; items: Inline[][] }
-  | { t: "ol"; items: Inline[][] };
+  /** `nums`: each item's own number as written ("1. … 4. … 5."), so a list is never renumbered. */
+  | { t: "ol"; items: Inline[][]; nums: number[] };
 
 const SAFE_URL = /^(https?:\/\/|mailto:|tel:)/i;
 
@@ -86,7 +87,7 @@ export function parseMarkdown(src: string): Block[] {
     if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) {
       blocks.push({ t: "ul", items: lines.map((l) => parseInline(l.replace(/^\s*[-*•]\s+/, ""))) });
     } else if (lines.every((l) => /^\s*\d+[.)]\s+/.test(l))) {
-      blocks.push({ t: "ol", items: lines.map((l) => parseInline(l.replace(/^\s*\d+[.)]\s+/, ""))) });
+      blocks.push({ t: "ol", items: lines.map((l) => parseInline(l.replace(/^\s*\d+[.)]\s+/, ""))), nums: lines.map((l) => Number(/^\s*(\d+)/.exec(l)![1])) });
     } else {
       blocks.push({ t: "p", c: parseInline(para) });
     }

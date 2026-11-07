@@ -58,7 +58,12 @@ export const notificationStatus = pgEnum("notification_status", ["queued", "sent
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  /** Drive folder this organization files into; empty = GOOGLE_DRIVE_ROOT_FOLDER_ID. Paths resolve below it. */
+  /**
+   * Dead since 5.11.2026, when Drive filing left "עיבוד טופס": nothing reads or writes it, and no
+   * organization ever held a value. Still declared on purpose — migrations run before the new build, so
+   * dropping it in the same deploy breaks the live deployment's organization reads (signing included)
+   * until the new one is promoted. Drop it in a deploy of its own.
+   */
   driveRootFolderId: text("drive_root_folder_id"),
   /** מספר עמותה, e.g. 580556306 */
   registrationNumber: text("registration_number").notNull().unique(),
@@ -480,6 +485,8 @@ export const signingSteps = pgTable(
     assigneePhone: text("assignee_phone"),
     assigneeFromFieldId: text("assignee_from_field_id"),
     skipIf: jsonb("skip_if").$type<Condition>(),
+    /** "One of the group" (group_any): the first member of this order to finish closes the others' steps. */
+    anyOf: boolean("any_of").notNull().default(false),
     status: stepStatus("status").notNull().default("pending"),
     channel: channel("channel").notNull().default("email"),
     otpRequired: boolean("otp_required").notNull().default(false),
@@ -494,6 +501,10 @@ export const signingSteps = pgTable(
     firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     dueAt: timestamp("due_at", { withTimezone: true }),
+    /** The step's own link deadline (from its route's `expiry`), set when it starts; used only when `ownLinkExpiry`. */
+    linkExpiresAt: timestamp("link_expires_at", { withTimezone: true }),
+    /** The step has its own expiry rule: `linkExpiresAt` (null = never) replaces the request's `expiresAt` for it. */
+    ownLinkExpiry: boolean("own_link_expiry").notNull().default(false),
     signerIp: text("signer_ip"),
     signerUserAgent: text("signer_user_agent"),
     ...timestamps,

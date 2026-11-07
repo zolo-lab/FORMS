@@ -208,6 +208,11 @@ export function cloneField(def: FormDefinition, fieldId: string): { definition: 
 export interface AddDetectedOptions {
   /** One form step per PDF page (only when the form has no fields yet). */
   stepPerPage?: boolean;
+  /**
+   * The document's own text (titles, paragraphs), added to the responsive form as headings and text blocks in reading
+   * order between the fields (only when the form has no fields yet). Shown in the form only, never drawn on the PDF.
+   */
+  texts?: { page: number; box: { x: number; y: number; width: number; height: number }; text: string; heading: boolean }[];
 }
 
 const YES_NO_VALUE: Record<string, string> = { [normalizeText("כן")]: "yes", [normalizeText("לא")]: "no" };
@@ -218,6 +223,13 @@ const YES_NO_VALUE: Record<string, string> = { [normalizeText("כן")]: "yes", [
  * (`insertFieldByPosition`), so a form with nothing in it comes out in the PDF's reading order. With `stepPerPage`
  * and an empty form, the fields are split into one step per PDF page.
  */
+/** Headings and text blocks taken from the PDF's own text by `addDetectedFields` (`texts`). */
+export const isDocumentText = (id: string) => /^pdf_(?:text|heading)_\d+$/.test(id);
+
+function withoutDocumentText(def: FormDefinition): FormDefinition {
+  return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.filter((f) => !isDocumentText(f.id)) })) };
+}
+
 export function addDetectedFields(
   def: FormDefinition,
   detected: DetectedField[],
@@ -225,8 +237,10 @@ export function addDetectedFields(
   newId: () => string,
   opts: AddDetectedOptions = {},
 ): { definition: FormDefinition; stamps: PdfStamp[] } {
-  const wasEmpty = allFields(def).length === 0;
-  let definition = def;
+  // "Empty": nothing to fill yet. Text taken from a document earlier (a run that found no fields) does not count, and
+  // is replaced by this document's text below rather than kept twice.
+  const wasEmpty = allFields(def).every((f) => isDocumentText(f.id));
+  let definition = opts.texts?.length && wasEmpty ? withoutDocumentText(def) : def;
   const all = [...existing];
   const added: PdfStamp[] = [];
   const pageOf = new Map<string, number>();
@@ -274,6 +288,17 @@ export function addDetectedFields(
     all.push(...stamps);
     added.push(...stamps);
     pageOf.set(fieldId, d.page);
+  }
+  if (wasEmpty && opts.texts?.length) {
+    for (const t of [...opts.texts].sort((a, b) => readingOrder({ page: a.page, ...a.box }, { page: b.page, ...b.box }))) {
+      const id = uniqueFieldId(definition, t.heading ? "pdf_heading_" : "pdf_text_");
+      const field: FormField = { id, type: t.heading ? "heading" : "info_text", label: t.text };
+      const at = { page: t.page, ...t.box };
+      definition = insertFieldByPosition(definition, field, at, all);
+      // Only to place the next blocks and fields around it; not a stamp (nothing is drawn on the PDF).
+      all.push({ ...at, fieldId: id } as PdfStamp);
+      pageOf.set(id, t.page);
+    }
   }
   if (wasEmpty && opts.stepPerPage && pageOf.size > 0) {
     const fields = definition.pages.flatMap((p) => p.fields);

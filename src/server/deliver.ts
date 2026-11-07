@@ -1,6 +1,6 @@
 /**
- * The engine behind "עיבוד טופס": once a request is finished and its documents (and parts) exist, every
- * destination the form defines is carried out and recorded in `deliveries`.
+ * The engine behind "עיבוד טופס": once a request is finished and its documents exist, every destination the
+ * form defines — a mail carrying the pieces it was told to carry — is carried out and recorded in `deliveries`.
  *
  * Two rules it keeps:
  *  - A destination that fails never fails the request. The signed documents are already stored; a delivery is
@@ -16,8 +16,6 @@ import type { CutPart, Destination } from "@/lib/processing/types";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Recipient } from "@/lib/requests/recipients";
 import { triggersFor } from "./mail-triggers";
-import { driveProblem, uploadToFolders } from "./drive";
-import { resolveFileName, resolvePath, type PathContext } from "@/lib/processing/path";
 import { insertNotifications } from "./notifications";
 
 const { deliveries, events, packageDocuments, packageTemplates, formTemplateVersions, formTemplates, requests, signingSteps, organizations, users } = schema;
@@ -124,10 +122,10 @@ async function record(row: typeof deliveries.$inferInsert): Promise<void> {
 /** Sends one destination. Never throws: the outcome is the row it returns. */
 async function runDestination(
   d: Destination,
-  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string; path: PathContext; driveRootFolderId: string | null },
+  opts: { requestId: string; organizationId: string; round: number; files: RequestFiles; look: PeopleLookup; subject: string; formName: string },
 ): Promise<void> {
   const picked = filesForDestination(d, opts.files);
-  const to = d.kind === "email" ? recipientsFor(d.to, opts.look) : [];
+  const to = recipientsFor(d.to, opts.look);
   const target = describeTarget(d, to);
   const base = { requestId: opts.requestId, destinationId: d.id, kind: d.kind, target, round: opts.round, documentIds: picked.map((f) => f.documentId).filter((x): x is string => !!x) };
 
@@ -138,16 +136,8 @@ async function runDestination(
   }
 
   try {
-    let url: string | null = null;
-    if (d.kind === "email") await mailDestination(d, picked, to, opts);
-    else if (d.kind === "drive") url = await driveDestination(d, picked, opts);
-    // Webhook destinations arrive with their own step of the build; until then they are recorded as not
-    // attempted rather than silently dropped.
-    else {
-      await record({ ...base, status: "failed", error: "יעד מסוג זה עדיין לא נתמך", attempts: 1 });
-      return;
-    }
-    await record({ ...base, status: "done", attempts: 1, url });
+    await mailDestination(d, picked, to, opts);
+    await record({ ...base, status: "done", attempts: 1 });
     await db.insert(events).values({ requestId: opts.requestId, actorType: "system", type: "delivery_done", payload: { destinationId: d.id, kind: d.kind, target, files: picked.length } });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -157,10 +147,6 @@ async function runDestination(
   }
 }
 
-/**
- * Files every chosen file into Drive, under the destination's path (or a folder picked in the browser).
- * Returns the link of the last file, which is what the request page shows.
- */
 /**
  * The bytes a destination sends. A part is cut here, out of the stored signed document — it is never a
  * document of the request, only a file on its way out. Cutting is deterministic, so a retry sends the
@@ -173,33 +159,6 @@ async function bytesOf(f: SendableFile): Promise<{ bytes: Uint8Array; name: stri
   if (!f.cut) return { bytes: stored.bytes, name: f.name };
   const { cutPages } = await import("@/lib/pdf/cut");
   return { bytes: await cutPages(stored.bytes, f.cut.pages, f.cut.sourcePages), name: f.name };
-}
-
-async function driveDestination(
-  d: Destination & { kind: "drive" },
-  picked: SendableFile[],
-  opts: { requestId: string; path: PathContext; driveRootFolderId: string | null },
-): Promise<string | null> {
-  const problem = driveProblem();
-  if (problem) throw new Error(`ארכיון Drive כבוי: ${problem}`);
-  let last: string | null = null;
-  for (const f of picked) {
-    const { bytes } = await bytesOf(f);
-    // `{סוג}` follows the part being filed, so one destination can carry several parts into one tree.
-    const ctx: PathContext = { ...opts.path, type: opts.path.type ?? f.name.replace(/\.pdf$/i, "") };
-    const { segments, unknown } = resolvePath(d.path ?? "", ctx);
-    if (unknown.length) throw new Error(`משתנה לא מוכר בנתיב: ${unknown.join(", ")}`);
-    const up = await uploadToFolders({
-      folders: segments,
-      fileName: resolveFileName(d.fileName, ctx),
-      bytes,
-      // A folder picked in the browser wins over the path; otherwise the organization's root, then the global one.
-      rootFolderId: d.folderId ?? opts.driveRootFolderId,
-    });
-    if (!up) throw new Error("ארכיון Drive לא מוגדר");
-    last = up.driveUrl;
-  }
-  return last;
 }
 
 const PROCESSING_KEY = "processing_docs";
@@ -266,25 +225,14 @@ export async function runProcessing(requestId: string, opts: { only?: string[] }
   const { collectedAnswers } = await import("./requests-store");
   const answers = await collectedAnswers(requestId);
   const [files, look] = await Promise.all([requestFiles(requestId, answers, processing.parts), peopleFor(requestId, answers)]);
-  const [org] = await db.select({ name: organizations.name, driveRootFolderId: organizations.driveRootFolderId }).from(organizations).where(eq(organizations.id, req.organizationId));
-  const steps = await db.select({ completedAt: signingSteps.completedAt }).from(signingSteps).where(eq(signingSteps.requestId, requestId));
-  const times = steps.map((s) => s.completedAt?.getTime() ?? 0).filter((t) => t > 0);
-  const path: PathContext = {
-    organization: org?.name,
-    form: pkg?.name,
-    subject: req.subjectName,
-    idNumber: req.subjectIdNumber ?? undefined,
-    signedAt: times.length ? new Date(Math.max(...times)) : new Date(),
-    requestId,
-    answers: answers as Record<string, unknown>,
-  };
+  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.organizationId));
 
   let run = 0;
   for (const d of wanted) {
     if (settled.has(d.id) && !opts.only) continue;
     // A retry replaces the earlier attempt of this round rather than piling rows up.
     if (opts.only) await db.delete(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.destinationId, d.id), eq(deliveries.round, round)));
-    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "", path, driveRootFolderId: org?.driveRootFolderId ?? null });
+    await runDestination(d, { requestId, organizationId: req.organizationId, round, files, look, subject: req.subjectName, formName: pkg?.name ?? org?.name ?? "" });
     run++;
   }
   const after = await db.select({ status: deliveries.status }).from(deliveries).where(and(eq(deliveries.requestId, requestId), eq(deliveries.round, round)));

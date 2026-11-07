@@ -148,6 +148,8 @@ export function SigningClient({ token, definition, pipeDefinition, initialAnswer
     const res = await fetch(`/api/s/${token}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: cleaned }) });
     if (res.ok) { setDone((await res.json()) as { message?: string; waitingFor: string[]; completed: boolean }); return; }
     if (res.status === 422) { setErrors(((await res.json()) as { errors: FieldErrors }).errors); return; }
+    const code = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+    if (code === "released") { setProblem("חבר אחר בצוות כבר חתם על הטופס הזה בזמן שמילאתם אותו, ואין צורך לשלוח. תודה!"); return; }
     setProblem("לא ניתן היה לשלוח. ייתכן שהקישור כבר אינו פעיל – רעננו את הדף.");
   }
 

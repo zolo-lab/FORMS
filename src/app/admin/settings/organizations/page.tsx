@@ -59,7 +59,6 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       </div>
       {errorText && !edit && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
       {saved === "bulk" && <p role="status" className="text-sm text-success">נשמר.</p>}
-      {saved === "orgfields" && <p role="status" className="text-sm text-success">שדות העמותה נשמרו.</p>}
 
       <OrgsTable rows={rows} editing={edit} />
 
@@ -78,7 +77,20 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
         const o = editing;
         const mine = projects.filter((p) => p.organizationId === o.id);
         return (
-          <Panel title={o.name} subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined} note="השינויים נשמרים אוטומטית" closeHref={PATH}>
+          <Panel
+            title={o.name}
+            subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined}
+            note="רוב השינויים נשמרים אוטומטית; שדות העמותה נשמרים בכפתור"
+            closeHref={PATH}
+            footer={
+              <>
+                {saved === "orgfields" && <span role="status" className="self-center text-sm text-success">נשמר.</span>}
+                <Link href={PATH} scroll={false} className={buttonVariants({ variant: "ghost" })}>סגירה</Link>
+                {/* Submits the organization-fields form above, which is the only part of the panel that waits for it. */}
+                <SubmitButton form={`orgfields-${o.id}`}>שמירה</SubmitButton>
+              </>
+            }
+          >
             {errorText && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
 
             <section aria-labelledby="sec-details" className="space-y-3">
@@ -149,7 +161,8 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <h3 className="font-semibold">שדות מזהים של העמותה</h3>
                 <p className="text-sm text-muted-foreground">
                   ערכים קבועים של העמותה (תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
-                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו, ולכן אי אפשר לשנות אותו אחרי היצירה.
+                  שם השדה הוא באנגלית והוא גם המזהה שהטפסים מצביעים עליו. אפשר לשנות אותו – כל הטפסים שמצביעים
+                  עליו והערכים של כל העמותות יתעדכנו יחד איתו.
                   בבונה הטפסים בוחרים אותו תחת &quot;מילוי אוטומטי&quot;: הוא מתמלא לפי העמותה שממנה יצאה הבקשה ומוצג לקריאה בלבד.
                 </p>
               </div>
@@ -169,8 +182,21 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                       <tbody>
                         {orgFields.map((f) => (
                           <tr key={f.id} className="border-t">
-                            {/* The name is the key the forms point at, so it is shown, never edited. */}
-                            <td className="px-3 py-1.5 font-mono text-xs" dir="ltr">{f.key}</td>
+                            <td className="px-3 py-1.5">
+                              {/* `was.` is what the panel was opened with: only a name the admin changed is renamed. */}
+                              <input type="hidden" name={`was.${f.id}`} value={f.key} />
+                              <Input
+                                name={`key.${f.id}`}
+                                defaultValue={f.key}
+                                required
+                                maxLength={40}
+                                pattern="[a-zA-Z][a-zA-Z0-9_-]*"
+                                title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
+                                dir="ltr"
+                                aria-label={`שם השדה – ${f.key}`}
+                                className="h-9 font-mono text-xs"
+                              />
+                            </td>
                             <td className="px-3 py-1.5">
                               <Input name={`f.${f.key}`} defaultValue={(o.fieldValues ?? {})[f.key] ?? ""} maxLength={200} aria-label={`${f.label} – ${o.name}`} className="h-9" />
                             </td>
@@ -198,7 +224,6 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                   </div>
                 )}
                 {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
-                {orgFields.length > 0 && <SubmitButton>שמירת השדות וסגירה</SubmitButton>}
               </form>
               {/* The delete forms live outside the save form; the buttons above point at them by id. */}
               {orgFields.map((f) => (
@@ -251,7 +276,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
 }
 
 /** Centered window over the table (the whole screen on a phone); closing goes back to the table. */
-function Panel({ title, subtitle, note, closeHref, children }: { title: string; subtitle?: string; note?: string; closeHref: string; children: React.ReactNode }) {
+function Panel({ title, subtitle, note, closeHref, footer, children }: { title: string; subtitle?: string; note?: string; closeHref: string; footer?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 md:p-6" role="dialog" aria-modal="true" aria-labelledby="panel-title">
       <Link href={closeHref} scroll={false} className="absolute inset-0" aria-label="סגירה" tabIndex={-1} />
@@ -265,6 +290,7 @@ function Panel({ title, subtitle, note, closeHref, children }: { title: string; 
           <Link href={closeHref} scroll={false} className={buttonVariants({ variant: "ghost", size: "icon" })} aria-label="סגירה"><X className="size-5" aria-hidden /></Link>
         </div>
         <div className="flex-1 space-y-6 overflow-y-auto p-5">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t bg-background px-5 py-3">{footer}</div>}
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ export function validateWorkflow(w: Workflow): string[] {
     if (!IMPLICIT.includes(s.role)) {
       if (kind === "fixed" && !a?.name?.trim()) errors.push(`${name}: נדרש שם לנמען הקבוע. בלי מייל/טלפון הקישור יימסר ידנית`);
       if (kind === "contact" && !s.contactId) errors.push(`${name}: יש לבחור איש קשר`);
-      if (kind === "group_all" && !s.groupId) errors.push(`${name}: יש לבחור קבוצה`);
+      if ((kind === "group_all" || kind === "group_any") && !s.groupId) errors.push(`${name}: יש לבחור קבוצה`);
       if (kind === "from_field" && !s.assigneeFromFieldId) errors.push(`${name}: יש לציין את השדה שממנו נלקח הנמען`);
       if (s.otpRequired && kind === "fixed" && !a?.email) errors.push(`${name}: אימות בקוד נשלח במייל, הגדירו מייל לנמען`);
     }

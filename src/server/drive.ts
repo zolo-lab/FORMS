@@ -90,49 +90,6 @@ export interface ArchivedFile {
   driveUrl: string;
 }
 
-/** The folders directly under `parentId` (the root when omitted), for the folder browser in the builder. */
-export async function listFolders(parentId?: string): Promise<{ id: string; name: string }[] | null> {
-  const acc = readAccount();
-  const parent = parentId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-  if (!acc || !parent) return null;
-  const q = `'${esc(parent)}' in parents and mimeType = '${FOLDER}' and trashed = false`;
-  const r = await api<{ files: { id: string; name: string }[] }>(
-    acc,
-    `https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id,name)", orderBy: "name", pageSize: "100", supportsAllDrives: "true", includeItemsFromAllDrives: "true" })}`,
-  );
-  return r.files;
-}
-
-/** Which of these folder names already exist under `parentId`, so the builder can say what will be created. */
-export async function existingFolders(parentId: string | undefined, names: string[]): Promise<string[] | null> {
-  const acc = readAccount();
-  const root: string | undefined = parentId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-  if (!acc || !root) return null;
-  let parent: string = root;
-  const found: string[] = [];
-  for (const name of names) {
-    const q: string = `'${esc(parent)}' in parents and name = '${esc(name)}' and mimeType = '${FOLDER}' and trashed = false`;
-    const r: { files: { id: string }[] } = await api(acc, `https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", supportsAllDrives: "true", includeItemsFromAllDrives: "true" })}`);
-    if (!r.files[0]) break;
-    found.push(name);
-    parent = r.files[0].id;
-  }
-  return found;
-}
-
-/**
- * Uploads one file into `folders` below a root, creating the folders that are missing.
- * Returns null when the archive is not configured, so callers can report it instead of failing.
- */
-export async function uploadToFolders(input: { folders: string[]; fileName: string; bytes: Uint8Array; rootFolderId?: string | null }): Promise<ArchivedFile | null> {
-  const acc = readAccount();
-  const root = input.rootFolderId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-  if (!acc || !root) return null;
-  let parent = root;
-  for (const name of input.folders) parent = await childFolder(acc, parent, name);
-  return putFileIn(acc, parent, input.fileName, input.bytes);
-}
-
 /** Files the PDF under organization / form type / year. Returns null when the archive is not configured. */
 export async function archivePdf(input: ArchiveInput & { bytes: Uint8Array }): Promise<ArchivedFile | null> {
   const acc = readAccount();

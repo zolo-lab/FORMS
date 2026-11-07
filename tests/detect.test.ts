@@ -364,3 +364,30 @@ describe("typed blanks as their own text items", () => {
     expect(labels.map((l) => l.str)).toEqual(["שם:", "___________"]);
   });
 });
+
+// Israel, 7.11.2026: a plain Word letter – a title, a numbered list whose lines wrap, and "חתימה … תאריך" at the
+// bottom. Only the last two ask for something; the title and the wrapped ends of sentences are text.
+describe("label-only pages: text is not a field", () => {
+  const lines = [
+    label("t", "אלו המשימות שיש לנו", 432, 760, 100),
+    label("p1", "1. להשיג את השטחים של רגבים בעמק וגולן להפעיל על זה וגם את הרכז הצפוני", 120, 735, 412),
+    label("p2", "שלנו ואולי שדובי ינסה להביא אלינו את רגבים בנגב.", 300, 721, 232),
+    label("p3", "4. מיטל מחר תסיים עם האיפוס על השטחים ויהיה לנו תמונת מצב מלאה בכל מקרה יש", 110, 707, 422),
+    label("p4", "חוסרים לכל מוסדות רגבים", 412, 693, 120),
+    label("p5", "5. אמיר רק צריך לעבור על הטבלה שעשיתי שלדעתי היא בסדר ואז תהיה לכם תמונת מצב", 105, 679, 427),
+    label("p6", "של הוצאות והצפי שלהם", 425, 665, 107),
+    label("s", "חתימה", 500, 600, 32),
+    label("d", "תאריך", 330, 600, 30),
+  ];
+  const found = detectFields([page(lines, {})]);
+  it("proposes only the signature and the date", () => {
+    expect(found.map((f) => [f.label, f.type])).toEqual([
+      ["חתימה", "signature"],
+      ["תאריך", "date"],
+    ]);
+  });
+  it("still takes a short name ending with a colon, even with text right under it", () => {
+    const f = detectFields([page([label("n", "שם המבקש:", 440, 760, 90), label("x", "יש למלא את הפרטים במלואם לפני השליחה", 200, 746, 330)], {})]);
+    expect(f.map((x) => x.label)).toEqual(["שם המבקש"]);
+  });
+});

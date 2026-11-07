@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import { defaultEmailField, draftProblems, stepLabel } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
+import { StepExpiryInput, expiryProblem } from "./StepExpiryInput";
 
 type Option = { id: string; label: string };
 /** An email field (or group list) of the form, with the step role that fills it. */
@@ -23,6 +24,8 @@ const HINT: Partial<Record<StepWho, string>> = {
   employee: "האדם שהטופס עליו. את השם והמייל או הנייד שלו מזינים כששולחים את הטופס, והקישור נשלח אליו.",
   email: "יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח אליו.",
   from_field: "השלב נשלח למייל שמולא בשדה, ברגע שהשלב מתחיל.",
+  group_any: "כל חברי הקבוצה מקבלים קישור. הראשון שחותם סוגר את השלב, והקישורים של השאר מתבטלים.",
+  group_all: "כל חברי הקבוצה מקבלים קישור, והשלב נגמר רק כשכולם חתמו.",
 };
 
 /**
@@ -31,8 +34,12 @@ const HINT: Partial<Record<StepWho, string>> = {
  * detail it needs; what is missing shows on the step itself. One save button for all of them.
  */
 export function StepsEditor({
-  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts,
+  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts, dateFields = [], orgs,
 }: {
+  /** Date fields of the form, for "the Nth of the month after…" link expiry. */
+  dateFields?: Option[];
+  /** Organizations a step's link expiry can have an exception for (omitted inside an organization's own route). */
+  orgs?: Option[];
   drafts: EditorDraft[];
   onChange: (next: EditorDraft[]) => void;
   contacts: Option[];
@@ -47,7 +54,12 @@ export function StepsEditor({
   fieldCounts?: Partial<Record<string, number>>;
 }) {
   const ctx = { contacts, groups, fields: emailFields };
-  const problems = draftProblems(drafts, emailFields);
+  // The steps' own problems, plus an incomplete link-expiry rule (a date rule with no date field chosen yet).
+  const problems = draftProblems(drafts, emailFields).map((p, i) => {
+    const d = drafts[i]!;
+    const more = [expiryProblem(d.expiry), ...Object.values(d.expiryByOrg ?? {}).map((r) => expiryProblem(r))].filter((x): x is string => !!x);
+    return more.length ? [...p, ...new Set(more)] : p;
+  });
   const patch = (i: number, p: Partial<EditorDraft>) => onChange(drafts.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const choose = (i: number, who: StepWho) => {
     const fieldId = who === "from_field" && !drafts[i]!.fieldId ? defaultEmailField(drafts, i, emailFields) : drafts[i]!.fieldId;
@@ -117,7 +129,7 @@ export function StepsEditor({
                     </Select>
                   </div>
                 )}
-                {s.who === "group_all" && (
+                {(s.who === "group_all" || s.who === "group_any") && (
                   <div className="space-y-1">
                     <Label htmlFor={`${id}-group`}>הקבוצה</Label>
                     <Select id={`${id}-group`} value={s.groupId ?? ""} onChange={(e) => patch(i, { groupId: e.target.value || undefined })}>
@@ -155,13 +167,23 @@ export function StepsEditor({
                   <Checkbox checked={!!s.formOnly} onChange={(e) => patch(i, { formOnly: e.target.checked })} />
                   ממלא רק בטופס, בלי האפשרות למלא על גבי המסמך
                 </label>
+                <div className="sm:col-span-2">
+                  <StepExpiryInput
+                    id={`${id}-exp`}
+                    expiry={s.expiry}
+                    expiryByOrg={s.expiryByOrg}
+                    onChange={(p) => patch(i, { expiry: p.expiry, expiryByOrg: p.expiryByOrg })}
+                    dateFields={dateFields}
+                    orgs={orgs}
+                  />
+                </div>
               </div>
               {missing.length > 0 ? (
                 <ul className="mt-2 space-y-0.5 text-sm text-destructive">{missing.map((m) => <li key={m}>{m}</li>)}</ul>
               ) : HINT[s.who] ? (
                 <p className="mt-2 text-xs text-muted-foreground">{HINT[s.who]}</p>
               ) : null}
-              {(s.who === "contact" || s.who === "group_all") && <p className="mt-1 text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
+              {(s.who === "contact" || s.who === "group_all" || s.who === "group_any") && <p className="mt-1 text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
             </li>
           );
         })}

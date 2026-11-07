@@ -105,3 +105,28 @@ describe("step names and fields", () => {
     expect(p).toEqual([[], []]);
   });
 });
+
+describe("group_any in the steps editor", () => {
+  it("round-trips through the draft", () => {
+    const step = stepFromDraft({ who: "group_any", role: "approver", groupId: "g1" }, 1);
+    expect(step).toEqual({ order: 2, role: "approver", action: "approve", assigneeKind: "group_any", groupId: "g1" });
+    expect(stepWhoOf(step)).toBe("group_any");
+  });
+});
+
+describe("step link expiry in drafts", () => {
+  const org = "0b8f6c2e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+  it("round-trips a step's rule and its organization exceptions", () => {
+    const d = { who: "employee" as const, role: "employee" as const, expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { [org]: { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
+    const step = stepFromDraft(d, 1);
+    expect(step.expiry).toEqual(d.expiry);
+    expect(step.expiryByOrg).toEqual(d.expiryByOrg);
+    expect(draftOf(step)).toMatchObject({ expiry: d.expiry, expiryByOrg: d.expiryByOrg });
+  });
+  it("drops junk rules and never gives the sender its own expiry", () => {
+    const junk = sanitizeDraft({ who: "employee", expiry: { kind: "days", days: -3 }, expiryByOrg: { "not-an-id": { kind: "none" }, [org]: { kind: "bad" } } });
+    expect(junk.expiry).toBeUndefined();
+    expect(junk.expiryByOrg).toBeUndefined();
+    expect(stepFromDraft({ who: "requester", role: "requester", expiry: { kind: "none" } }, 0).expiry).toBeUndefined();
+  });
+});

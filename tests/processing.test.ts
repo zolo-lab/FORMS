@@ -20,7 +20,6 @@ const ctx: ProcessingContext = {
   steps: [{ role: "employee", label: "העובד" }],
   emailFields: [{ id: "mgr_mail", label: "מייל מנהל" }],
   users: [{ id: "u1", label: "רות לוי" }],
-  webhooks: [{ id: "w1", label: "פריוריטי" }],
 };
 
 const email = (over: Partial<Destination> = {}): Destination =>
@@ -29,6 +28,20 @@ const email = (over: Partial<Destination> = {}): Destination =>
 describe("normalizeProcessing", () => {
   it("returns an empty value for anything that is not an object", () => {
     for (const v of [null, undefined, 7, "x", []]) expect(normalizeProcessing(v)).toEqual({ parts: [], destinations: [] });
+  });
+
+  it("drops a Drive or webhook destination saved before those were removed, keeping the mails", () => {
+    const p = normalizeProcessing({
+      parts: [{ id: "p1", name: "101", pages: "1-2" }],
+      destinations: [
+        { id: "old-drive", kind: "drive", path: "שכר/{שנה}", items: [{ kind: "part", partId: "p1" }] },
+        { id: "old-hook", kind: "webhook", webhookId: "w1", items: [{ kind: "full" }] },
+        { id: "keep", kind: "email", to: [{ kind: "fixed", email: "a@b.il" }], items: [{ kind: "full" }] },
+      ],
+    });
+    expect(p.destinations.map((d) => d.id)).toEqual(["keep"]);
+    // The cut itself is not a Drive thing and stays, so the part can still be mailed and downloaded.
+    expect(p.parts.map((x) => x.name)).toEqual(["101"]);
   });
 
   it("drops destinations and items it cannot read instead of throwing", () => {
@@ -48,7 +61,7 @@ describe("normalizeProcessing", () => {
   });
 
   it("never keeps a stored copy of the completion destination", () => {
-    const p = normalizeProcessing({ destinations: [{ id: COMPLETION_DESTINATION_ID, kind: "email", to: [], items: [] }, { id: "d9", kind: "webhook", webhookId: "w1", items: [] }] });
+    const p = normalizeProcessing({ destinations: [{ id: COMPLETION_DESTINATION_ID, kind: "email", to: [], items: [] }, { id: "d9", kind: "email", to: [], items: [] }] });
     expect(p.destinations.map((d) => d.id)).toEqual(["d9"]);
   });
 
@@ -60,7 +73,7 @@ describe("normalizeProcessing", () => {
 
 describe("the completion destination mirrors completionRecipients", () => {
   it("is built from the package column, in front of the stored destinations", () => {
-    const view = viewProcessing({ destinations: [{ id: "d2", kind: "drive", path: "x", items: [] }] }, [{ name: "שכר", email: "payroll@x.org.il" }]);
+    const view = viewProcessing({ destinations: [{ id: "d2", kind: "email", to: [], items: [] }] }, [{ name: "שכר", email: "payroll@x.org.il" }]);
     expect(view.destinations[0]!.id).toBe(COMPLETION_DESTINATION_ID);
     expect(view.destinations[1]!.id).toBe("d2");
   });
@@ -122,8 +135,7 @@ describe("labels", () => {
 
   it("describes a destination in one line", () => {
     expect(describeDestination(email(), ctx)).toBe("המסמך החתום המלא → שכר <payroll@x.org.il>");
-    expect(describeDestination({ id: "d", kind: "drive", path: "שכר/{שנה}", items: [{ kind: "part", partId: "p1" }] }, ctx)).toBe("101 → שכר/{שנה}");
-    expect(describeDestination({ id: "d", kind: "webhook", webhookId: "w1", items: [{ kind: "full" }] }, ctx)).toBe("המסמך החתום המלא → פריוריטי");
+    expect(describeDestination(email({ items: [{ kind: "part", partId: "p1" }] } as Partial<Destination>), ctx)).toBe("101 → שכר <payroll@x.org.il>");
   });
 
   it("summarises the tab", () => {
@@ -147,11 +159,6 @@ describe("destinationProblems", () => {
     expect(destinationProblems(email({ to: [{ kind: "user", userId: "gone" }] } as Partial<Destination>), ctx)).toContain("אחד הנמענים מצביע על משתמש שנמחק");
   });
 
-  it("requires a folder or a path for Drive", () => {
-    expect(destinationProblems({ id: "d", kind: "drive", items: [{ kind: "full" }] }, ctx)).toEqual(["לא נבחרה תיקייה ולא הוזן נתיב"]);
-    expect(destinationProblems({ id: "d", kind: "drive", folderId: "f1", items: [{ kind: "full" }] }, ctx)).toEqual([]);
-  });
-
   it("reports each problem once", () => {
     const d = email({ items: [{ kind: "part", partId: "a" }, { kind: "part", partId: "b" }] } as Partial<Destination>);
     expect(destinationProblems(d, ctx).filter((p) => p.includes("החלקים"))).toHaveLength(1);
@@ -168,7 +175,7 @@ describe("the save path (normalizeProcessing with keepCompletion)", () => {
       parts: [],
       destinations: [
         { id: COMPLETION_DESTINATION_ID, kind: "email", attach: true, items: [{ kind: "full" }], to: [{ kind: "fixed", email: "ok@x.il" }, { kind: "fixed", email: "not-an-email" }, { kind: "junk" }] },
-        { id: "d2", kind: "drive", path: "שכר/{שנה}", items: [{ kind: "full" }] },
+        { id: "d2", kind: "email", to: [{ kind: "fixed", email: "a@b.il" }], items: [{ kind: "full" }] },
       ],
     };
     const { processing, completionRecipients } = splitProcessing(normalizeProcessing(posted, true));
