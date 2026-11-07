@@ -80,8 +80,8 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
         actions={
           <>
           <nav aria-label="תצוגה" className="flex overflow-hidden rounded-md border text-sm">
-            <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`px-3 py-1.5 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
-            <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`px-3 py-1.5 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
+            <Link href={link({ view: undefined, page: 1 })} aria-current={!filters.view ? "page" : undefined} className={`flex min-h-11 items-center px-3 md:min-h-9 ${!filters.view ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>טבלה</Link>
+            <Link href={link({ view: "board", page: 1 })} aria-current={filters.view === "board" ? "page" : undefined} className={`flex min-h-11 items-center px-3 md:min-h-9 ${filters.view === "board" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>לוח</Link>
           </nav>
           <Link href="/admin/requests/bulk" className={buttonVariants({ variant: "ghost" })}>
             שליחה מקובץ
@@ -256,7 +256,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: SP 
               const [label, tone] = REQUEST_STATUS_LABEL[r.status];
               return (
                 <tr key={r.id}>
-                  <td className="px-3 py-2"><input type="checkbox" name="id" value={r.id} aria-label={`בחירת ${requestLabel(r) || r.subjectName}`} className="size-4 accent-primary" /></td>
+                  <td className="p-0"><label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center px-3"><input type="checkbox" name="id" value={r.id} aria-label={`בחירת ${requestLabel(r) || r.subjectName}`} className="size-4 accent-primary" /></label></td>
                   <td className="px-3 py-2">
                     <Link href={`/admin/requests/${r.id}`} className="font-medium hover:underline">
                       {/* The form's identifier; a form that defines none keeps showing the name the request was opened with. */}

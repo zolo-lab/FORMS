@@ -399,7 +399,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   return (
     <div className="flex h-[calc(100dvh-3rem)] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b bg-card px-4 py-2">
-        <Link href="/admin/forms" className="text-sm text-muted-foreground hover:text-foreground">← טפסים</Link>
+        <Link href="/admin/forms" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground">← טפסים</Link>
+        {/* The editable title is an input, so the page has no heading of its own without this. */}
+        <h1 className="sr-only">{`עריכת טופס: ${def.title || "ללא שם"}`}</h1>
         <Input
           aria-label="שם הטופס"
           value={def.title}

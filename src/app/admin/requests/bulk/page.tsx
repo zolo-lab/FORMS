@@ -15,7 +15,7 @@ export default async function BulkPage() {
   const orgs = usable ? allOrgs.filter((o) => usable.includes(o.id)) : allOrgs;
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">
-      <Link href="/admin/requests" className="text-sm text-muted-foreground hover:underline">
+      <Link href="/admin/requests" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:underline">
         ← חזרה לבקשות
       </Link>
       <h1 className="text-2xl font-bold">שליחה מרוכזת מקובץ</h1>
