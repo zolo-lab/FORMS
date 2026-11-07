@@ -688,6 +688,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}
                   dateFields={dateFieldsOf(def, stepWork)}
+                  generalDateFields={dateFieldsOf(def, stepWork, pendingMoves)}
                   defaultExpiry={flow.defaultExpiry}
                   general={routeTargets.find((o) => o.id === routeOrg)?.sub ? undefined : {
                     drafts: stepWork,

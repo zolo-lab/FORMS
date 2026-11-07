@@ -36,9 +36,11 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, defaultExpiry, general, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, generalDateFields, defaultExpiry, general, heldRoles, save, onRoutesChange,
 }: {
   dateFields?: DateFieldOption[];
+  /** The date fields as the general route's unsaved step changes will place them (for the general route's rows). */
+  generalDateFields?: DateFieldOption[];
   defaultExpiry?: string;
   /**
    * The general route, editable for this organization's link expiry only (an organization – not a project – that
@@ -115,7 +117,7 @@ export function OrgRoutes({
               contacts={contacts}
               groups={groups}
               emailFields={emailFields}
-              dateFields={dateFields}
+              dateFields={generalDateFields ?? dateFields}
               defaultExpiry={defaultExpiry}
               dirty={general.dirty}
               state={general.state}
