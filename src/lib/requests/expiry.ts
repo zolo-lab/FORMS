@@ -7,12 +7,20 @@
  * next month; Shivat Zion's "the 20th" = from the field, round to day 20 this month or the next.
  * A date from a field, or a rounded date, ends at 23:59 Israel time; "N days after sending" keeps the exact time.
  * Without a valid date in the field, the deadline is `fallbackDays` after sending (default 30).
+ * Conditions choose between rules ("cases"): if [a date's day of the month ≤ / > D | a date is already past / within
+ * N days / more than N days away, counted from when the link is set] then [a rule], …, otherwise [a rule]. The first
+ * condition that holds decides; a condition on a missing date does not hold.
  */
 export type ExpiryBase = { from: "sent" } | { from: "stepStart" } | { from: "field"; fieldId: string };
 export type ExpirySnap = { day: number; mode: "sameOrNext" | "next" | "same" };
-export type ExpiryRule =
-  | { kind: "none" }
-  | { kind: "calc"; base: ExpiryBase; addDays?: number; addMonths?: number; snap?: ExpirySnap; fallbackDays?: number };
+export type ExpiryCalc = { kind: "calc"; base: ExpiryBase; addDays?: number; addMonths?: number; snap?: ExpirySnap; fallbackDays?: number };
+/** A rule that is not a choice between rules. */
+export type ExpiryOutcome = { kind: "none" } | ExpiryCalc;
+export type ExpiryCondition =
+  | { type: "day"; fieldId: string; op: "lte" | "gt"; day: number }
+  | { type: "today"; fieldId: string; op: "past" | "within" | "beyond"; days?: number };
+export type ExpiryCase = { when: ExpiryCondition; then: ExpiryOutcome };
+export type ExpiryRule = ExpiryOutcome | { kind: "cases"; cases: ExpiryCase[]; otherwise: ExpiryOutcome };
 
 /** Rules stored before the general rule existed; read through `normalizeExpiryRule`. */
 type LegacyRule =
@@ -63,8 +71,9 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   const start = at instanceof Date ? at : (at.start ?? at.sent);
   const plusDays = (from: Date, n: number) => new Date(from.getTime() + n * 86_400_000);
   if (raw === null || raw === undefined) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
-  const rule = normalizeExpiryRule(raw);
-  if (!rule) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
+  const normalized = normalizeExpiryRule(raw);
+  if (!normalized) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
+  const rule = normalized.kind === "cases" ? (normalized.cases.find((c) => holds(c.when, answers, start))?.then ?? normalized.otherwise) : normalized;
   if (rule.kind === "none") return null;
   const days = Math.round(rule.addDays ?? 0);
   const months = Math.round(rule.addMonths ?? 0);
@@ -96,10 +105,53 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   return endOfDayIsrael(date.y, date.m, date.d);
 }
 
+/** Whether a condition holds; "today" is when the link is set (the step's start, or the sending). */
+function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
+  const date = parseDate(answers[c.fieldId]);
+  if (!date) return false;
+  if (c.type === "day") return c.op === "lte" ? date.d <= c.day : date.d > c.day;
+  const t = israelDate(now);
+  const diff = Math.round((Date.UTC(date.y, date.m - 1, date.d) - Date.UTC(t.y, t.m - 1, t.d)) / 86_400_000);
+  if (c.op === "past") return diff < 0;
+  if (c.op === "within") return diff >= 0 && diff <= (c.days ?? 0);
+  return diff > (c.days ?? 0);
+}
+
 const pos = (v: unknown, max: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Math.round(Number(v))) : undefined);
+
+const fieldIdOf = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 80) : null);
+
+function normalizeCondition(raw: unknown): ExpiryCondition | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const fieldId = fieldIdOf(o.fieldId);
+  if (!fieldId) return null;
+  if (o.type === "day" && (o.op === "lte" || o.op === "gt") && pos(o.day, 31)) return { type: "day", fieldId, op: o.op, day: pos(o.day, 31)! };
+  if (o.type === "today" && o.op === "past") return { type: "today", fieldId, op: "past" };
+  if (o.type === "today" && (o.op === "within" || o.op === "beyond")) return { type: "today", fieldId, op: o.op, days: Math.min(3650, Math.max(0, Math.round(Number(o.days) || 0))) };
+  return null;
+}
 
 /** Stored JSON (possibly junk, possibly an older rule) to a rule, or null for the default. */
 export function normalizeExpiryRule(raw: unknown): ExpiryRule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (o.kind === "cases") {
+    const otherwise = normalizeOutcome(o.otherwise);
+    if (!otherwise || !Array.isArray(o.cases)) return null;
+    const cases: ExpiryCase[] = [];
+    for (const c of o.cases.slice(0, 10)) {
+      const when = normalizeCondition((c as { when?: unknown } | null)?.when);
+      const then = normalizeOutcome((c as { then?: unknown } | null)?.then);
+      if (!when || !then) return null; // an incomplete condition is not saved silently without it
+      cases.push({ when, then });
+    }
+    return cases.length ? { kind: "cases", cases, otherwise } : otherwise;
+  }
+  return normalizeOutcome(raw);
+}
+
+function normalizeOutcome(raw: unknown): ExpiryOutcome | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (o.kind === "none") return { kind: "none" };
@@ -136,6 +188,13 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
   if (!raw) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
   const rule = normalizeExpiryRule(raw);
   if (!rule) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
+  if (rule.kind === "cases") {
+    const name = (id: string) => `"${fieldLabel?.(id) ?? id}"`;
+    const cond = (c: ExpiryCondition) => c.type === "day"
+      ? `היום בחודש של ${name(c.fieldId)} ${c.op === "lte" ? `עד ${c.day}` : `אחרי ה-${c.day}`}`
+      : c.op === "past" ? `${name(c.fieldId)} כבר עבר` : c.op === "within" ? `${name(c.fieldId)} בתוך ${c.days} ימים` : `${name(c.fieldId)} בעוד יותר מ-${c.days} ימים`;
+    return [...rule.cases.map((c) => `אם ${cond(c.when)}: ${describeExpiryRule(c.then, fieldLabel)}`), `אחרת: ${describeExpiryRule(rule.otherwise, fieldLabel)}`].join("; ");
+  }
   if (rule.kind === "none") return "ללא תוקף";
   const from = rule.base.from === "sent" ? "השליחה" : rule.base.from === "stepStart" ? "תחילת השלב" : `"${fieldLabel?.(rule.base.fieldId) ?? rule.base.fieldId}"`;
   const parts = [rule.addMonths ? (rule.addMonths === 1 ? "חודש" : `${rule.addMonths} חודשים`) : "", rule.addDays ? (rule.addDays === 1 ? "יום" : `${rule.addDays} ימים`) : ""].filter(Boolean);
@@ -177,4 +236,13 @@ export function normalizeExpiryByOrg(raw: unknown): Record<string, ExpiryRule> |
     if (rule && /^[0-9a-f-]{36}$/i.test(org)) out[org] = rule;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** The form fields a rule reads (the date it counts from, and those its conditions look at). */
+export function expiryRuleFields(raw: unknown): string[] {
+  const rule = normalizeExpiryRule(raw);
+  if (!rule || rule.kind === "none") return [];
+  const of = (r: ExpiryOutcome) => (r.kind === "calc" && r.base.from === "field" ? [r.base.fieldId] : []);
+  if (rule.kind === "calc") return of(rule);
+  return [...new Set([...rule.cases.flatMap((c) => [c.when.fieldId, ...of(c.then)]), ...of(rule.otherwise)])];
 }

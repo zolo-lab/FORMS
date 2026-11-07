@@ -9,7 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { describeExpiryRule, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
+import { describeExpiryRule, expiryRuleFields, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
 import { STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import { defaultEmailField, draftProblems, stepLabel, stepTarget } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
@@ -86,11 +86,10 @@ export function StepsEditor({
     return dateFields.filter((f) => !f.roles || f.roles.some((r) => roles.has(r)));
   };
   const lateField = (rule: ExpiryRule | undefined, i: number) => {
-    const r = rule && normalizeExpiryRule(rule);
-    if (r?.kind !== "calc" || r.base.from !== "field") return null;
-    const fid = r.base.fieldId;
-    if (!dateFields.some((f) => f.id === fid)) return "תוקף הקישור: שדה התאריך כבר לא קיים בטופס – בחרו שוב";
-    return !datesBefore(i).some((f) => f.id === fid) ? "תוקף הקישור: התאריך נבחר משלב שעוד לא מולא כשהשלב מתחיל" : null;
+    const ids = rule ? expiryRuleFields(rule) : [];
+    if (ids.some((fid) => !dateFields.some((f) => f.id === fid))) return "תוקף הקישור: שדה תאריך בכלל כבר לא קיים בטופס – בחרו שוב";
+    const before = datesBefore(i);
+    return ids.some((fid) => !before.some((f) => f.id === fid)) ? "תוקף הקישור: הכלל משתמש בתאריך משלב שעוד לא מולא כשהשלב מתחיל" : null;
   };
   // Every rule on the step blocks saving when incomplete: its own and each organization's (the route is shared).
   const problems = draftProblems(drafts, emailFields).map((p, i) => {

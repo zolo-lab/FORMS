@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeExpiryRule, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { describeExpiryRule, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -160,5 +160,42 @@ describe("snap to a day of the same month", () => {
   it("day 31 is the last day of the month", () => {
     const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "d" }, snap: { day: 31, mode: "same" as const } };
     expect(expiryFor(rule, { d: "2027-02-10" }, new Date("2027-02-01T08:00:00Z"))).toEqual(endOfDayIsrael(2027, 2, 28));
+  });
+});
+
+describe("conditions choose the rule", () => {
+  const sent = new Date("2026-11-10T08:00:00Z");
+  const day = (op: "lte" | "gt", d: number) => ({ type: "day" as const, fieldId: "start", op, day: d });
+  // Make's Shivat Zion rule, written with conditions: start day ≤ 20 → the 20th of that month, else of the next.
+  const shivat = {
+    kind: "cases" as const,
+    cases: [{ when: day("lte", 20), then: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "same" as const } } }],
+    otherwise: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "next" as const } },
+  };
+  it("the first condition that holds decides, else the otherwise rule", () => {
+    expect(expiryFor(shivat, { start: "2026-12-15" }, sent)).toEqual(endOfDayIsrael(2026, 12, 20));
+    expect(expiryFor(shivat, { start: "2026-12-25" }, sent)).toEqual(endOfDayIsrael(2027, 1, 20));
+    expect(normalizeExpiryRule(shivat)).toEqual(shivat);
+  });
+  it("a condition on a missing date does not hold", () => {
+    expect(expiryFor(shivat, {}, sent)).toEqual(new Date(sent.getTime() + 30 * 86_400_000));
+  });
+  it("compares a date with the day the link is set", () => {
+    const rule = {
+      kind: "cases" as const,
+      cases: [
+        { when: { type: "today" as const, fieldId: "start", op: "past" as const }, then: { kind: "calc" as const, base: { from: "sent" as const }, addDays: 7 } },
+        { when: { type: "today" as const, fieldId: "start", op: "within" as const, days: 10 }, then: { kind: "none" as const } },
+      ],
+      otherwise: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } },
+    };
+    expect(expiryFor(rule, { start: "2026-11-01" }, sent)).toEqual(new Date(sent.getTime() + 7 * 86_400_000));
+    expect(expiryFor(rule, { start: "2026-11-15" }, sent)).toBeNull();
+    expect(expiryFor(rule, { start: "2027-01-03" }, sent)).toEqual(endOfDayIsrael(2027, 2, 7));
+    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('אם "תאריך תחילה" כבר עבר: 7 ימים מהשליחה; אם "תאריך תחילה" בתוך 10 ימים: ללא תוקף; אחרת: ה-7 בחודש שאחרי "תאריך תחילה"');
+    expect(expiryRuleFields(rule)).toEqual(["start"]);
+  });
+  it("an incomplete condition is not a rule", () => {
+    expect(normalizeExpiryRule({ ...shivat, cases: [{ when: { type: "day", fieldId: "", op: "lte", day: 20 }, then: shivat.otherwise }] })).toBeNull();
   });
 });
