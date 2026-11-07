@@ -80,9 +80,9 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("tab", { name: "שלבי הטופס" }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
   // A new form starts with the sender → the employee. Step 1 is fixed; add a third step.
-  await expect(page.getByRole("listitem", { name: "שלב 1" })).toContainText("שלב 1 · השולח");
+  await expect(page.getByRole("row", { name: "שלב 1", exact: true })).toContainText("השולח");
   await page.getByRole("button", { name: "הוספת שלב" }).click();
-  const step3 = page.getByRole("listitem", { name: "שלב 3" });
+  const step3 = page.getByRole("row", { name: "שלב 3", exact: true });
   // What is missing shows on the step itself, and nothing can be saved until it is fixed.
   await expect(step3).toContainText("בחרו משתמש");
   await expect(page.getByRole("button", { name: "שמירת השלבים" })).toBeDisabled();
@@ -92,7 +92,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
-  await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
+  await expect(page.getByRole("row", { name: "שלב 3", exact: true }).getByLabel("מייל")).toHaveValue("payroll@example.test");
 
   // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
   await page.getByRole("tab", { name: "רספונסיבי" }).click();

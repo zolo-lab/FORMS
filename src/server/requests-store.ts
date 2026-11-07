@@ -241,7 +241,7 @@ async function persist(
         continue;
       }
       answers ??= await collectedAnswers(requestId);
-      linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: stepLinkDeadline(rule, answers, now) });
+      linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: stepLinkDeadline(rule, answers, now, req.createdAt) });
     }
   }
   const linkExpiry = (id: string) => {

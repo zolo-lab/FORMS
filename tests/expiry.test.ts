@@ -38,15 +38,16 @@ describe("expiryFor", () => {
 
 describe("normalizeExpiryRule / describe", () => {
   it("keeps valid rules and drops junk", () => {
-    expect(normalizeExpiryRule({ kind: "days", days: "14" })).toEqual({ kind: "days", days: 14 });
-    expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 40, dateFieldId: "x" })).toEqual({ kind: "dayOfNextMonth", day: 31, dateFieldId: "x" });
+    // Older rules read as the general rule.
+    expect(normalizeExpiryRule({ kind: "days", days: "14" })).toEqual({ kind: "calc", base: { from: "sent" }, addDays: 14 });
+    expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 40, dateFieldId: "x" })).toEqual({ kind: "calc", base: { from: "field", fieldId: "x" }, snap: { day: 31, mode: "next" } });
     expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 4 })).toBeNull();
     expect(normalizeExpiryRule("x")).toBeNull();
     expect(normalizeExpiryRule({ kind: "none" })).toEqual({ kind: "none" });
   });
   it("describes in Hebrew", () => {
     expect(describeExpiryRule({ kind: "dayOfNextMonth", day: 4, dateFieldId: "s" }, () => "תאריך תחילה")).toBe('ה-4 בחודש שאחרי "תאריך תחילה"');
-    expect(describeExpiryRule({ kind: "none" })).toBe("ללא תפוגה");
+    expect(describeExpiryRule({ kind: "none" })).toBe("ללא תוקף");
   });
 });
 
@@ -64,9 +65,9 @@ describe("dayOfMonth: the Nth on or after the date (Make's Shivat Zion rule: the
     expect(expiryFor({ ...rule, fallbackDays: 5 }, {}, sent)).toEqual(new Date(sent.getTime() + 5 * 86_400_000));
   });
   it("normalizes and describes", () => {
-    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20, dateFieldId: "start" })).toEqual(rule);
+    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20, dateFieldId: "start" })).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" } });
     expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20 })).toBeNull();
-    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('ה-20 בחודש לפי "תאריך תחילה" (אותו חודש עד ה-20, אחרת החודש הבא)');
+    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('ה-20 בחודש לפי "תאריך תחילה" (אותו חודש אם לא עבר, אחרת הבא)');
   });
 });
 
@@ -85,14 +86,14 @@ describe("linkExpiryOf: a step's own deadline wins over the request's", () => {
 describe("stepExpiryRule: the organization's exception wins", () => {
   const step = { expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { "org-sz": { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
   it("picks the exception for its organization, the step rule otherwise", () => {
-    expect(stepExpiryRule(step, "org-sz")).toEqual(step.expiryByOrg["org-sz"]);
-    expect(stepExpiryRule(step, "org-other")).toEqual(step.expiry);
+    expect(stepExpiryRule(step, "org-sz")).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" } });
+    expect(stepExpiryRule(step, "org-other")).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 7, mode: "next" } });
     expect(stepExpiryRule({}, "org-sz")).toBeNull();
   });
 });
 
 describe("stepLinkDeadline: never dead on arrival", () => {
-  const rule = { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" };
+  const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } };
   it("keeps the rule's date when it is far enough", () => {
     expect(stepLinkDeadline(rule, { start: "2026-10-15" }, sent)).toEqual(endOfDayIsrael(2026, 11, 7));
   });
@@ -101,5 +102,37 @@ describe("stepLinkDeadline: never dead on arrival", () => {
   });
   it("none stays none", () => {
     expect(stepLinkDeadline({ kind: "none" }, {}, sent)).toBeNull();
+  });
+});
+
+describe("the general rule (start → add → round)", () => {
+  const sentAt = new Date("2026-11-03T08:00:00Z");
+  const field = (fieldId: string) => ({ from: "field" as const, fieldId });
+  it("Make's presets: the 7th / 10th of the month after the start date, the 20th this month or the next", () => {
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 7, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 7));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 10, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 10));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 20, mode: "sameOrNext" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 20, mode: "sameOrNext" } }, { start: "2026-11-25" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 20));
+  });
+  it("adds months and days before rounding", () => {
+    // 15.11 + 1 month = 15.12 → the 1st of the month after = 1.1.2027
+    expect(expiryFor({ kind: "calc", base: field("start"), addMonths: 1, snap: { day: 1, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2027, 1, 1));
+    // 31.1 + 1 month = 28.2 (no 31st)
+    expect(expiryFor({ kind: "calc", base: field("start"), addMonths: 1 }, { start: "2027-01-31" }, sentAt)).toEqual(endOfDayIsrael(2027, 2, 28));
+    expect(expiryFor({ kind: "calc", base: field("start"), addDays: 14 }, { start: "2026-12-25" }, sentAt)).toEqual(endOfDayIsrael(2027, 1, 8));
+  });
+  it("from sending: N days keeps the time; with rounding, the end of that day", () => {
+    expect(expiryFor({ kind: "calc", base: { from: "sent" }, addDays: 30 }, {}, sentAt)).toEqual(new Date(sentAt.getTime() + 30 * 86_400_000));
+    expect(expiryFor({ kind: "calc", base: { from: "sent" }, snap: { day: 7, mode: "next" } }, {}, sentAt)).toEqual(endOfDayIsrael(2026, 12, 7));
+  });
+  it("from the step's start uses the step's moment, not the sending", () => {
+    const start = new Date("2026-11-20T08:00:00Z");
+    expect(expiryFor({ kind: "calc", base: { from: "stepStart" }, addDays: 5 }, {}, { sent: sentAt, start })).toEqual(new Date(start.getTime() + 5 * 86_400_000));
+  });
+  it("rejects a rule that would expire at once, and describes rules as sentences", () => {
+    expect(normalizeExpiryRule({ kind: "calc", base: { from: "sent" } })).toBeNull();
+    expect(describeExpiryRule({ kind: "calc", base: { from: "sent" }, addDays: 30 })).toBe("30 ימים מהשליחה");
+    expect(describeExpiryRule({ kind: "calc", base: field("s"), snap: { day: 7, mode: "next" } }, () => "תאריך תחילה")).toBe('ה-7 בחודש שאחרי "תאריך תחילה"');
+    expect(describeExpiryRule({ kind: "calc", base: field("s"), addMonths: 1, snap: { day: 1, mode: "next" } }, () => "תאריך תחילה")).toBe('ה-1 בחודש שאחרי חודש אחרי "תאריך תחילה"');
   });
 });

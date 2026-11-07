@@ -60,14 +60,12 @@ export async function savePackageSettingsAction(fd: FormData) {
   const id = pkgId(fd);
   const data = await getPackage(id);
   if (!data) redirect("/admin/packages");
-  const kind = String(fd.get("expiryKind") ?? "default");
-  const rule =
-    kind === "none" ? { kind: "none" }
-    : kind === "days" ? { kind: "days", days: Number(fd.get("expiryDays")) }
-    : kind === "dayOfNextMonth" ? { kind: "dayOfNextMonth", day: Number(fd.get("expiryDay")), dateFieldId: String(fd.get("expiryField") ?? "") }
-    : null;
-  const expiryRule = normalizeExpiryRule(rule);
-  if (kind !== "default" && !expiryRule) back(id, "?settingsError=expiry", fd);
+  // The link expiry, from the rule builder (JSON; empty = the default of 30 days after sending).
+  const rawRule = String(fd.get("expiryRule") ?? "").trim();
+  let parsed: unknown = null;
+  try { parsed = rawRule ? JSON.parse(rawRule) : null; } catch { parsed = undefined; }
+  const expiryRule = normalizeExpiryRule(parsed);
+  if (rawRule && !expiryRule) back(id, "?settingsError=expiry", fd);
   const recipients = parseRecipients(String(fd.get("recipients") ?? ""));
   if (recipients.invalid.length) back(id, `?settingsError=${encodeURIComponent(recipients.invalid.join(", "))}`, fd);
   await updatePackageSettings(id, {

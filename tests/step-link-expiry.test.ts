@@ -29,8 +29,8 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
           { order: 1, role: "requester", action: "fill" },
           {
             order: 2, role: "employee", action: "fill",
-            expiry: { kind: "dayOfNextMonth", day: 7, dateFieldId: "start" },
-            expiryByOrg: { [special.id]: { kind: "dayOfMonth", day: 20, dateFieldId: "start" } },
+            expiry: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } },
+            expiryByOrg: { [special.id]: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" as const } } },
           },
         ],
       },
@@ -83,7 +83,7 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
         [special.id]: {
           steps: [
             { order: 1, role: "requester", action: "fill" },
-            { order: 2, role: "employee", action: "fill", expiry: { kind: "none" }, expiryByOrg: { [special.id]: { kind: "dayOfMonth", day: 20, dateFieldId: "start" } } },
+            { order: 2, role: "employee", action: "fill", expiry: { kind: "none" }, expiryByOrg: { [special.id]: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" as const } } } },
           ],
         },
       },

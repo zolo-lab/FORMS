@@ -117,7 +117,7 @@ describe("group_any in the steps editor", () => {
 describe("step link expiry in drafts", () => {
   const org = "0b8f6c2e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
   it("round-trips a step's rule and its organization exceptions", () => {
-    const d = { who: "employee" as const, role: "employee" as const, expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { [org]: { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
+    const d = { who: "employee" as const, role: "employee" as const, expiry: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } }, expiryByOrg: { [org]: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" as const } } } };
     const step = stepFromDraft(d, 1);
     expect(step.expiry).toEqual(d.expiry);
     expect(step.expiryByOrg).toEqual(d.expiryByOrg);

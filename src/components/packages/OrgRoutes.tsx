@@ -34,9 +34,15 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, defaultExpiry, general, heldRoles, save, onRoutesChange,
 }: {
   dateFields?: Option[];
+  defaultExpiry?: string;
+  /**
+   * The general route, editable for this organization's link expiry only (an organization – not a project – that
+   * follows it). Saved with the general route.
+   */
+  general?: { drafts: EditorDraft[]; onChange: (next: EditorDraft[]) => void; onSave: () => void; dirty: boolean; state: StepsSaveState; waitingForForm: boolean };
   org: Option;
   orgs: Option[];
   /** Saved routes, per organization id. */
@@ -98,9 +104,29 @@ export function OrgRoutes({
             <p className="text-sm text-muted-foreground">כשצריך אצלה מנהלים אחרים או שלב נוסף, יוצרים לה מסלול משלה. אפשר להתחיל מהמסלול הכללי או לשכפל מסלול של עמותה אחרת ולשנות רק את השמות.</p>
           </div>
         </div>
-        <ol className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
-          {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
-        </ol>
+        {general ? (
+          <>
+            <p className="text-sm">אפשר לתת ל{org.label} תוקף קישור משלה לכל שלב, בלי מסלול נפרד: לחצו על &quot;תוקף הקישור&quot; בשורה.</p>
+            <StepsEditor
+              drafts={general.drafts}
+              onChange={general.onChange}
+              contacts={contacts}
+              groups={groups}
+              emailFields={emailFields}
+              dateFields={dateFields}
+              defaultExpiry={defaultExpiry}
+              dirty={general.dirty}
+              state={general.state}
+              onSave={general.onSave}
+              waitingForForm={general.waitingForForm}
+              orgView={org}
+            />
+          </>
+        ) : (
+          <ol className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
+            {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
+          </ol>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <Button type="button" onClick={() => setMine(fresh(fallback.drafts, org.id))}>
             <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מ{fallback.label})
@@ -156,6 +182,7 @@ export function OrgRoutes({
         groups={groups}
         emailFields={emailFields}
         dateFields={dateFields}
+        defaultExpiry={defaultExpiry}
         dirty={dirty}
         state={state[org.id] ?? { kind: "idle" }}
         onSave={() => void persist(mine)}

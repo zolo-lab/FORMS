@@ -1,3 +1,5 @@
+import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { allFields } from "@/lib/forms/schema";
 import { formLinkOrgs } from "@/server/public-fill";
 import { listOrgFieldDefs, listOrgs, listProjects } from "@/server/orgs-store";
 import { notFound, redirect } from "next/navigation";
@@ -56,6 +58,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         completionRecipients: pkg?.pkg.completionRecipients ?? [],
         saveProcessing: saveProcessingAction,
         sendSettings,
+        defaultExpiry: describeExpiryRule(normalizeExpiryRule(pkg?.pkg.expiryRule), (fid) => allFields(data.version.definition).find((f) => f.id === fid)?.label ?? fid),
         sendSettingsOpen: !!(query.saved === "settings" || query.saved === "org" || query.settingsError || query.error),
       }}
       initial={data.version.definition}

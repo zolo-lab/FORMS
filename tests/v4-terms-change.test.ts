@@ -38,7 +38,7 @@ describe.skipIf(!hasDb)("terms change, end to end (dev DB)", () => {
       .values({
         name: `v4-terms-${stamp}`,
         workflow: termsChangeWorkflow,
-        expiryRule: { kind: "dayOfNextMonth", day: 4, dateFieldId: "start_work_date" },
+        expiryRule: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start_work_date" }, snap: { day: 4, mode: "next" as const } },
         completionRecipients: [{ name: "חשבות", email: "payroll-docs@example.test" }],
         followUpStatuses: [{ key: "payroll", label: "עודכן בשכר" }],
       })

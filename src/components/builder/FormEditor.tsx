@@ -80,6 +80,8 @@ export interface FormEditorProps {
     saveProcessing?: (packageId: string, view: Processing) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
     sendSettings?: React.ReactNode;
+    /** The form's default link expiry, in words. */
+    defaultExpiry?: string;
     /** Open the sending settings (they were just saved, or failed). */
     sendSettingsOpen?: boolean;
   };
@@ -681,6 +683,15 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}
                   dateFields={dateFieldsOf(def)}
+                  defaultExpiry={flow.defaultExpiry}
+                  general={routeTargets.find((o) => o.id === routeOrg)?.sub ? undefined : {
+                    drafts: stepWork,
+                    onChange: changeSteps,
+                    onSave: () => void saveSteps(),
+                    dirty: stepsDirty,
+                    state: stepState,
+                    waitingForForm: save !== "saved",
+                  }}
                   heldRoles={[...new Set([...answerFields(def).map(fieldRole), ...stepWork.map((d) => d.role)])]}
                   save={(org, drafts) => flow.saveOrgRoute!(flow.packageId, org, drafts)}
                   onRoutesChange={setOrgRoutes}
@@ -693,7 +704,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 groups={flow.groups}
                 emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
                 dateFields={dateFieldsOf(def)}
-                orgs={flow.orgs?.map((o) => ({ id: o.id, label: o.label }))}
+                defaultExpiry={flow.defaultExpiry}
                 dirty={stepsDirty}
                 state={stepState}
                 onSave={() => void saveSteps()}
