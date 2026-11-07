@@ -41,7 +41,7 @@ export async function addNewFieldToTypeAction(fd: FormData) {
   if (type.fields.length >= MAX_TYPE_FIELDS) redirect(`${PATH}/${id}?error=full`);
   const r = await createDictionaryEntry({ label: String(fd.get("label") ?? ""), key: String(fd.get("key") ?? ""), type: String(fd.get("type") ?? ""), category: "general" });
   if (!r.ok) redirect(`${PATH}/${id}?error=${r.reason}`);
-  await appendFieldToType(id, r.key);
+  if (!(await appendFieldToType(id, r.key))) redirect(`${PATH}/${id}?error=full`);
   revalidatePath(`${PATH}/${id}`);
   redirect(`${PATH}/${id}?saved=field`);
 }
