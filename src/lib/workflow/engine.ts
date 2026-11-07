@@ -24,6 +24,8 @@ export interface EngineStep {
   returnedToStepId?: string;
   declineReason?: string;
   returnReason?: string;
+  /** One of a group's "any member" steps: the first of them to finish closes the rest (`group_any`). */
+  anyOf?: boolean;
 }
 
 export interface EngineEvent {
@@ -67,6 +69,7 @@ const withoutEmpty = (a: AssigneeFields): AssigneeFields => Object.fromEntries(O
  * Build the (all pending) steps of a request from the package workflow.
  * A `group_all` step becomes one parallel step per member (none when the group is empty: the step is
  * created without a person, so the admin sees it waiting and can delegate it).
+ * A `group_any` step fans out the same way, marked `anyOf`: the first member to finish closes it for the others.
  */
 export function planSteps(workflow: Workflow, answers: Answers, newId: () => string = defaultId, people: PeopleDirectory = {}): EngineStep[] {
   const base = (w: WorkflowStep, who: AssigneeFields): EngineStep => ({
@@ -91,6 +94,10 @@ export function planSteps(workflow: Workflow, answers: Answers, newId: () => str
         case "group_all": {
           const members = (w.groupId ? people.groups?.[w.groupId] : undefined) ?? [];
           return members.length ? members.map((m) => base(w, fromPerson(m))) : [base(w, {})];
+        }
+        case "group_any": {
+          const members = (w.groupId ? people.groups?.[w.groupId] : undefined) ?? [];
+          return (members.length ? members.map((m) => base(w, fromPerson(m))) : [base(w, {})]).map((s) => ({ ...s, anyOf: true }));
         }
         case "requester":
           return [base(w, people.requester ? fromPerson(people.requester) : {})];
@@ -160,13 +167,29 @@ export function openStep(input: EngineStep[], stepId: string): EngineResult {
   return { steps, events };
 }
 
+/**
+ * "One of the group": once one member's step is done, the other members' open steps of the same order are closed
+ * (`skipped`, so the request can complete), and their links die with them.
+ */
+function releaseSiblings(steps: EngineStep[], done: EngineStep): EngineEvent[] {
+  if (!done.anyOf) return [];
+  const events: EngineEvent[] = [];
+  for (const o of steps) {
+    if (o === done || !o.anyOf || o.order !== done.order || !OPEN.includes(o.status)) continue;
+    o.status = "skipped";
+    events.push({ type: "step_released", stepId: o.id, payload: { byStepId: done.id, by: done.assigneeName ?? done.assigneeEmail ?? done.assigneePhone ?? "" } });
+  }
+  return events;
+}
+
 export function completeStep(input: EngineStep[], stepId: string, answers: Answers, contacts: Record<string, Person> = {}): EngineResult {
   const steps = clone(input);
   const s = find(steps, stepId);
   if (s.status !== "active" && s.status !== "in_progress") throw new Error(`cannot complete a ${s.status} step`);
   s.status = "completed";
+  const released = releaseSiblings(steps, s);
   const next = activateNext(steps, answers, contacts);
-  return { steps: next.steps, events: [{ type: "step_completed", stepId }, ...next.events] };
+  return { steps: next.steps, events: [{ type: "step_completed", stepId }, ...released, ...next.events] };
 }
 
 /** The admin moves the request on without this step: it is marked skipped and the next one starts. */

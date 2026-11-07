@@ -59,3 +59,14 @@ describe("roleView", () => {
     expect(v.definition.pages[0]!.fields.map((f) => f.id)).toEqual(["salary", "jobPercent"]);
   });
 });
+
+describe("group_any links", () => {
+  const now = new Date("2026-11-07T10:00:00Z");
+  it("a released member is told another member already signed, even though the link was revoked", () => {
+    expect(tokenState({ token: { revokedAt: now, expiresAt: null }, stepStatus: "skipped", requestStatus: "in_progress", stepAnyOf: true, now })).toBe("released");
+  });
+  it("an ordinary skipped step stays revoked/closed", () => {
+    expect(tokenState({ token: { revokedAt: now, expiresAt: null }, stepStatus: "skipped", requestStatus: "in_progress", now })).toBe("revoked");
+    expect(tokenState({ token: { revokedAt: null, expiresAt: null }, stepStatus: "skipped", requestStatus: "in_progress", now })).toBe("closed");
+  });
+});

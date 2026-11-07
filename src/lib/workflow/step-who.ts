@@ -5,14 +5,15 @@
 import type { AssigneeKind, StepActionKind, StepRole, WorkflowStep } from "./types";
 import { assigneeKindOf } from "./assignee";
 
-export const STEP_WHO = ["requester", "employee", "contact", "group_all", "email", "from_field"] as const;
+export const STEP_WHO = ["requester", "employee", "contact", "group_any", "group_all", "email", "from_field"] as const;
 export type StepWho = (typeof STEP_WHO)[number];
 
 export const STEP_WHO_LABELS: Record<StepWho, string> = {
   requester: "השולח (ממלא את הטופס ושולח)",
   employee: "העובד שהטופס עליו (פרטיו מוזנים בשליחה)",
   contact: "משתמש מוגדר",
-  group_all: "קבוצה (כולם במקביל)",
+  group_any: "קבוצה (אחד מהם חותם – הראשון שמסיים)",
+  group_all: "קבוצה (כולם חותמים במקביל)",
   email: "מייל קבוע (למשל גורם חיצוני)",
   from_field: "המייל שמולא בשדה של שלב קודם",
 };
@@ -56,7 +57,7 @@ export function stepWhoOf(step: Pick<WorkflowStep, "role" | "assigneeKind" | "as
   if (step.role === "employee") return "employee";
   const kind = assigneeKindOf(step);
   if (kind === "fixed") return "email";
-  return kind === "group_all" || kind === "from_field" ? kind : "contact";
+  return kind === "group_all" || kind === "group_any" || kind === "from_field" ? kind : "contact";
 }
 
 /** The hidden values the step form submits for a "who" choice (`role` only matters for a chosen person). */
@@ -111,7 +112,7 @@ export function stepFromDraft(d: StepDraft, index: number): WorkflowStep {
     action: f.action,
     ...(f.assigneeKind ? { assigneeKind: f.assigneeKind } : {}),
     ...(who === "contact" && d.contactId ? { contactId: d.contactId } : {}),
-    ...(who === "group_all" && d.groupId ? { groupId: d.groupId } : {}),
+    ...((who === "group_all" || who === "group_any") && d.groupId ? { groupId: d.groupId } : {}),
     ...(who === "from_field" && d.fieldId ? { assigneeFromFieldId: d.fieldId } : {}),
     ...(who === "email" ? { assignee: { name: d.name?.trim() || email, ...(email ? { email } : {}) }, otpRequired: true } : d.otpRequired ? { otpRequired: true } : {}),
     ...(d.formOnly && who !== "requester" ? { formOnly: true } : {}),

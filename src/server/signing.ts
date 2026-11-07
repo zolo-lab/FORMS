@@ -52,7 +52,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
   if (!tok) return { state: "invalid" };
   const [step] = await db.select().from(signingSteps).where(eq(signingSteps.id, tok.stepId));
   const [request] = step ? await db.select().from(requests).where(eq(requests.id, step.requestId)) : [];
-  const state = tokenState({ token: tok, stepStatus: step?.status, requestStatus: request?.status, now });
+  const state = tokenState({ token: tok, stepStatus: step?.status, requestStatus: request?.status, stepAnyOf: step?.anyOf, now });
   if (state !== "ok" || !step || !request) return { state: state === "ok" ? "invalid" : state };
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, request.organizationId));
@@ -163,7 +163,8 @@ export async function submit(token: string, input: Answers, cookieHeader: string
     const out = await applyStepAction(ctx.step.id, { type: "submit", answers: cleaned }, { type: "signer" });
     return { ok: true, ...(await doneInfo(ctx, out.status)) };
   } catch (e) {
-    if (e instanceof StepConflictError) return { ok: false, state: "closed" };
+    // A group member who lost the race to another member is told so, not "the link is closed".
+    if (e instanceof StepConflictError) return { ok: false, state: ctx.step.anyOf ? "released" : "closed" };
     throw e;
   }
 }
