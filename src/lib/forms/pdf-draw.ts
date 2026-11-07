@@ -223,6 +223,13 @@ const YES_NO_VALUE: Record<string, string> = { [normalizeText("כן")]: "yes", [
  * (`insertFieldByPosition`), so a form with nothing in it comes out in the PDF's reading order. With `stepPerPage`
  * and an empty form, the fields are split into one step per PDF page.
  */
+/** Headings and text blocks taken from the PDF's own text by `addDetectedFields` (`texts`). */
+export const isDocumentText = (id: string) => /^pdf_(?:text|heading)_\d+$/.test(id);
+
+function withoutDocumentText(def: FormDefinition): FormDefinition {
+  return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.filter((f) => !isDocumentText(f.id)) })) };
+}
+
 export function addDetectedFields(
   def: FormDefinition,
   detected: DetectedField[],
@@ -230,8 +237,10 @@ export function addDetectedFields(
   newId: () => string,
   opts: AddDetectedOptions = {},
 ): { definition: FormDefinition; stamps: PdfStamp[] } {
-  const wasEmpty = allFields(def).length === 0;
-  let definition = def;
+  // "Empty": nothing to fill yet. Text taken from a document earlier (a run that found no fields) does not count, and
+  // is replaced by this document's text below rather than kept twice.
+  const wasEmpty = allFields(def).every((f) => isDocumentText(f.id));
+  let definition = opts.texts?.length && wasEmpty ? withoutDocumentText(def) : def;
   const all = [...existing];
   const added: PdfStamp[] = [];
   const pageOf = new Map<string, number>();

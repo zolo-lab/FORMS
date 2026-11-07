@@ -37,6 +37,26 @@ describe("documentTextBlocks: the document's own text for the responsive form", 
   });
 });
 
+describe("documentTextBlocks: columns and renamed fields", () => {
+  it("text in two columns at the same height stays in two paragraphs, right column first", () => {
+    const twoCols = page([
+      label("r1", "הוראות למילוי הטופס", 360, 760, 170),
+      label("r2", "יש לצרף צילום תעודת זהות", 360, 746, 170),
+      label("l1", "לשימוש המשרד בלבד", 60, 760, 150),
+      label("l2", "התקבל בתאריך", 60, 746, 150),
+    ]);
+    expect(documentTextBlocks([twoCols], []).map((b) => b.text)).toEqual([
+      "הוראות למילוי הטופס יש לצרף צילום תעודת זהות",
+      "לשימוש המשרד בלבד התקבל בתאריך",
+    ]);
+  });
+  it("the printed name of a field renamed in the dialog, or with a remark in brackets, is not repeated as text", () => {
+    const form = page([label("n", "מספר זהות (9 ספרות):", 430, 760, 100), label("x", "פרטים נוספים בהמשך", 300, 700, 230)]);
+    const field = { page: 0, label: "תעודת זהות של העובד", box: { x: 250, y: 755, width: 170, height: 16 }, aliases: ["מספר זהות"] };
+    expect(documentTextBlocks([form], [field]).map((b) => b.text)).toEqual(["פרטים נוספים בהמשך"]);
+  });
+});
+
 describe("addDetectedFields with the document's text", () => {
   it("puts the title and the paragraph before the signature and the date, as text the signer does not fill", async () => {
     const { addDetectedFields } = await import("@/lib/forms/pdf-draw");
@@ -52,5 +72,15 @@ describe("addDetectedFields with the document's text", () => {
     ]);
     // Nothing is drawn on the PDF for the text.
     expect(stamps.every((s) => !s.fieldId.startsWith("pdf_text_") && !s.fieldId.startsWith("pdf_heading_"))).toBe(true);
+  });
+  it("a form holding only text from an earlier document is still new: its text is replaced, not doubled", async () => {
+    const { addDetectedFields } = await import("@/lib/forms/pdf-draw");
+    const { blankForm } = await import("@/lib/forms/builder");
+    const first = addDetectedFields(blankForm("מכתב"), [], [], () => "x", { texts: documentTextBlocks([letter], []) }).definition;
+    const fields = detectFields([letter]);
+    let n = 0;
+    const again = addDetectedFields(first, fields, [], () => `s${++n}`, { texts: documentTextBlocks([letter], fields) }).definition;
+    const types = again.pages.flatMap((p) => p.fields).map((f) => f.type);
+    expect(types).toEqual(["heading", "info_text", "signature", "date"]);
   });
 });

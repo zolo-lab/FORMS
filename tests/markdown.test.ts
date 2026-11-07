@@ -57,3 +57,10 @@ describe("answer piping", () => {
     expect(pipeText("no tokens", {}, def)).toBe("no tokens");
   });
 });
+
+describe("numbered lists keep their own numbers", () => {
+  it("1, 4, 5 stay 1, 4, 5 (a letter's list, not renumbered)", () => {
+    const [b] = parseMarkdown("1. להשיג את השטחים\n4. מיטל תסיים\n5. אמיר יעבור");
+    expect(b).toMatchObject({ t: "ol", nums: [1, 4, 5] });
+  });
+});

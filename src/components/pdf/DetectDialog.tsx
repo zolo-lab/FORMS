@@ -175,7 +175,7 @@ function Body({ fields, pageCount, canSplit, canAddText, onConfirm, onClose }: {
       {badKey && <p className="text-destructive">מזהה: אותיות לועזיות, ספרות וקו תחתון, מתחיל באות.</p>}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button onClick={confirm} disabled={(chosen === 0 && !(canAddText && withText)) || badKey} className="min-h-11">
-          {chosen === 0 ? "הוספת הטקסט בלבד" : `הוספת ${chosen} שדות לטופס`}
+          {chosen === 0 && canAddText && withText ? "הוספת הטקסט בלבד" : `הוספת ${chosen} שדות לטופס`}
         </Button>
         <Button variant="outline" onClick={onClose} className="min-h-11">אבנה ידנית</Button>
       </div>
