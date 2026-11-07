@@ -5,6 +5,7 @@
  *
  * Migrations: never hand-edit drizzle/*.sql. See docs/HANDOFF.md → "Database".
  */
+import type { StoreColumn, StoreValues } from "@/lib/stores/model";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -724,6 +725,36 @@ export const exportTemplates = pgTable("export_templates", {
   template: jsonb("template").$type<ExportTemplate>().notNull(),
   ...timestamps,
 });
+
+/**
+ * Data stores ("מאגרי נתונים"): tables an admin builds – columns of their own and rows – shared by all organizations.
+ * A form's dropdown lists a store's rows, and the chosen row fills other fields. See src/lib/stores/model.ts.
+ */
+export const dataStores = pgTable("data_stores", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  columns: jsonb("columns").$type<StoreColumn[]>().notNull().default([]),
+  /** The highest column number ever used, so a deleted column's key ("c3") is never given to a new one. */
+  lastColumnNumber: integer("last_column_number").notNull().default(0),
+  /** The column a dropdown shows; null = the first non-empty value. */
+  displayColumn: text("display_column"),
+  ...timestamps,
+});
+
+export const dataStoreRows = pgTable(
+  "data_store_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storeId: uuid("store_id")
+      .notNull()
+      .references(() => dataStores.id, { onDelete: "cascade" }),
+    values: jsonb("values").$type<StoreValues>().notNull().default({}),
+    order: integer("order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("data_store_rows_store_idx").on(t.storeId, t.order)],
+);
 
 /**
  * What admins did with the fields the system proposed from a PDF (kept or dropped, the name, type and id they chose).
