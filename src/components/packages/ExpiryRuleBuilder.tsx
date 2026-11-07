@@ -5,7 +5,7 @@ import { CalendarClock } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { describeExpiryRule, expiryFor, type ExpiryBase, type ExpiryRule, type ExpirySnap } from "@/lib/requests/expiry";
+import { DEFAULT_EXPIRY_DAYS, describeExpiryRule, expiryFor, type ExpiryBase, type ExpiryRule, type ExpirySnap } from "@/lib/requests/expiry";
 
 /** A date field of the form; `hint` says who fills it ("שלב 2 · העובד"). */
 export type DateFieldOption = { id: string; label: string; hint?: string; roles?: string[] };
@@ -163,7 +163,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
               </div>
             </div>
             {fromField && !dateFields.some((f) => f.id === baseField) && (
-              <p role="alert" className="text-sm text-destructive">שדה התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו תאריך אחר – עד אז נספרים 30 ימים.</p>
+              <p role="alert" className="text-sm text-destructive">שדה התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו תאריך אחר – כשאין בו תאריך תקין בזמן החישוב, נספרים {calc.fallbackDays ?? DEFAULT_EXPIRY_DAYS} ימים.</p>
             )}
             {calc.snap?.day === 31 && <p className="text-xs text-muted-foreground">31 = היום האחרון בחודש (28/29/30 בחודשים קצרים).</p>}
           </div>
