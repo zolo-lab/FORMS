@@ -3,7 +3,7 @@
  * (supplier name, company number…) in one list. The two live in two tables but share one namespace of internal
  * names. Lists of suppliers, work places… are built on these fields.
  */
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
 import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
@@ -102,7 +102,7 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
   }
   // A new internal name: the field and every list type that lists it change in one batch (one transaction), so a
   // failure leaves them all as they were, never a type pointing at a name the dictionary no longer has.
-  await db.batch([own, ...(await keyRenameInTypes(cur.key, key))]);
+  await db.batch([own, keyRenameInTypes(cur.key, key)]);
   return { ok: true, key };
 }
 
@@ -112,6 +112,11 @@ export async function deleteDictionaryEntry(id: string): Promise<{ ok: true } | 
   if (!cur) return { ok: true };
   const using = await typesUsingKey(cur.key);
   if (using.length) return { ok: false, reason: "inUse", types: using.map((t) => t.name) };
-  await db.delete(fieldDictionary).where(eq(fieldDictionary.id, id));
+  // The check again inside the delete itself: a type that took the field a moment ago keeps it.
+  const gone = await db
+    .delete(fieldDictionary)
+    .where(and(eq(fieldDictionary.id, id), sql`NOT EXISTS (SELECT 1 FROM ${schema.listTypes} WHERE ${schema.listTypes.fields} ? ${cur.key})`))
+    .returning({ id: fieldDictionary.id });
+  if (!gone.length) return { ok: false, reason: "inUse", types: (await typesUsingKey(cur.key)).map((t) => t.name) };
   return { ok: true };
 }

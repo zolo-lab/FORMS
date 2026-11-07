@@ -1,7 +1,7 @@
 /** List types ("סוגי רשימות"): the database side. Pure rules live in src/lib/fields/list-type.ts. */
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { cleanTypeFields, displayKeyOf, MAX_TYPE_FIELDS, renameKeyInType } from "@/lib/fields/list-type";
+import { cleanTypeFields, displayKeyOf, MAX_TYPE_FIELDS } from "@/lib/fields/list-type";
 
 const { listTypes } = schema;
 
@@ -73,13 +73,17 @@ export async function typesUsingKey(key: string): Promise<ListType[]> {
 }
 
 /**
- * The updates that make every type listing `from` list `to` instead – not run here, so the caller can run them in
+ * The update that makes every type listing `from` list `to` instead – one SQL statement that reads each row as it
+ * is when it runs (so a type edited a moment before keeps that edit), returned unrun so the caller can put it in
  * one batch with the dictionary's own update.
  */
-export async function keyRenameInTypes(from: string, to: string) {
-  const now = new Date();
-  return (await typesUsingKey(from)).flatMap((t) => {
-    const next = renameKeyInType(t, from, to);
-    return next ? [db.update(listTypes).set({ ...next, updatedAt: now }).where(eq(listTypes.id, t.id))] : [];
-  });
+export function keyRenameInTypes(from: string, to: string) {
+  return db
+    .update(listTypes)
+    .set({
+      fields: sql`(SELECT coalesce(jsonb_agg(CASE WHEN e = ${from} THEN ${to} ELSE e END ORDER BY i), '[]'::jsonb) FROM jsonb_array_elements_text(${listTypes.fields}) WITH ORDINALITY AS x(e, i))`,
+      displayKey: sql`CASE WHEN ${listTypes.displayKey} = ${from} THEN ${to} ELSE ${listTypes.displayKey} END`,
+      updatedAt: new Date(),
+    })
+    .where(sql`${listTypes.fields} ? ${from} OR ${listTypes.displayKey} = ${from}`);
 }
