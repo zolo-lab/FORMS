@@ -314,14 +314,27 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
   function putChosenAt(e: React.PointerEvent, pi: number): boolean {
     if (!placing && !boxCopy) return false;
     if (e.button !== 0) return true;
-    if (placing) {
-      drawAtPointer(placing, pi, e.clientX, e.clientY);
-      setPlacing(null);
-    } else {
-      const r = pageRefs.current[pi]!.getBoundingClientRect();
-      const at = screenBoxToPdf({ x: e.clientX - r.left, y: e.clientY - r.top, width: 0, height: 0 }, pages[pi]!.height, scale);
-      pasteBoxAt(pi, { x: at.x, y: at.y });
-    }
+    const put = (clientX: number, clientY: number) => {
+      if (placing) {
+        drawAtPointer(placing, pi, clientX, clientY);
+        setPlacing(null);
+      } else {
+        const r = pageRefs.current[pi]!.getBoundingClientRect();
+        const at = screenBoxToPdf({ x: clientX - r.left, y: clientY - r.top, width: 0, height: 0 }, pages[pi]!.height, scale);
+        pasteBoxAt(pi, { x: at.x, y: at.y });
+      }
+    };
+    if (e.pointerType === "mouse") { put(e.clientX, e.clientY); return true; }
+    // A finger or a pen may be starting to scroll: place only on a tap (lifted without moving), never on a swipe.
+    const x0 = e.clientX, y0 = e.clientY;
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) put(ev.clientX, ev.clientY);
+    };
+    const cancel = () => { window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", cancel); };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
     return true;
   }
 
