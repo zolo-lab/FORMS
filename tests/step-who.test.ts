@@ -105,3 +105,11 @@ describe("step names and fields", () => {
     expect(p).toEqual([[], []]);
   });
 });
+
+describe("group_any in the steps editor", () => {
+  it("round-trips through the draft", () => {
+    const step = stepFromDraft({ who: "group_any", role: "approver", groupId: "g1" }, 1);
+    expect(step).toEqual({ order: 2, role: "approver", action: "approve", assigneeKind: "group_any", groupId: "g1" });
+    expect(stepWhoOf(step)).toBe("group_any");
+  });
+});

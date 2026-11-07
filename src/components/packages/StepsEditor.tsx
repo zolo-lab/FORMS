@@ -23,6 +23,8 @@ const HINT: Partial<Record<StepWho, string>> = {
   employee: "האדם שהטופס עליו. את השם והמייל או הנייד שלו מזינים כששולחים את הטופס, והקישור נשלח אליו.",
   email: "יקבל קישור ותזכורות במייל, ונכנס עם קוד חד-פעמי שנשלח אליו.",
   from_field: "השלב נשלח למייל שמולא בשדה, ברגע שהשלב מתחיל.",
+  group_any: "כל חברי הקבוצה מקבלים קישור. הראשון שחותם סוגר את השלב, והקישורים של השאר מתבטלים.",
+  group_all: "כל חברי הקבוצה מקבלים קישור, והשלב נגמר רק כשכולם חתמו.",
 };
 
 /**
@@ -117,7 +119,7 @@ export function StepsEditor({
                     </Select>
                   </div>
                 )}
-                {s.who === "group_all" && (
+                {(s.who === "group_all" || s.who === "group_any") && (
                   <div className="space-y-1">
                     <Label htmlFor={`${id}-group`}>הקבוצה</Label>
                     <Select id={`${id}-group`} value={s.groupId ?? ""} onChange={(e) => patch(i, { groupId: e.target.value || undefined })}>
@@ -161,7 +163,7 @@ export function StepsEditor({
               ) : HINT[s.who] ? (
                 <p className="mt-2 text-xs text-muted-foreground">{HINT[s.who]}</p>
               ) : null}
-              {(s.who === "contact" || s.who === "group_all") && <p className="mt-1 text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
+              {(s.who === "contact" || s.who === "group_all" || s.who === "group_any") && <p className="mt-1 text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
             </li>
           );
         })}

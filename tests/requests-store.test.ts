@@ -67,6 +67,45 @@ describe.skipIf(!hasDb)("requests-store (dev DB)", () => {
     expect(r.events.map((e) => e.type)).toContain("request_completed");
   });
 
+  it("group_any: the first member to submit closes the step for the other, also when both submit at once", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq, inArray } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const [org] = await db.select().from(schema.organizations).limit(1);
+    const stamp = Date.now();
+    const people = await db
+      .insert(schema.contacts)
+      .values([{ name: `חבר א ${stamp}`, email: `a-${stamp}@example.test` }, { name: `חבר ב ${stamp}`, email: `b-${stamp}@example.test` }])
+      .returning();
+    cleanup.push(() => db.delete(schema.contacts).where(inArray(schema.contacts.id, people.map((p) => p.id))));
+    const [group] = await db.insert(schema.groups).values({ name: `test-any-${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.groups).where(eq(schema.groups.id, group!.id)));
+    await db.insert(schema.groupMembers).values(people.map((p) => ({ groupId: group!.id, contactId: p.id })));
+    const [pkg] = await db
+      .insert(schema.packageTemplates)
+      .values({ name: `test-pkg-any-${stamp}`, workflow: { steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_any", groupId: group!.id }] } })
+      .returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "ג", email: "e@example.test" } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    let r = (await store.getRequest(id))!;
+    expect(r.steps.map((s) => s.status)).toEqual(["active", "active"]);
+    expect(r.steps.every((s) => s.anyOf)).toBe(true);
+
+    const results = await Promise.allSettled(r.steps.map((s) => store.applyStepAction(s.id, { type: "submit", answers: {} })));
+    expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    const lost = results.find((x) => x.status === "rejected") as PromiseRejectedResult | undefined;
+    if (lost) expect(lost.reason).toBeInstanceOf(store.StepConflictError);
+
+    r = (await store.getRequest(id))!;
+    expect(r.steps.map((s) => s.status).sort()).toEqual(["completed", "skipped"]);
+    expect(r.request.status).toBe("completed");
+    const released = r.steps.find((s) => s.status === "skipped")!;
+    const tokens = await db.select().from(schema.stepTokens).where(eq(schema.stepTokens.stepId, released.id));
+    expect(tokens.every((t) => t.revokedAt !== null)).toBe(true);
+  });
+
   it("return sends the request back to the earlier step", async () => {
     const { db, schema } = await import("@/db");
     const { eq } = await import("drizzle-orm");

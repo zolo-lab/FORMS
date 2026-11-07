@@ -21,6 +21,8 @@ function who(s: WorkflowStep, contacts: { id: string; name: string }[]): string 
       return "לפי שדה בטופס";
     case "group_all":
       return "כל חברי קבוצה";
+    case "group_any":
+      return "אחד מחברי קבוצה";
     default:
       return [s.assignee?.name, s.assignee?.email, s.assignee?.phone].filter(Boolean).join(" · ") || "—";
   }

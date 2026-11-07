@@ -27,7 +27,7 @@ export function parseStepForm(g: Getter): WorkflowStep {
     ...(g.get("formOnly") === "on" || g.get("formOnly") === "1" ? { formOnly: true } : {}),
     ...(kind ? { assigneeKind: kind } : {}),
     ...(kind === "contact" && contactId ? { contactId } : {}),
-    ...(kind === "group_all" && groupId ? { groupId } : {}),
+    ...((kind === "group_all" || kind === "group_any") && groupId ? { groupId } : {}),
     ...(fromField && (!kind || kind === "from_field") ? { assigneeFromFieldId: fromField } : {}),
     ...(due ? { dueHours: Number(due) } : {}),
     ...(name || email || phone ? { assignee: { name, ...(email ? { email } : {}), ...(phone ? { phone } : {}) } } : {}),

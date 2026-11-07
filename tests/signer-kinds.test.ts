@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activateNext, planSteps } from "@/lib/workflow/engine";
+import { activateNext, completeStep, openStep, planSteps, requestStatus } from "@/lib/workflow/engine";
 import { assigneeKindOf, groupIdOfSource } from "@/lib/workflow/assignee";
 import { parseStepForm } from "@/lib/workflow/step-form";
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
@@ -92,5 +92,81 @@ describe("step form and validation", () => {
     expect(validateWorkflow({ steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_all" }] })[0]).toContain("קבוצה");
     expect(validateWorkflow({ steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "from_field" }] })[0]).toContain("השדה");
     expect(validateWorkflow({ steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_all", groupId: "g1" }] })).toEqual([]);
+  });
+});
+
+describe("group_any: one member of the group signs", () => {
+  const w: Workflow = {
+    steps: [
+      { order: 1, role: "employee", action: "fill_and_sign" },
+      { order: 2, role: "approver", action: "approve", assigneeKind: "group_any", groupId: "g1" },
+      { order: 3, role: "payroll", action: "approve", assigneeKind: "contact", contactId: "c1" },
+    ],
+  };
+
+  const atGroup = () => {
+    const planned = planSteps(w, {}, id, people);
+    const r1 = activateNext(planned, {});
+    return completeStep(r1.steps, r1.steps[0]!.id, {});
+  };
+
+  it("fans out to every member, marked anyOf, all active together", () => {
+    const r = atGroup();
+    const group = r.steps.filter((s) => s.order === 2);
+    expect(group.map((s) => s.assigneeName)).toEqual(["מזכירות ארצנו", "מזכירות גרעין"]);
+    expect(group.every((s) => s.anyOf && s.status === "active")).toBe(true);
+    expect(r.steps.find((s) => s.order === 1)!.anyOf).toBeUndefined();
+  });
+
+  it("the first member to finish closes the step for the others and the chain moves on", () => {
+    const r = atGroup();
+    const [a, b] = r.steps.filter((s) => s.order === 2);
+    const done = completeStep(r.steps, a!.id, {});
+    expect(done.steps.find((s) => s.id === a!.id)!.status).toBe("completed");
+    expect(done.steps.find((s) => s.id === b!.id)!.status).toBe("skipped");
+    expect(done.steps.find((s) => s.order === 3)!.status).toBe("active");
+    expect(done.events).toContainEqual({ type: "step_released", stepId: b!.id, payload: { byStepId: a!.id, by: "מזכירות ארצנו" } });
+  });
+
+  it("a member who already opened the link is released too", () => {
+    const r = atGroup();
+    const [a, b] = r.steps.filter((s) => s.order === 2);
+    const opened = openStep(r.steps, b!.id);
+    const done = completeStep(opened.steps, a!.id, {});
+    expect(done.steps.find((s) => s.id === b!.id)!.status).toBe("skipped");
+  });
+
+  it("the request completes when the last step is done", () => {
+    const r = atGroup();
+    const [a] = r.steps.filter((s) => s.order === 2);
+    const afterGroup = completeStep(r.steps, a!.id, {});
+    const last = afterGroup.steps.find((s) => s.order === 3)!;
+    const end = completeStep(afterGroup.steps, last.id, {});
+    expect(requestStatus(end.steps)).toBe("completed");
+    expect(end.events.some((e) => e.type === "request_completed")).toBe(true);
+  });
+
+  it("group_all is unchanged: every member must finish", () => {
+    const all: Workflow = { steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_all", groupId: "g1" }, { order: 2, role: "payroll", action: "approve", assigneeKind: "contact", contactId: "c1" }] };
+    const r = activateNext(planSteps(all, {}, id, people), {});
+    const [a, b] = r.steps.filter((s) => s.order === 1);
+    const one = completeStep(r.steps, a!.id, {});
+    expect(one.steps.find((s) => s.id === b!.id)!.status).toBe("active");
+    expect(one.steps.find((s) => s.order === 2)!.status).toBe("pending");
+  });
+
+  it("an empty group still yields one step without a person", () => {
+    const empty: Workflow = { steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_any", groupId: "nope" }] };
+    const steps = planSteps(empty, {}, id, people);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ anyOf: true });
+    expect(steps[0]!.assigneeName).toBeUndefined();
+  });
+
+  it("is validated and parsed like a group step", () => {
+    const fd = (o: Record<string, string>) => ({ get: (k: string) => (k in o ? o[k]! : null) });
+    expect(parseStepForm(fd({ order: "2", role: "approver", action: "approve", assigneeKind: "group_any", groupId: "g1" }))).toMatchObject({ assigneeKind: "group_any", groupId: "g1" });
+    expect(validateWorkflow({ steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_any" }] })[0]).toContain("קבוצה");
+    expect(validateWorkflow({ steps: [{ order: 1, role: "approver", action: "approve", assigneeKind: "group_any", groupId: "g1" }] })).toEqual([]);
   });
 });

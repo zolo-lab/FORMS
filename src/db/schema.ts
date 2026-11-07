@@ -485,6 +485,8 @@ export const signingSteps = pgTable(
     assigneePhone: text("assignee_phone"),
     assigneeFromFieldId: text("assignee_from_field_id"),
     skipIf: jsonb("skip_if").$type<Condition>(),
+    /** "One of the group" (group_any): the first member of this order to finish closes the others' steps. */
+    anyOf: boolean("any_of").notNull().default(false),
     status: stepStatus("status").notNull().default("pending"),
     channel: channel("channel").notNull().default("email"),
     otpRequired: boolean("otp_required").notNull().default(false),

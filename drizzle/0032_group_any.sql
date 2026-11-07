@@ -1,0 +1,1 @@
+ALTER TABLE "signing_steps" ADD COLUMN IF NOT EXISTS "any_of" boolean DEFAULT false NOT NULL;
