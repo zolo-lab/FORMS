@@ -144,6 +144,11 @@ export async function saveOrgFieldsAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!UUID.test(id)) redirect(PATH);
 
+  // An empty Hebrew name is refused before anything is written (the browser's `required` lets spaces through).
+  for (const [k, v] of formData.entries()) {
+    if (k.startsWith("label.") && typeof v === "string" && !v.trim()) redirect(`${PATH}?edit=${id}&error=orgFieldLabel`);
+  }
+
   // What the admin changed: `was.` carries the name the panel was opened with, so saving values from a panel
   // opened earlier cannot put an old name back for everyone.
   const wanted: { defId: string; from: string; to: string }[] = [];
@@ -195,7 +200,7 @@ export async function saveOrgFieldsAction(formData: FormData) {
   for (const [k, v] of formData.entries()) {
     if (!k.startsWith("label.") || typeof v !== "string") continue;
     const defId = k.slice("label.".length);
-    if (UUID.test(defId) && v.trim() && v !== formData.get(`wasLabel.${defId}`)) await updateOrgFieldDef(defId, { label: v });
+    if (UUID.test(defId) && v !== formData.get(`wasLabel.${defId}`)) await updateOrgFieldDef(defId, { label: v });
   }
 
   // The values come in under the names the panel was opened with, so a field renamed just now keeps its value.

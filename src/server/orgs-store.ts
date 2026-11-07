@@ -136,7 +136,13 @@ export async function listOrgFieldDefs(): Promise<OrgFieldDef[]> {
 export async function takenFieldKeys(): Promise<Set<string>> {
   const [orgKeys, dictKeys] = await Promise.all([
     db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs),
-    db.select({ key: schema.fieldDictionary.key }).from(schema.fieldDictionary).catch(() => [] as { key: string }[]),
+    // Only a missing table (a database the migration has not reached) counts as empty; any other error must stop
+    // the uniqueness check rather than let it pass silently.
+    db.select({ key: schema.fieldDictionary.key }).from(schema.fieldDictionary).catch((e: unknown) => {
+      const code = (e as { cause?: { code?: string }; code?: string }).cause?.code ?? (e as { code?: string }).code;
+      if (code === "42P01") return [] as { key: string }[];
+      throw e;
+    }),
   ]);
   return new Set([...orgKeys, ...dictKeys].map((r) => r.key));
 }
@@ -182,7 +188,9 @@ export async function renameOrgFieldDef(id: string, name: string): Promise<{ ok:
   if (!row) return { ok: false, reason: "missing" };
   const from = row.key;
   if (from === to) return { ok: true, forms: 0 };
-  if ((await takenFieldKeys()).has(to)) return { ok: false, reason: "exists" };
+  const taken = await takenFieldKeys();
+  taken.delete(from);
+  if ([...taken].some((k) => k.toLowerCase() === to.toLowerCase())) return { ok: false, reason: "exists" };
 
   // The forms first: a form left on the old key would silently stop filling, while a form already moved to the new
   // key simply finds nothing until the values follow a moment later.
