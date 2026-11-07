@@ -190,7 +190,11 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
     setStamps([...mapping.stamps, ...out]);
     return out;
   }
-  const [boxCopy, setBoxCopy] = useState<PdfStamp | null>(null);
+  const [boxCopy, setBoxCopyState] = useState<PdfStamp | null>(null);
+  // What is chosen right now, kept in step at once (a touch tap is decided when the finger lifts, maybe after Esc).
+  const chosenNow = useRef<{ placing: PaletteEntry | null; boxCopy: PdfStamp | null }>({ placing: null, boxCopy: null });
+  const setBoxCopy = (v: PdfStamp | null) => { chosenNow.current = { ...chosenNow.current, boxCopy: v }; setBoxCopyState(v); };
+  const setPlacing = (v: PaletteEntry | null) => { chosenNow.current = { ...chosenNow.current, placing: v }; setPlacingState(v); };
   const pasteBoxAt = (page: number, at: { x: number; y: number }) => {
     if (!boxCopy) return;
     const pg = pages[page]!;
@@ -297,11 +301,9 @@ export function PdfPlacement({ definition, source, pages, mapping, onMappingChan
    * Adding from the list of field types: the type is chosen first, then a click on the document puts it exactly there
    * (as with a pasted box). "במקום פנוי" keeps the old way, and is how the keyboard adds one. Esc cancels.
    */
-  const [placing, setPlacing] = useState<PaletteEntry | null>(null);
-  // For a tap on a touch screen, decided when the finger lifts: what is chosen by then, and the pointer waiting.
-  const chosenNow = useRef<{ placing: PaletteEntry | null; boxCopy: PdfStamp | null }>({ placing: null, boxCopy: null });
+  const [placing, setPlacingState] = useState<PaletteEntry | null>(null);
+  // The pointer of a touch tap waiting for its finger to lift.
   const pendingTap = useRef<number | null>(null);
-  useEffect(() => { chosenNow.current = { placing, boxCopy }; });
   /** The point under the pointer on page `pi`, as the top corner of a box of the entry's size (like a drop). */
   function drawAtPointer(entry: PaletteEntry, pi: number, clientX: number, clientY: number) {
     const pg = pages[pi]!;
