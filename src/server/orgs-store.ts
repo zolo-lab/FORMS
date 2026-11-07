@@ -4,7 +4,7 @@ import { projectSlug } from "@/lib/forms/public-link";
 import { labelKey } from "@/lib/forms/field-keys";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
 import { suggestKey } from "@/lib/fields/key";
-import { dictionaryType } from "@/lib/fields/types";
+import { dictionaryType, isOrgFieldType } from "@/lib/fields/types";
 import { renameOrgFieldInDefinition } from "@/lib/orgs/rename-prefill";
 import { ORG_FIELD_PREFIX } from "@/lib/forms/prefill";
 import { db, schema } from "@/db";
@@ -152,9 +152,11 @@ export async function takenFieldKeys(): Promise<Set<string>> {
  * People type the Hebrew name; the internal name (the key the forms point at) is made from it unless one is given,
  * and can be renamed later (`renameOrgFieldDef` moves the forms and the values with it).
  */
-export async function createOrgFieldDef(input: { label: string; key?: string; type?: string }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" }> {
+export async function createOrgFieldDef(input: { label: string; key?: string; type?: string }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" | "type" }> {
   const label = input.label.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!label) return { ok: false, reason: "label" };
+  // An organization's value is one line of text: a multi-line type is refused, never silently replaced.
+  if (input.type && !isOrgFieldType(input.type)) return { ok: false, reason: "type" };
   const taken = await takenFieldKeys();
   let key: string;
   if (input.key?.trim()) {
@@ -168,13 +170,18 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
   return { ok: true, key };
 }
 
-/** The Hebrew name and the type of an organization field (the internal name has its own rename). */
-export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string }) {
+/**
+ * The Hebrew name and the type of an organization field (the internal name has its own rename). A type left out
+ * (or empty) keeps the current one; a multi-line type is refused.
+ */
+export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string }): Promise<{ ok: true } | { ok: false; reason: "type" }> {
+  if (patch.type && !isOrgFieldType(patch.type)) return { ok: false, reason: "type" };
   const label = patch.label?.replace(/\s+/g, " ").trim().slice(0, 80);
   await db
     .update(organizationFieldDefs)
-    .set({ ...(label ? { label } : {}), ...(patch.type !== undefined ? { type: dictionaryType(patch.type, true) } : {}), updatedAt: new Date() })
+    .set({ ...(label ? { label } : {}), ...(patch.type ? { type: dictionaryType(patch.type, true) } : {}), updatedAt: new Date() })
     .where(eq(organizationFieldDefs.id, id));
+  return { ok: true };
 }
 
 /**

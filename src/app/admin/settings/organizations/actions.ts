@@ -130,7 +130,7 @@ export async function createOrgFieldAction(formData: FormData) {
   const org = String(formData.get("org") ?? "");
   const back = UUID.test(org) ? `${PATH}?edit=${org}` : PATH;
   const res = await createOrgFieldDef({ label: String(formData.get("label") ?? ""), key: String(formData.get("key") ?? ""), type: String(formData.get("type") ?? "") });
-  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : res.reason === "label" ? "orgFieldLabel" : "orgFieldKey"}`);
+  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : res.reason === "label" ? "orgFieldLabel" : res.reason === "type" ? "orgFieldType" : "orgFieldKey"}`);
   revalidatePath(PATH);
   redirect(`${back}&saved=orgfield`);
 }

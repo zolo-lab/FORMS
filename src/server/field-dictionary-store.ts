@@ -6,7 +6,7 @@
 import { asc, count, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
-import { dictionaryType, ORG_FIELD_TYPES, type DictionaryType } from "@/lib/fields/types";
+import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
 import { createOrgFieldDef, listOrgFieldDefs, renameOrgFieldDef, takenFieldKeys, updateOrgFieldDef } from "./orgs-store";
 
 const { fieldDictionary } = schema;
@@ -43,15 +43,10 @@ export async function listDictionary(): Promise<DictionaryEntry[]> {
 
 export type DictionaryResult = { ok: true; key: string } | { ok: false; reason: "label" | "key" | "exists" | "missing" | "type" };
 
-/** An organization's value is one line of text: a multi-line type is refused there, never silently replaced. */
-const orgTypeOk = (type: string | undefined) => !type || (ORG_FIELD_TYPES as readonly string[]).includes(type);
-
 /** A new field: the Hebrew name, a type, and an internal name (made from the name unless typed). */
 export async function createDictionaryEntry(input: { label: string; key?: string; type?: string; category: FieldCategory }): Promise<DictionaryResult> {
-  if (input.category === "org") {
-    if (!orgTypeOk(input.type)) return { ok: false, reason: "type" };
-    return createOrgFieldDef(input);
-  }
+  // The type check of an organization field lives in createOrgFieldDef, shared with the organizations screen.
+  if (input.category === "org") return createOrgFieldDef(input);
   const label = input.label.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!label) return { ok: false, reason: "label" };
   const taken = await takenFieldKeys();
@@ -75,7 +70,7 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
   const label = patch.label.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!label) return { ok: false, reason: "label" };
   if (category === "org") {
-    if (!orgTypeOk(patch.type)) return { ok: false, reason: "type" };
+    if (patch.type && !isOrgFieldType(patch.type)) return { ok: false, reason: "type" };
     const defs = await listOrgFieldDefs();
     const cur = defs.find((d) => d.id === id);
     if (!cur) return { ok: false, reason: "missing" };
@@ -83,7 +78,8 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
       const r = await renameOrgFieldDef(id, patch.key);
       if (!r.ok) return r;
     }
-    await updateOrgFieldDef(id, { label, type: patch.type });
+    const u = await updateOrgFieldDef(id, { label, type: patch.type });
+    if (!u.ok) return u;
     return { ok: true, key: patch.key.trim() || cur.key };
   }
   const [cur] = await db.select().from(fieldDictionary).where(eq(fieldDictionary.id, id));
@@ -97,7 +93,8 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
     if ([...taken].some((k) => k.toLowerCase() === typed.toLowerCase())) return { ok: false, reason: "exists" };
     key = typed;
   }
-  await db.update(fieldDictionary).set({ key, label, type: dictionaryType(patch.type), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
+  // A type left out keeps the current one.
+  await db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
   return { ok: true, key };
 }
 

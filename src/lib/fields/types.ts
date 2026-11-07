@@ -35,6 +35,8 @@ export const DICTIONARY_TYPE_LABELS: Record<DictionaryType, string> = {
   full_name: "שם מלא",
 };
 
+export const isOrgFieldType = (type: string) => (ORG_FIELD_TYPES as readonly string[]).includes(type);
+
 export function dictionaryType(raw: unknown, forOrg = false): DictionaryType {
   const list: readonly string[] = forOrg ? ORG_FIELD_TYPES : DICTIONARY_TYPES;
   return typeof raw === "string" && list.includes(raw) ? (raw as DictionaryType) : "short_text";
