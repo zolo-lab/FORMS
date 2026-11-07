@@ -282,6 +282,29 @@ export function expire(input: EngineStep[]): EngineResult {
   return { steps, events };
 }
 
+/**
+ * An expired request extended by an admin: the steps that expired while open start again (each gets a fresh link).
+ * A step that had sent the request back for a correction (`returnedToStepId`) waits again as "returned", not active.
+ */
+export function reopenExpired(input: EngineStep[]): EngineResult {
+  const steps = clone(input);
+  const events: EngineEvent[] = [];
+  const wasExpired = new Set(steps.filter((s) => s.status === "expired").map((s) => s.id));
+  for (const s of steps) {
+    if (s.status === "expired" && s.returnedToStepId && wasExpired.has(s.returnedToStepId)) {
+      s.status = "returned";
+      continue;
+    }
+    if (s.status === "expired") {
+      s.status = "active";
+      // A step that was being asked for a correction gets the request back with the reason, as when it was returned.
+      const waiting = input.find((t) => t.returnedToStepId === s.id && t.status === "expired" && t.returnReason);
+      events.push({ type: "step_activated", stepId: s.id, payload: { order: s.order, role: s.role, reactivated: true, ...(waiting ? { returnReason: waiting.returnReason } : {}) } });
+    }
+  }
+  return { steps, events };
+}
+
 export function cancelAll(input: EngineStep[], reason: string): EngineResult {
   const steps = clone(input);
   for (const s of steps) if (OPEN.includes(s.status)) s.status = "cancelled";

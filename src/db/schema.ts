@@ -501,6 +501,10 @@ export const signingSteps = pgTable(
     firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     dueAt: timestamp("due_at", { withTimezone: true }),
+    /** The step's own link deadline (from its route's `expiry`), set when it starts; used only when `ownLinkExpiry`. */
+    linkExpiresAt: timestamp("link_expires_at", { withTimezone: true }),
+    /** The step has its own expiry rule: `linkExpiresAt` (null = never) replaces the request's `expiresAt` for it. */
+    ownLinkExpiry: boolean("own_link_expiry").notNull().default(false),
     signerIp: text("signer_ip"),
     signerUserAgent: text("signer_user_agent"),
     ...timestamps,

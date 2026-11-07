@@ -1,0 +1,2 @@
+ALTER TABLE "signing_steps" ADD COLUMN IF NOT EXISTS "link_expires_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "signing_steps" ADD COLUMN IF NOT EXISTS "own_link_expiry" boolean DEFAULT false NOT NULL;

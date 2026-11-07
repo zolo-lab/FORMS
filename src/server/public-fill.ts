@@ -3,6 +3,7 @@
  * Nothing is created until it is sent; then a request is opened, the first step is submitted through the usual signing
  * code (same validation, signatures, PDF), and the next steps go on by themselves.
  */
+import { linkExpiryOf } from "@/lib/requests/expiry";
 import { routeFor } from "@/lib/workflow/assignee";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -112,7 +113,7 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
   if (!token) {
     const made = createToken();
     const [req] = await db.select({ expiresAt: schema.requests.expiresAt }).from(schema.requests).where(eq(schema.requests.id, requestId));
-    await db.insert(schema.stepTokens).values({ stepId: first.id, tokenHash: made.hash, expiresAt: req?.expiresAt ?? null });
+    await db.insert(schema.stepTokens).values({ stepId: first.id, tokenHash: made.hash, expiresAt: linkExpiryOf(first, { expiresAt: req?.expiresAt ?? null }) });
     token = made.token;
   }
   // Whoever filled the link is the one this step is for: no one-time code on top.

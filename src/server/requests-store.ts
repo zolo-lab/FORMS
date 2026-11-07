@@ -21,6 +21,7 @@ import {
   declineStep,
   delegate,
   expire,
+  reopenExpired,
   openStep,
   planSteps,
   requestStatus,
@@ -33,7 +34,7 @@ import {
 import { listContacts, peopleForWorkflow } from "./people-store";
 import { deliveryTargets, isPlaceholderEmail } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
-import { expiryFor, normalizeExpiryRule } from "@/lib/requests/expiry";
+import { expiryFor, linkExpiryOf, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 import { normalizeCampaign } from "@/lib/requests/campaign";
 import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
@@ -200,6 +201,8 @@ async function persist(
   result: EngineResult,
   actor: { type: "user" | "signer" | "system" | "api"; id?: string },
   stepPatch: Record<string, Partial<typeof signingSteps.$inferInsert>> = {},
+  /** Steps reopened by an extension: a step with its own rule gets `reopenDays` from now (the link and the e-mail agree). */
+  opts: { reopenDays?: number } = {},
 ) {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) throw new Error("request not found");
@@ -215,6 +218,36 @@ async function persist(
   const writes: Promise<unknown>[] = [];
 
   const activatedIds = new Set(result.events.filter((e) => e.type === "step_activated").map((e) => e.stepId!));
+  /**
+   * A step with its own link rule (from its route, or its organization's exception) gets its deadline now, counted
+   * from the moment it starts and the answers collected so far. Steps without one follow the request's expiry.
+   */
+  const linkByStep = new Map<string, { ownLinkExpiry: boolean; linkExpiresAt: Date | null }>();
+  if (activatedIds.size && pkg) {
+    // The steps this request actually runs: the chain set for it when it was created, else its package's route.
+    const override = (req.apiParams as { workflowOverride?: Workflow } | null)?.workflowOverride;
+    const routed = override ?? routeFor(pkg, req.organizationId, req.projectId);
+    const route = routed.steps;
+    // Per-organization exceptions belong to the general route; an organization's (or project's) own route, or a chain
+    // set for this request, is already specific, so only its steps' own rule counts there.
+    const exceptionsFor = !override && routed === pkg.workflow ? req.organizationId : null;
+    let answers: Answers | null = null;
+    for (const s of result.steps.filter((x) => activatedIds.has(x.id))) {
+      const w = route.find((x) => x.order === s.order && x.role === s.role);
+      const rule = w && s.role !== "requester" ? stepExpiryRule(w, exceptionsFor) : null;
+      if (!rule) { linkByStep.set(s.id, { ownLinkExpiry: false, linkExpiresAt: null }); continue; }
+      if (opts.reopenDays) {
+        linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: rule.kind === "none" ? null : new Date(now.getTime() + opts.reopenDays * 86_400_000) });
+        continue;
+      }
+      answers ??= await collectedAnswers(requestId);
+      linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: stepLinkDeadline(rule, answers, now) });
+    }
+  }
+  const linkExpiry = (id: string) => {
+    const own = linkByStep.get(id) ?? known.get(id);
+    return own ? linkExpiryOf(own, req) : req.expiresAt;
+  };
   const tokensToLink: { stepId: string; token: string }[] = [];
 
   for (const s of result.steps) {
@@ -229,7 +262,7 @@ async function persist(
       declineReason: s.declineReason ?? null,
       returnReason: s.returnReason ?? null,
       returnedToStepId: s.returnedToStepId ?? null,
-      ...(activatedIds.has(s.id) ? { activatedAt: now, dueAt: dueByStep.get(s.id) ?? null } : {}),
+      ...(activatedIds.has(s.id) ? { activatedAt: now, dueAt: dueByStep.get(s.id) ?? null, ...(linkByStep.get(s.id) ?? {}) } : {}),
       ...(s.status === "completed" && prev?.status !== "completed" ? { completedAt: now } : {}),
       ...patch,
     };
@@ -274,11 +307,14 @@ async function persist(
     const s = result.steps.find((x) => x.id === id)!;
     if (s.status !== "active" || s.role === "requester") continue;
     const { token, hash } = createToken();
-    await db.insert(stepTokens).values({ stepId: id, tokenHash: hash, expiresAt: req.expiresAt });
+    const linkEnds = linkExpiry(id);
+    await db.insert(stepTokens).values({ stepId: id, tokenHash: hash, expiresAt: linkEnds });
     tokensToLink.push({ stepId: id, token });
     const targets = deliveryTargets({ email: s.assigneeEmail, phone: s.assigneePhone });
     // A step that was sent back for correction gets the "returned" text with the reason, not the plain invitation.
-    const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason;
+    // (A correction reopened by an extension carries the reason on its activation.)
+    const returnReason = result.events.find((e) => e.type === "step_returned" && e.payload?.toStepId === id)?.payload?.reason
+      ?? result.events.find((e) => e.type === "step_activated" && e.stepId === id)?.payload?.returnReason;
     const key = returnReason ? "returned" : "step_invite";
     mail ??= await triggersFor(req.organizationId);
     if (targets.length && mail.trigger(key).enabled) {
@@ -287,7 +323,7 @@ async function persist(
         ...common,
         name: s.role === "employee" ? req.subjectName : (s.assigneeName ?? req.subjectName),
         link: `${appUrl()}/s/${token}`,
-        dueDate: req.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(req.expiresAt) : "",
+        dueDate: linkEnds ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(linkEnds) : "",
         reason: returnReason ? String(returnReason) : undefined,
       };
       const msg = mail.render(key, vars);
@@ -614,8 +650,11 @@ export async function expireOverdue(now = new Date()) {
   const open = await db.select().from(requests).where(inArray(requests.status, ["in_progress", "returned"]));
   let n = 0;
   for (const r of open) {
-    if (r.expiresAt && r.expiresAt < now) {
-      const before = await loadSteps(r.id);
+    const before = await loadSteps(r.id);
+    // Each open step by its own deadline when it has one, else by the request's.
+    const waiting = before.filter((s) => s.status === "active" || s.status === "in_progress");
+    const passed = waiting.length ? waiting.some((s) => { const at = linkExpiryOf(s, r); return !!at && at < now; }) : !!r.expiresAt && r.expiresAt < now;
+    if (passed) {
       await persist(r.id, before, expire(before.map(toEngine)), { type: "system" });
       n++;
     }
@@ -639,7 +678,7 @@ export async function issueLink(stepId: string): Promise<{ url: string } | null>
   if (!req) return null;
   await db.update(stepTokens).set({ revokedAt: new Date() }).where(eq(stepTokens.stepId, stepId));
   const { token, hash } = createToken();
-  await db.insert(stepTokens).values({ stepId, tokenHash: hash, expiresAt: req.expiresAt });
+  await db.insert(stepTokens).values({ stepId, tokenHash: hash, expiresAt: linkExpiryOf(step, req) });
   return { url: `${appUrl()}/s/${token}` };
 }
 
@@ -652,8 +691,25 @@ export async function extendExpiry(requestId: string, days: number, actor: { typ
   const base = req.expiresAt && req.expiresAt > new Date() ? req.expiresAt : new Date();
   const next = new Date(base.getTime() + days * 86_400_000);
   await db.update(requests).set({ expiresAt: next }).where(eq(requests.id, requestId));
-  const open = (await loadSteps(requestId)).filter((s) => s.status === "active" || s.status === "in_progress").map((s) => s.id);
+  // An expired request opens again: the steps that expired while open start over, each with a fresh link sent out.
+  const reopened = new Set<string>();
+  if (req.status === "expired") {
+    const before = await loadSteps(requestId);
+    const result = reopenExpired(before.map(toEngine));
+    for (const e of result.events) if (e.stepId) reopened.add(e.stepId);
+    if (reopened.size) await persist(requestId, before, result, actor, {}, { reopenDays: days });
+  }
+  const openSteps = (await loadSteps(requestId)).filter((s) => s.status === "active" || s.status === "in_progress");
+  const open = openSteps.filter((s) => !s.ownLinkExpiry && !reopened.has(s.id)).map((s) => s.id);
   if (open.length) await db.update(stepTokens).set({ expiresAt: next }).where(inArray(stepTokens.stepId, open));
+  // A step with its own deadline is pushed out by the same days (from its deadline, or from now once it passed).
+  // (A step that just reopened already got its date, from now, when its new link was issued.)
+  for (const s of openSteps.filter((x) => x.ownLinkExpiry && x.linkExpiresAt && !reopened.has(x.id))) {
+    const from = s.linkExpiresAt! > new Date() ? s.linkExpiresAt! : new Date();
+    const mine = new Date(from.getTime() + days * 86_400_000);
+    await db.update(signingSteps).set({ linkExpiresAt: mine }).where(eq(signingSteps.id, s.id));
+    await db.update(stepTokens).set({ expiresAt: mine }).where(eq(stepTokens.stepId, s.id));
+  }
   await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_extended", payload: { days, expiresAt: next.toISOString() } });
   return next;
 }
