@@ -31,6 +31,7 @@ const COND_LABEL: Record<CondKey, string> = {
   "today-beyond": "בעוד יותר ממספר ימים מהיום",
 };
 const condKey = (c: ExpiryCondition): CondKey => `${c.type}-${c.op}` as CondKey;
+const MAX_CASES = 10;
 const fmt = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric" });
 const num = (v: string, min: number, max: number) => Math.min(max, Math.max(min, Math.round(Number(v)) || 0));
 
@@ -242,9 +243,9 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
           </section>
 
           <div className="space-y-1">
-            <Button type="button" variant="outline" size="sm" disabled={dateFields.length === 0} onClick={addCase}><Plus className="size-4" aria-hidden />הוספת תנאי (אם…)</Button>
+            <Button type="button" variant="outline" size="sm" disabled={dateFields.length === 0 || cases.length >= MAX_CASES} onClick={addCase}><Plus className="size-4" aria-hidden />הוספת תנאי (אם…)</Button>
             <p className="text-xs text-muted-foreground">
-              {dateFields.length === 0
+              {cases.length >= MAX_CASES ? `אפשר עד ${MAX_CASES} תנאים.` : dateFields.length === 0
                 ? "תנאים בודקים שדה תאריך שממולא לפני השלב הזה – אין כרגע שדה כזה בטופס."
                 : "למשל: אם היום בחודש של תאריך התחילה עד 20 → ה-20 באותו חודש; אם התאריך כבר עבר → 7 ימים מתחילת השלב. התנאי הראשון שמתקיים קובע."}
             </p>

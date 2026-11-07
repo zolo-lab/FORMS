@@ -217,9 +217,11 @@ export function StepsEditor({
                   )}
                 </span>
                 {missing.length > 0 && (
-                  <button role="cell" type="button" onClick={() => setEditKey(s.key)} className="col-span-full flex flex-wrap gap-x-3 ps-[5.25rem] text-start text-sm text-destructive underline-offset-2 hover:underline">
-                    {missing.map((m) => <span key={m}>{m}</span>)}
-                  </button>
+                  <div role="cell" className="col-span-full ps-[5.25rem]">
+                    <button type="button" onClick={() => setEditKey(s.key)} className="flex flex-wrap gap-x-3 text-start text-sm text-destructive underline-offset-2 hover:underline">
+                      {missing.map((m) => <span key={m}>{m}</span>)}
+                    </button>
+                  </div>
                 )}
               </div>
             );
