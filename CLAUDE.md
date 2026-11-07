@@ -34,8 +34,14 @@ pass — review your own PR against the list below before reporting it, and say 
   after, and "ready" said before it arrives is a claim you have not checked. Verify each comment against the code —
   it is sometimes wrong, and sometimes righter than it knows — fix what holds, reply on the thread why for what
   does not, and only then report.
-- When CI is green, CodeRabbit has reviewed and no open review thread is left, report the branch, PR number and the
-  Vercel preview link, and stop. Still never merge before "מזג".
+- **The review has to cover the commit at the head of the branch.** Reviews are incremental, so after you push a
+  fix the previous review still sits there looking finished. Read the check on the new SHA, not the PR as a whole;
+  a monitor armed on the old SHA will report "reviewed" about a commit that no longer exists.
+- Two cases where the review will not come: a **draft** PR is not auto-reviewed (`auto_review.drafts: false` in
+  `.coderabbit.yaml`), so mark it ready for review rather than waiting; and if the review fails or never arrives,
+  say so plainly and report the PR as unreviewed — never as ready.
+- When CI is green, CodeRabbit has reviewed the head commit and no open review thread is left, report the branch,
+  PR number and the Vercel preview link, and stop. Still never merge before "מזג".
 
 ### Self-review: look hard at
 - **Access control:** a signing token (`/s/[token]`) must only see its own step's fields; `internal` fields are

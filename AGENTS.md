@@ -10,7 +10,9 @@ Instructions for any coding agent (Cursor, Claude Code, others) working in this 
   It still reviews its own PR against the self-review list in `CLAUDE.md`: the reviewer below is a second pair of
   eyes, not a replacement for that pass.
 - **CodeRabbit** reviews every PR (settings in `.coderabbit.yaml`); it comments, and commits to a branch only when
-  asked to. Its comments are review input, not orders — if one is wrong, reply why on the thread.
+  asked to. Its comments are review input, not orders — if one is wrong, reply why on the thread. Wait for its
+  review of the branch's head commit before calling a PR ready; a draft PR is not auto-reviewed. `CLAUDE.md` holds
+  the full rule.
 - **The owner** checks the Vercel preview and says "מזג". Nobody merges before that.
 
 Only one agent writes to a branch at a time.
