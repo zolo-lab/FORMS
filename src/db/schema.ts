@@ -58,7 +58,12 @@ export const notificationStatus = pgEnum("notification_status", ["queued", "sent
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  /** Drive folder this organization files into; empty = GOOGLE_DRIVE_ROOT_FOLDER_ID. Paths resolve below it. */
+  /**
+   * Dead since 5.11.2026, when Drive filing left "עיבוד טופס": nothing reads or writes it, and no
+   * organization ever held a value. Still declared on purpose — migrations run before the new build, so
+   * dropping it in the same deploy breaks the live deployment's organization reads (signing included)
+   * until the new one is promoted. Drop it in a deploy of its own.
+   */
   driveRootFolderId: text("drive_root_folder_id"),
   /** מספר עמותה, e.g. 580556306 */
   registrationNumber: text("registration_number").notNull().unique(),

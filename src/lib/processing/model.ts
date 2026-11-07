@@ -49,14 +49,12 @@ function normalizeDestination(v: unknown): Destination | null {
   const id = str(o.id);
   if (!id) return null;
   const items = Array.isArray(o.items) ? o.items.map(normalizeItem).filter((i): i is SendItem => !!i) : [];
-  if (o.kind === "drive") {
-    return { id, items, kind: "drive", ...(str(o.folderId) ? { folderId: str(o.folderId)! } : {}), ...(str(o.path) ? { path: str(o.path)! } : {}), ...(str(o.fileName) ? { fileName: str(o.fileName)! } : {}) };
-  }
+  // A destination stored before 5.11.2026 may still say "drive" or "webhook". Those are gone, and an
+  // unknown kind is dropped below rather than kept as a destination that nothing can carry out.
   if (o.kind === "email") {
     const to = Array.isArray(o.to) ? o.to.map(normalizeRef).filter((r): r is RecipientRef => !!r) : [];
     return { id, items, kind: "email", to, attach: o.attach !== false, ...(str(o.note) ? { note: str(o.note)! } : {}) };
   }
-  if (o.kind === "webhook" && str(o.webhookId)) return { id, items, kind: "webhook", webhookId: str(o.webhookId)! };
   return null;
 }
 
@@ -142,7 +140,6 @@ export interface ProcessingContext {
   /** E-mail fields of the form, with the step that fills them. */
   emailFields?: { id: string; label: string }[];
   users?: { id: string; label: string }[];
-  webhooks?: { id: string; label: string }[];
 }
 
 export function itemLabel(item: SendItem, ctx: ProcessingContext): string {
@@ -188,16 +185,12 @@ export function destinationProblems(d: Destination, ctx: ProcessingContext): str
       if (ref.kind === "user" && ctx.users && !ctx.users.some((u) => u.id === ref.userId)) out.push("אחד הנמענים מצביע על משתמש שנמחק");
     }
   }
-  if (d.kind === "drive" && !d.folderId && !d.path) out.push("לא נבחרה תיקייה ולא הוזן נתיב");
-  if (d.kind === "webhook" && ctx.webhooks && !ctx.webhooks.some((w) => w.id === d.webhookId)) out.push("ה-webhook שנבחר כבר לא קיים");
   return [...new Set(out)];
 }
 
 /** One line for the collapsed card: what goes where. */
 export function describeDestination(d: Destination, ctx: ProcessingContext): string {
   const what = d.items.length === 0 ? "—" : d.items.map((i) => itemLabel(i, ctx)).join(" + ");
-  if (d.kind === "drive") return `${what} → ${d.path || "תיקייה שנבחרה בדרייב"}`;
-  if (d.kind === "webhook") return `${what} → ${ctx.webhooks?.find((w) => w.id === d.webhookId)?.label ?? "webhook"}`;
   const to = d.to.length === 0 ? "—" : d.to.map((r) => recipientLabel(r, ctx)).join(", ");
   return `${what} → ${to}`;
 }
