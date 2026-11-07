@@ -157,7 +157,8 @@ export async function saveOrgFieldsAction(formData: FormData) {
   for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
   await setOrgFieldValues(id, values);
   revalidatePath(PATH);
-  redirect(`${PATH}?saved=orgfields`);
+  // The panel stays open: closing is the admin's own button next to this one.
+  redirect(`${PATH}?edit=${id}&saved=orgfields`);
 }
 
 
