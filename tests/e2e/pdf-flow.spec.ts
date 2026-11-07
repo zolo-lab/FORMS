@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { login, newFormFromPdf } from "./helpers";
+import { addOnPdf, login, newFormFromPdf } from "./helpers";
 
 // builder-plan.md §1.7 (route B): a form built from an existing PDF, iForms-style.
 // Needs the dev database; skipped when DATABASE_URL is not provided.
@@ -32,7 +32,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
 
   // Five elements from the palette; each lands on its own spot.
   for (const label of ["תשובה קצרה", "תעודת זהות", "תאריך", "הצהרה / אישור", "חתימה"]) {
-    await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
+    await addOnPdf(page, label);
   }
   const stamps = page.locator("[data-stamp]");
   await expect(stamps).toHaveCount(5);
