@@ -291,4 +291,14 @@ describe("reopenExpired (extending an expired request)", () => {
     expect(requestStatus(r.steps)).toBe("in_progress");
     expect(r.events).toEqual([{ type: "step_activated", stepId: "s2", payload: { order: 2, role: "employee", reactivated: true } }]);
   });
+  it("a request waiting on a correction reopens waiting on it again: only the corrected step is active", () => {
+    let { steps } = started(serial);
+    ({ steps } = completeStep(steps, "s1", {}));
+    ({ steps } = completeStep(steps, "s2", {}));
+    const back = returnTo(steps, "s3", "s1", "חסר תלוש").steps;
+    const r = reopenExpired(expire(back).steps);
+    expect(byOrder(r.steps)).toBe("1:active 2:pending 3:returned");
+    expect(requestStatus(r.steps)).toBe("returned");
+    expect(r.events.map((e) => e.stepId)).toEqual(["s1"]);
+  });
 });

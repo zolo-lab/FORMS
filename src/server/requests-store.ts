@@ -201,6 +201,8 @@ async function persist(
   result: EngineResult,
   actor: { type: "user" | "signer" | "system" | "api"; id?: string },
   stepPatch: Record<string, Partial<typeof signingSteps.$inferInsert>> = {},
+  /** Steps reopened by an extension: a step with its own rule gets `reopenDays` from now (the link and the e-mail agree). */
+  opts: { reopenDays?: number } = {},
 ) {
   const [req] = await db.select().from(requests).where(eq(requests.id, requestId));
   if (!req) throw new Error("request not found");
@@ -232,6 +234,10 @@ async function persist(
       const w = route.find((x) => x.order === s.order && x.role === s.role);
       const rule = w && s.role !== "requester" ? stepExpiryRule(w, exceptionsFor) : null;
       if (!rule) { linkByStep.set(s.id, { ownLinkExpiry: false, linkExpiresAt: null }); continue; }
+      if (opts.reopenDays) {
+        linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: rule.kind === "none" ? null : new Date(now.getTime() + opts.reopenDays * 86_400_000) });
+        continue;
+      }
       answers ??= await collectedAnswers(requestId);
       linkByStep.set(s.id, { ownLinkExpiry: true, linkExpiresAt: stepLinkDeadline(rule, answers, now) });
     }
@@ -687,15 +693,15 @@ export async function extendExpiry(requestId: string, days: number, actor: { typ
     const before = await loadSteps(requestId);
     const result = reopenExpired(before.map(toEngine));
     for (const e of result.events) if (e.stepId) reopened.add(e.stepId);
-    if (reopened.size) await persist(requestId, before, result, actor);
+    if (reopened.size) await persist(requestId, before, result, actor, {}, { reopenDays: days });
   }
   const openSteps = (await loadSteps(requestId)).filter((s) => s.status === "active" || s.status === "in_progress");
-  const open = openSteps.filter((s) => !s.ownLinkExpiry).map((s) => s.id);
+  const open = openSteps.filter((s) => !s.ownLinkExpiry && !reopened.has(s.id)).map((s) => s.id);
   if (open.length) await db.update(stepTokens).set({ expiresAt: next }).where(inArray(stepTokens.stepId, open));
   // A step with its own deadline is pushed out by the same days (from its deadline, or from now once it passed).
-  for (const s of openSteps.filter((x) => x.ownLinkExpiry && x.linkExpiresAt)) {
-    // A step that just reopened counts the days from now, not from the date its rule gave it again.
-    const from = !reopened.has(s.id) && s.linkExpiresAt! > new Date() ? s.linkExpiresAt! : new Date();
+  // (A step that just reopened already got its date, from now, when its new link was issued.)
+  for (const s of openSteps.filter((x) => x.ownLinkExpiry && x.linkExpiresAt && !reopened.has(x.id))) {
+    const from = s.linkExpiresAt! > new Date() ? s.linkExpiresAt! : new Date();
     const mine = new Date(from.getTime() + days * 86_400_000);
     await db.update(signingSteps).set({ linkExpiresAt: mine }).where(eq(signingSteps.id, s.id));
     await db.update(stepTokens).set({ expiresAt: mine }).where(eq(stepTokens.stepId, s.id));
