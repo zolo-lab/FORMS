@@ -36,12 +36,13 @@ describe.skipIf(!hasDb)("field dictionary (dev DB)", () => {
     expect(gRow).toMatchObject({ category: "general", type: "short_text" });
     expect(oRow).toMatchObject({ category: "org", type: "number", label: `תיק ${stamp}` });
 
-    // Rename keeps the Hebrew name; an organization field only takes single-line types.
+    // An organization field refuses multi-line types; a rename keeps the Hebrew name.
     const renamed = `renamed${stamp}`;
-    expect(await dict.updateDictionaryEntry(oRow.id, "org", { label: `תיק חדש ${stamp}`, type: "bank_account", key: renamed })).toEqual({ ok: true, key: renamed });
+    expect(await dict.updateDictionaryEntry(oRow.id, "org", { label: `תיק חדש ${stamp}`, type: "bank_account", key: renamed })).toEqual({ ok: false, reason: "type" });
+    expect(await dict.updateDictionaryEntry(oRow.id, "org", { label: `תיק חדש ${stamp}`, type: "phone", key: renamed })).toEqual({ ok: true, key: renamed });
     cleanup.push(() => db.delete(schema.organizationFieldDefs).where(eq(schema.organizationFieldDefs.key, renamed)));
     const after = (await dict.listDictionary()).find((f) => f.id === oRow.id)!;
-    expect(after).toMatchObject({ key: renamed, label: `תיק חדש ${stamp}`, type: "short_text" });
+    expect(after).toMatchObject({ key: renamed, label: `תיק חדש ${stamp}`, type: "phone" });
 
     await dict.deleteDictionaryEntry(gRow.id);
     expect((await dict.listDictionary()).some((f) => f.id === gRow.id)).toBe(false);
