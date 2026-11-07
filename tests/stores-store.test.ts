@@ -47,6 +47,15 @@ describe.skipIf(!hasDb)("stores-store (dev DB)", () => {
     data = (await store.getStore(id))!;
     expect(data.rows.map((r) => r.values)).toEqual([{ c1: "רק זה" }]);
 
+    // A repeated column name is refused, and nothing is written.
+    expect(await store.saveStore(id, { columns: [{ key: "c1", label: "שם" }, { key: "c2", label: "שם" }], rows: [] })).toMatchObject({ ok: false, reason: "columns" });
+    expect((await store.getStore(id))!.rows).toHaveLength(1);
+
+    // A column added in this save can be the display column, named by its label.
+    await store.saveStore(id, { columns: [{ key: "c1", label: "שם" }, { label: "קוד" }], displayColumn: null, displayLabel: "קוד", rows: [{ values: { c1: "רק זה" } }] });
+    data = (await store.getStore(id))!;
+    expect(data.store.displayColumn).toBe("c5");
+
     const listed = (await store.listStores()).find((s) => s.id === id);
     expect(listed?.rowCount).toBe(1);
 

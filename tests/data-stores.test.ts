@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanRows, cleanValues, exportRows, highestKey, nextColumnKey, normalizeColumns, planImport, rowLabel, type StoreColumn } from "@/lib/stores/model";
+import { cleanRows, cleanValues, columnsProblem, exportRows, highestKey, nextColumnKey, normalizeColumns, planImport, rowLabel, type StoreColumn } from "@/lib/stores/model";
 
 const cols: StoreColumn[] = [
   { key: "c1", label: "שם ספק" },
@@ -83,5 +83,14 @@ describe("import and export", () => {
     const sheet = exportRows(cols, [{ values: { c1: "ספק א", c4: "הרצל 1" } }]);
     expect(sheet).toEqual([["שם ספק", 'ח"פ', "כתובת"], ["ספק א", "", "הרצל 1"]]);
     expect(planImport(sheet, cols).rows).toEqual([{ c1: "ספק א", c4: "הרצל 1" }]);
+  });
+});
+
+describe("columnsProblem", () => {
+  it("refuses empty and repeated names instead of dropping the column", () => {
+    expect(columnsProblem([{ label: "א" }, { label: " " }])).toBe("לכל עמודה צריך שם");
+    expect(columnsProblem([{ label: "שם" }, { label: " שם " }])).toContain("שתי עמודות באותו שם");
+    expect(columnsProblem([])).toBe("צריך לפחות עמודה אחת");
+    expect(columnsProblem([{ label: "א" }, { label: "ב" }])).toBeNull();
   });
 });

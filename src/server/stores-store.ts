@@ -1,7 +1,7 @@
 /** Data stores ("מאגרי נתונים"): the database side. Pure rules live in src/lib/stores/model.ts. */
-import { asc, count, eq, inArray } from "drizzle-orm";
+import { asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { cleanRows, highestKey, normalizeColumns, type StoreColumn, type StoreValues } from "@/lib/stores/model";
+import { cleanRows, columnsProblem, highestKey, MAX_ROWS, normalizeColumns, type StoreColumn, type StoreValues } from "@/lib/stores/model";
 
 const { dataStores, dataStoreRows } = schema;
 
@@ -59,17 +59,23 @@ export async function renameStore(id: string, name: string, description: string)
  */
 export async function saveStore(
   id: string,
-  input: { columns: { key?: unknown; label?: unknown }[]; displayColumn?: string | null; rows: unknown },
-): Promise<{ ok: true } | { ok: false; reason: "notFound" | "noColumns" }> {
+  input: { columns: { key?: unknown; label?: unknown }[]; displayColumn?: string | null; displayLabel?: string | null; rows: unknown },
+): Promise<{ ok: true } | { ok: false; reason: "notFound" | "columns" | "tooMany"; message?: string }> {
   const [store] = await db.select().from(dataStores).where(eq(dataStores.id, id));
   if (!store) return { ok: false, reason: "notFound" };
+  // An empty or repeated name is refused, never silently dropped with its values.
+  const problem = columnsProblem(input.columns);
+  if (problem) return { ok: false, reason: "columns", message: problem };
+  if (Array.isArray(input.rows) && input.rows.length > MAX_ROWS) return { ok: false, reason: "tooMany" };
   const columns = normalizeColumns(input.columns, store.columns, store.lastColumnNumber);
-  if (!columns.length) return { ok: false, reason: "noColumns" };
-  const displayColumn = columns.some((c) => c.key === input.displayColumn) ? input.displayColumn! : columns[0]!.key;
+  // A column added in this save has no key yet: the editor names its display column by label then.
+  const display = columns.find((c) => c.key === input.displayColumn) ?? columns.find((c) => c.label === input.displayLabel?.trim());
+  const displayColumn = display?.key ?? columns[0]!.key;
   const rows = cleanRows(input.rows, columns);
 
-  const existing = await db.select({ id: dataStoreRows.id }).from(dataStoreRows).where(eq(dataStoreRows.storeId, id));
+  const existing = await db.select({ id: dataStoreRows.id, values: dataStoreRows.values, order: dataStoreRows.order }).from(dataStoreRows).where(eq(dataStoreRows.storeId, id));
   const existingIds = new Set(existing.map((r) => r.id));
+  const before = new Map(existing.map((r) => [r.id, r]));
   const keep = new Set(rows.filter((r) => r.id && existingIds.has(r.id)).map((r) => r.id!));
   const now = new Date();
   // No transactions over neon-http: write the store first, then the rows; a failure halfway leaves rows that the
@@ -79,22 +85,34 @@ export async function saveStore(
   if (gone.length) await db.delete(dataStoreRows).where(inArray(dataStoreRows.id, gone));
   const writes: Promise<unknown>[] = [];
   const inserts: (typeof dataStoreRows.$inferInsert)[] = [];
+  const same = (a: StoreValues, b: StoreValues) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
   rows.forEach((r, order) => {
-    if (r.id && keep.has(r.id)) writes.push(db.update(dataStoreRows).set({ values: r.values, order, updatedAt: now }).where(eq(dataStoreRows.id, r.id)));
-    else inserts.push({ storeId: id, values: r.values, order });
+    if (r.id && keep.has(r.id)) {
+      // Only rows that actually changed are written.
+      const old = before.get(r.id)!;
+      if (old.order !== order || !same(old.values, r.values)) writes.push(db.update(dataStoreRows).set({ values: r.values, order, updatedAt: now }).where(eq(dataStoreRows.id, r.id)));
+    } else inserts.push({ storeId: id, values: r.values, order });
   });
-  await Promise.all(writes);
+  for (let i = 0; i < writes.length; i += 50) await Promise.all(writes.slice(i, i + 50));
   for (let i = 0; i < inserts.length; i += 500) await db.insert(dataStoreRows).values(inserts.slice(i, i + 500));
   return { ok: true };
 }
 
-/** Rows from a sheet, added after the existing ones or replacing them all. */
+/**
+ * Rows from a sheet, added after the existing ones or replacing them all, up to MAX_ROWS in the store. Returns how
+ * many were written. On replace, the new rows are written first and the old ones deleted after (no transactions
+ * over neon-http: a failure halfway leaves extra rows, never an empty store).
+ */
 export async function importRows(id: string, rows: StoreValues[], mode: "append" | "replace"): Promise<number> {
-  const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(dataStoreRows).where(eq(dataStoreRows.storeId, id));
-  const start = mode === "replace" ? 0 : Number(n);
-  if (mode === "replace") await db.delete(dataStoreRows).where(eq(dataStoreRows.storeId, id));
-  const values = rows.map((v, i) => ({ storeId: id, values: v, order: start + i }));
+  const old = await db.select({ id: dataStoreRows.id }).from(dataStoreRows).where(eq(dataStoreRows.storeId, id));
+  const [{ top } = { top: null }] = await db.select({ top: max(dataStoreRows.order) }).from(dataStoreRows).where(eq(dataStoreRows.storeId, id));
+  const room = mode === "replace" ? MAX_ROWS : Math.max(0, MAX_ROWS - old.length);
+  const start = mode === "replace" ? 0 : (top ?? -1) + 1;
+  const values = rows.slice(0, room).map((v, i) => ({ storeId: id, values: v, order: start + i }));
   for (let i = 0; i < values.length; i += 500) await db.insert(dataStoreRows).values(values.slice(i, i + 500));
+  if (mode === "replace" && old.length) await db.delete(dataStoreRows).where(inArray(dataStoreRows.id, old.map((r) => r.id)));
+  // The editor remounts when the store changes: touching it makes the page show the imported rows.
+  await db.update(dataStores).set({ updatedAt: new Date() }).where(eq(dataStores.id, id));
   return values.length;
 }
 

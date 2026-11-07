@@ -15,6 +15,9 @@ import { DeleteStoreButton } from "./DeleteStoreButton";
 
 export const dynamic = "force-dynamic";
 
+const editorKey = (columns: { key: string; label: string }[], rows: { id: string; updatedAt: Date }[]) =>
+  `${columns.map((c) => `${c.key}:${c.label}`).join("|")}#${rows.length}#${rows.reduce((m, r) => Math.max(m, r.updatedAt.getTime()), 0)}#${rows.map((r) => r.id.slice(0, 8)).join("")}`;
+
 const ERRORS: Record<string, string> = {
   file: "בחרו קובץ אקסל או CSV",
   big: "הקובץ גדול מדי (עד 5MB)",
@@ -22,8 +25,8 @@ const ERRORS: Record<string, string> = {
   empty: "לא נמצאו שורות: שורת הכותרת בקובץ צריכה להכיל את שמות העמודות של המאגר.",
 };
 
-export default async function StorePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string; n?: string; skipped?: string }> }) {
-  const [{ id }, { error, saved, n, skipped }] = await Promise.all([params, searchParams]);
+export default async function StorePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string; n?: string; skipped?: string; cut?: string }> }) {
+  const [{ id }, { error, saved, n, skipped, cut }] = await Promise.all([params, searchParams]);
   const data = await getStore(id);
   if (!data) notFound();
   const { store, rows } = data;
@@ -43,6 +46,7 @@ export default async function StorePage({ params, searchParams }: { params: Prom
       {saved === "import" && (
         <p role="status" className="text-sm text-success">
           יובאו {n} שורות.{skipped && <span className="text-muted-foreground"> עמודות בקובץ שלא נקלטו: {skipped}</span>}
+          {cut && <span className="text-destructive"> {cut} שורות לא יובאו: במאגר אפשר עד 2,000 שורות.</span>}
         </p>
       )}
       {error && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{ERRORS[error] ?? "שגיאה"}</p>}
@@ -67,7 +71,7 @@ export default async function StorePage({ params, searchParams }: { params: Prom
         <Card className="space-y-3 p-4">
           <h2 className="font-semibold">ייבוא מאקסל</h2>
           <p className="text-sm text-muted-foreground">השורה הראשונה בקובץ היא שמות העמודות, והן מותאמות לפי השם. אפשר להוריד את הקובץ בייצוא, למלא ולייבא בחזרה.</p>
-          <form action={importStoreAction} className="space-y-3">
+          <form action={importStoreAction} data-store-form="import" className="space-y-3">
             <input type="hidden" name="id" value={store.id} />
             <div className="space-y-1">
               <Label htmlFor="s-file">קובץ (xlsx או CSV)</Label>
@@ -84,8 +88,9 @@ export default async function StorePage({ params, searchParams }: { params: Prom
         </Card>
       </div>
 
-      {/* Remounted after every save, so new rows get the ids the server gave them. */}
-      <StoreEditor key={store.updatedAt.toISOString()} storeId={store.id} columns={store.columns} displayColumn={store.displayColumn} rows={rows.map((r) => ({ id: r.id, values: r.values }))} />
+      {/* Remounted when the columns or rows change (a save, an import), so new rows get the ids the server gave
+          them; renaming the store does not touch them and so keeps unsaved edits. */}
+      <StoreEditor key={editorKey(store.columns, rows)} storeId={store.id} columns={store.columns} displayColumn={store.displayColumn} rows={rows.map((r) => ({ id: r.id, values: r.values }))} />
 
       <section aria-labelledby="danger-title" className="space-y-2 border-t py-6">
         <h2 id="danger-title" className="font-semibold">מחיקת המאגר</h2>

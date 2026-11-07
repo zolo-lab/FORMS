@@ -49,6 +49,20 @@ export function normalizeColumns(input: { key?: unknown; label?: unknown }[], ex
   return out;
 }
 
+/**
+ * Why the editor's columns cannot be saved as they are, or null: an empty or repeated name would silently drop a
+ * column (and its values), so it is refused instead.
+ */
+export function columnsProblem(input: { label?: unknown }[]): string | null {
+  const labels = input.map((c) => clean(c.label, MAX_LABEL));
+  if (!labels.length) return "צריך לפחות עמודה אחת";
+  if (labels.some((l) => !l)) return "לכל עמודה צריך שם";
+  const dup = labels.find((l, i) => labels.indexOf(l) !== i);
+  if (dup) return `שתי עמודות באותו שם: ${dup}`;
+  if (labels.length > MAX_COLUMNS) return `עד ${MAX_COLUMNS} עמודות`;
+  return null;
+}
+
 /** The highest column number a store has ever used, so a deleted column's key is never given to a new one. */
 export const highestKey = (columns: StoreColumn[], previous = 0) => Math.max(previous, ...columns.map((c) => Number(/^c(\d+)$/.exec(c.key)?.[1] ?? 0)));
 

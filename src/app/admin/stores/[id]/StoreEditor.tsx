@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Radio } from "@/components/ui/checkbox";
-import { MAX_COLUMNS, MAX_ROWS, type StoreColumn } from "@/lib/stores/model";
+import { columnsProblem, MAX_COLUMNS, MAX_ROWS, type StoreColumn } from "@/lib/stores/model";
 import { saveStoreAction } from "../actions";
 
 type Col = { uid: string; key?: string; label: string };
@@ -32,12 +32,27 @@ export function StoreEditor({ storeId, columns, displayColumn, rows }: { storeId
   const [status, setStatus] = useState<{ kind: "idle" | "saved" } | { kind: "error"; text: string }>({ kind: "idle" });
   const [pending, start] = useTransition();
 
-  // Leaving with unsaved changes asks first.
+  // Leaving with unsaved changes asks first: closing the tab, a link inside the app, or another form on the page
+  // (an import reloads the table from the database).
   useEffect(() => {
     if (!dirty) return;
+    const message = "יש שינויים במאגר שלא נשמרו. לצאת בלי לשמור?";
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    const click = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.("a[href]");
+      if (a && !(a as HTMLAnchorElement).download && !confirm(message)) { e.preventDefault(); e.stopPropagation(); }
+    };
+    const submit = (e: SubmitEvent) => {
+      if ((e.target as HTMLFormElement).dataset.storeForm === "import" && !confirm(message)) { e.preventDefault(); e.stopPropagation(); }
+    };
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    document.addEventListener("click", click, true);
+    document.addEventListener("submit", submit, true);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      document.removeEventListener("click", click, true);
+      document.removeEventListener("submit", submit, true);
+    };
   }, [dirty]);
 
   const touch = () => { setDirty(true); setStatus({ kind: "idle" }); };
@@ -54,16 +69,27 @@ export function StoreEditor({ storeId, columns, displayColumn, rows }: { storeId
     touch();
   };
 
+  const problem = columnsProblem(cols);
   const save = () =>
     start(async () => {
+      if (problem) { setStatus({ kind: "error", text: problem }); return; }
       // New columns are sent without a key: the server gives them one. They have no values yet (the table shows
       // them after the save).
       const sentCols = cols.map((c) => ({ key: c.key, label: c.label }));
-      const res = await saveStoreAction(storeId, {
-        columns: sentCols,
-        displayColumn: cols.find((c) => colId(c) === display)?.key ?? null,
-        rows: data.map((r) => ({ id: r.id, values: Object.fromEntries(cols.filter((c) => c.key).map((c) => [c.key!, r.values[c.key!] ?? ""])) })),
-      });
+      const shownCol = cols.find((c) => colId(c) === display);
+      let res: Awaited<ReturnType<typeof saveStoreAction>>;
+      try {
+        res = await saveStoreAction(storeId, {
+          columns: sentCols,
+          displayColumn: shownCol?.key ?? null,
+          displayLabel: shownCol?.label ?? null,
+          rows: data.map((r) => ({ id: r.id, values: Object.fromEntries(cols.filter((c) => c.key).map((c) => [c.key!, r.values[c.key!] ?? ""])) })),
+        });
+      } catch {
+        // The edits stay in the editor: nothing is lost, the person can try again.
+        setStatus({ kind: "error", text: "השמירה נכשלה. השינויים עדיין כאן – נסו שוב." });
+        return;
+      }
       if (!res.ok) { setStatus({ kind: "error", text: res.error }); return; }
       setDirty(false);
       setStatus({ kind: "saved" });

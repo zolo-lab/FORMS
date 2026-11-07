@@ -33,11 +33,11 @@ export async function renameStoreAction(fd: FormData) {
 
 export type SaveStoreResult = { ok: true } | { ok: false; error: string };
 
-export async function saveStoreAction(id: string, input: { columns: { key?: string; label: string }[]; displayColumn: string | null; rows: { id?: string; values: Record<string, string> }[] }): Promise<SaveStoreResult> {
+export async function saveStoreAction(id: string, input: { columns: { key?: string; label: string }[]; displayColumn: string | null; displayLabel?: string | null; rows: { id?: string; values: Record<string, string> }[] }): Promise<SaveStoreResult> {
   await requireGrant("manageForms");
   if (!UUID.test(id) || !input || !Array.isArray(input.columns) || !Array.isArray(input.rows)) return { ok: false, error: "קלט לא תקין" };
   const r = await saveStore(id, input);
-  if (!r.ok) return { ok: false, error: r.reason === "noColumns" ? "צריך לפחות עמודה אחת עם שם" : "המאגר לא נמצא" };
+  if (!r.ok) return { ok: false, error: r.reason === "columns" ? r.message! : r.reason === "tooMany" ? "יותר מדי שורות" : "המאגר לא נמצא" };
   revalidatePath(`${PATH}/${id}`);
   revalidatePath(PATH);
   return { ok: true };
@@ -66,7 +66,8 @@ export async function importStoreAction(fd: FormData) {
   const n = await importRows(id, plan.rows, fd.get("mode") === "replace" ? "replace" : "append");
   revalidatePath(`${PATH}/${id}`);
   const skipped = plan.unknownHeaders.length ? `&skipped=${encodeURIComponent(plan.unknownHeaders.join(", "))}` : "";
-  redirect(`${PATH}/${id}?saved=import&n=${n}${skipped}`);
+  const cut = n < plan.rows.length ? `&cut=${plan.rows.length - n}` : "";
+  redirect(`${PATH}/${id}?saved=import&n=${n}${skipped}${cut}`);
 }
 
 export async function deleteStoreAction(fd: FormData) {
