@@ -1,3 +1,4 @@
+import type { ExpiryRule } from "@/lib/requests/expiry";
 /**
  * Shared workflow types: used by the DB schema (jsonb columns), the engine and the UI.
  * Pure types only — no runtime imports, so schema.ts can import this safely.
@@ -81,6 +82,12 @@ export interface WorkflowStep {
   /** Skip the step when this condition holds on the answers collected so far. */
   skipIf?: Condition;
   dueHours?: number;
+  /**
+   * When this step's link stops working (counted from when the step starts). Missing = the request's own expiry
+   * (the form's "תוקף הקישורים"). `expiryByOrg` replaces it for a given organization.
+   */
+  expiry?: ExpiryRule;
+  expiryByOrg?: Record<string, ExpiryRule>;
   /** Fixed assignee, when the step is always the same person (e.g. payroll). */
   assignee?: { name: string; email?: string; phone?: string };
 }

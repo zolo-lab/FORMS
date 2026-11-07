@@ -10,6 +10,7 @@ import {
   planSteps,
   requestStatus,
   returnTo,
+  reopenExpired,
   skipStep,
   type EngineStep,
 } from "@/lib/workflow/engine";
@@ -276,5 +277,30 @@ describe("skipStep (admin moves the request on)", () => {
   it("only a waiting step can be skipped", () => {
     const { steps } = started(serial);
     expect(() => skipStep(steps, "s2", {})).toThrow();
+  });
+});
+
+describe("reopenExpired (extending an expired request)", () => {
+  it("the steps that expired while open start again; done steps stay done", () => {
+    let { steps } = started(serial);
+    ({ steps } = completeStep(steps, "s1", {}));
+    const expired = expire(steps).steps;
+    expect(requestStatus(expired)).toBe("expired");
+    const r = reopenExpired(expired);
+    expect(byOrder(r.steps)).toBe("1:completed 2:active 3:pending");
+    expect(requestStatus(r.steps)).toBe("in_progress");
+    expect(r.events).toEqual([{ type: "step_activated", stepId: "s2", payload: { order: 2, role: "employee", reactivated: true } }]);
+  });
+  it("a request waiting on a correction reopens waiting on it again: only the corrected step is active", () => {
+    let { steps } = started(serial);
+    ({ steps } = completeStep(steps, "s1", {}));
+    ({ steps } = completeStep(steps, "s2", {}));
+    const back = returnTo(steps, "s3", "s1", "חסר תלוש").steps;
+    const r = reopenExpired(expire(back).steps);
+    expect(byOrder(r.steps)).toBe("1:active 2:pending 3:returned");
+    expect(requestStatus(r.steps)).toBe("returned");
+    expect(r.events.map((e) => e.stepId)).toEqual(["s1"]);
+    // The corrector is asked again with the reason, not with a plain invitation.
+    expect(r.events[0]!.payload).toMatchObject({ reactivated: true, returnReason: "חסר תלוש" });
   });
 });

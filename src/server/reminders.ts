@@ -1,4 +1,5 @@
 /** Cron job: nudge the people whose step has been waiting (policy per organization). */
+import { linkExpiryOf } from "@/lib/requests/expiry";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createToken } from "@/lib/auth/tokens";
@@ -54,13 +55,14 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
 
     // A second valid link, so a reminder never kills a tab the person already has open.
     const { token, hash } = createToken();
-    await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
+    const linkEnds = linkExpiryOf(step, request);
+    await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: linkEnds });
     const msg = mail.render("reminder", {
       ...(await requestVars(request)),
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,
-      dueDate: request.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(request.expiresAt) : "",
+      dueDate: linkEnds ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(linkEnds) : "",
     });
     for (const t of targets) {
       await enqueue({
@@ -113,13 +115,14 @@ export async function remindNow(requestId: string, actor: { id?: string }, now =
     const targets = deliveryTargets({ email: step.assigneeEmail, phone: step.assigneePhone });
     if (!targets.length) continue;
     const { token, hash } = createToken();
-    await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: request.expiresAt });
+    const linkEnds = linkExpiryOf(step, request);
+    await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: linkEnds });
     const msg = mail.render("reminder", {
       ...(await requestVars(request)),
       name: step.role === "employee" ? request.subjectName : (step.assigneeName ?? request.subjectName),
       org: org.name,
       link: `${appUrl()}/s/${token}`,
-      dueDate: request.expiresAt ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(request.expiresAt) : "",
+      dueDate: linkEnds ? new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem" }).format(linkEnds) : "",
     });
     for (const t of targets) {
       await enqueue({ organizationId: org.id, requestId, stepId: step.id, channel: t.channel, to: t.to, templateKey: "reminder", subject: t.channel === "email" ? msg.subject : "", body: t.channel === "email" ? msg.text : msg.body, html: t.channel === "email" ? msg.html : null });
