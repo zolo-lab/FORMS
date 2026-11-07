@@ -63,6 +63,20 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
     expect((await store.getRequest(a.id))!.request.status).toBe("expired");
     expect((await store.getRequest(b.id))!.request.status).toBe("in_progress");
 
+    // Extending it opens it again: the step is active with a fresh link that lasts the extension from now.
+    const t0 = Date.now();
+    await store.extendExpiry(a.id, 5);
+    const again = (await store.getRequest(a.id))!;
+    expect(again.request.status).toBe("in_progress");
+    const [stepNow] = await db.select().from(schema.signingSteps).where(eq(schema.signingSteps.id, a.step.id));
+    expect(stepNow!.status).toBe("active");
+    const ends = stepNow!.linkExpiresAt!.getTime();
+    expect(ends).toBeGreaterThanOrEqual(t0 + 5 * 86_400_000);
+    expect(ends).toBeLessThan(t0 + 5 * 86_400_000 + 120_000);
+    const live = (await db.select().from(schema.stepTokens).where(eq(schema.stepTokens.stepId, a.step.id))).filter((t) => !t.revokedAt);
+    expect(live.length).toBeGreaterThan(0);
+    expect(live.every((t) => t.expiresAt?.getTime() === ends)).toBe(true);
+
     // An organization's own route: only its steps' own rule counts, never a leftover exception.
     await db.update(schema.packageTemplates).set({
       orgWorkflows: {

@@ -19,9 +19,11 @@ const strip = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = {
  * Editable copies of steps. A route of its own already belongs to one organization, so per-organization link-expiry
  * exceptions have no meaning in it (and are not shown here): they are dropped, and the step's own rule is what applies.
  */
-const fresh = (drafts: StepDraft[]): EditorDraft[] =>
+const fresh = (drafts: StepDraft[], forOrg?: string): EditorDraft[] =>
   drafts.map((d) => {
-    const copy: EditorDraft = { ...d, key: crypto.randomUUID(), origRole: d.role };
+    // Copied for one organization: its exception (if it had one) becomes the step's own rule, so nothing changes for it.
+    const own = (forOrg && d.expiryByOrg?.[forOrg]) || d.expiry;
+    const copy: EditorDraft = { ...d, key: crypto.randomUUID(), origRole: d.role, ...(own ? { expiry: own } : {}) };
     delete copy.expiryByOrg;
     return copy;
   });
@@ -100,7 +102,7 @@ export function OrgRoutes({
           {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
         </ol>
         <div className="flex flex-wrap items-end gap-3">
-          <Button type="button" onClick={() => setMine(fresh(fallback.drafts))}>
+          <Button type="button" onClick={() => setMine(fresh(fallback.drafts, org.id))}>
             <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מ{fallback.label})
           </Button>
           {withRoute.length > 0 && (

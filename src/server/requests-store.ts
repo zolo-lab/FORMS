@@ -21,6 +21,7 @@ import {
   declineStep,
   delegate,
   expire,
+  reopenExpired,
   openStep,
   planSteps,
   requestStatus,
@@ -680,12 +681,21 @@ export async function extendExpiry(requestId: string, days: number, actor: { typ
   const base = req.expiresAt && req.expiresAt > new Date() ? req.expiresAt : new Date();
   const next = new Date(base.getTime() + days * 86_400_000);
   await db.update(requests).set({ expiresAt: next }).where(eq(requests.id, requestId));
+  // An expired request opens again: the steps that expired while open start over, each with a fresh link sent out.
+  const reopened = new Set<string>();
+  if (req.status === "expired") {
+    const before = await loadSteps(requestId);
+    const result = reopenExpired(before.map(toEngine));
+    for (const e of result.events) if (e.stepId) reopened.add(e.stepId);
+    if (reopened.size) await persist(requestId, before, result, actor);
+  }
   const openSteps = (await loadSteps(requestId)).filter((s) => s.status === "active" || s.status === "in_progress");
   const open = openSteps.filter((s) => !s.ownLinkExpiry).map((s) => s.id);
   if (open.length) await db.update(stepTokens).set({ expiresAt: next }).where(inArray(stepTokens.stepId, open));
   // A step with its own deadline is pushed out by the same days (from its deadline, or from now once it passed).
   for (const s of openSteps.filter((x) => x.ownLinkExpiry && x.linkExpiresAt)) {
-    const from = s.linkExpiresAt! > new Date() ? s.linkExpiresAt! : new Date();
+    // A step that just reopened counts the days from now, not from the date its rule gave it again.
+    const from = !reopened.has(s.id) && s.linkExpiresAt! > new Date() ? s.linkExpiresAt! : new Date();
     const mine = new Date(from.getTime() + days * 86_400_000);
     await db.update(signingSteps).set({ linkExpiresAt: mine }).where(eq(signingSteps.id, s.id));
     await db.update(stepTokens).set({ expiresAt: mine }).where(eq(stepTokens.stepId, s.id));

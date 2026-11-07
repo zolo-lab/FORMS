@@ -282,6 +282,19 @@ export function expire(input: EngineStep[]): EngineResult {
   return { steps, events };
 }
 
+/** An expired request extended by an admin: the steps that expired while open start again (each gets a fresh link). */
+export function reopenExpired(input: EngineStep[]): EngineResult {
+  const steps = clone(input);
+  const events: EngineEvent[] = [];
+  for (const s of steps) {
+    if (s.status === "expired") {
+      s.status = "active";
+      events.push({ type: "step_activated", stepId: s.id, payload: { order: s.order, role: s.role, reactivated: true } });
+    }
+  }
+  return { steps, events };
+}
+
 export function cancelAll(input: EngineStep[], reason: string): EngineResult {
   const steps = clone(input);
   for (const s of steps) if (OPEN.includes(s.status)) s.status = "cancelled";
