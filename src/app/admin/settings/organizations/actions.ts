@@ -2,9 +2,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
+import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
 import { currentUser } from "@/server/users-store";
 import type { AutoSaveResult } from "@/components/ui/auto-save-form";
 
@@ -143,18 +144,61 @@ export async function saveOrgFieldsAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!UUID.test(id)) redirect(PATH);
 
-  // Renames first, and only the ones this admin actually changed: `was.` carries what the panel was opened with,
-  // so saving values from a panel opened earlier cannot put an old name back for everyone.
+  // What the admin changed: `was.` carries the name the panel was opened with, so saving values from a panel
+  // opened earlier cannot put an old name back for everyone.
+  const wanted: { defId: string; from: string; to: string }[] = [];
   for (const [k, v] of formData.entries()) {
     if (!k.startsWith("key.") || typeof v !== "string") continue;
     const defId = k.slice("key.".length);
-    if (!UUID.test(defId) || v === String(formData.get(`was.${defId}`) ?? "")) continue;
-    const res = await renameOrgFieldDef(defId, v);
-    if (!res.ok) redirect(`${PATH}?edit=${id}&error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
+    const from = String(formData.get(`was.${defId}`) ?? "");
+    const to = normalizeOrgFieldKey(v);
+    if (!UUID.test(defId) || v === from) continue;
+    if (!to) redirect(`${PATH}?edit=${id}&error=orgFieldKey`);
+    wanted.push({ defId, from, to });
   }
 
+  if (wanted.length) {
+    // Everything is checked before anything is written: a save that cannot go through in full changes nothing,
+    // so the admin is never left guessing which half of it was applied.
+    const keys = (await listOrgFieldDefs()).map((d) => d.key);
+    const after = new Set(keys.filter((k) => !wanted.some((w) => w.from === k)));
+    for (const w of wanted) {
+      if (after.has(w.to)) redirect(`${PATH}?edit=${id}&error=orgFieldExists`);
+      after.add(w.to);
+    }
+    // Renames whose new name is still taken by a field that is itself moving wait their turn; a plain swap has no
+    // such turn, so the one in the way steps aside through a name nobody can have typed.
+    const taken = new Set(keys);
+    const todo = [...wanted];
+    while (todo.length) {
+      const i = todo.findIndex((w) => !taken.has(w.to));
+      const next = i >= 0 ? todo.splice(i, 1)[0]! : todo.shift()!;
+      if (i < 0) {
+        const park = `tmp${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+        const blocking = wanted.find((w) => w.to === next.to && w !== next);
+        if (blocking) {
+          await renameOrgFieldDef(blocking.defId, park);
+          taken.delete(blocking.from);
+          blocking.from = park;
+          taken.add(park);
+          todo.push(blocking);
+        }
+      }
+      const res = await renameOrgFieldDef(next.defId, next.to);
+      if (!res.ok) redirect(`${PATH}?edit=${id}&error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
+      taken.delete(next.from);
+      taken.add(next.to);
+    }
+  }
+
+  // The values come in under the names the panel was opened with, so a field renamed just now keeps its value.
+  const moved = new Map(wanted.map((w) => [w.from, w.to]));
   const values: Record<string, string> = {};
-  for (const [k, v] of formData.entries()) if (k.startsWith("f.") && typeof v === "string") values[k.slice(2)] = v;
+  for (const [k, v] of formData.entries()) {
+    if (!k.startsWith("f.") || typeof v !== "string") continue;
+    const key = k.slice(2);
+    values[moved.get(key) ?? key] = v;
+  }
   await setOrgFieldValues(id, values);
   revalidatePath(PATH);
   // The panel stays open: closing is the admin's own button next to this one.
