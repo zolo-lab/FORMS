@@ -162,6 +162,9 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 )}
               </div>
             </div>
+            {fromField && !dateFields.some((f) => f.id === baseField) && (
+              <p role="alert" className="text-sm text-destructive">שדה התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו תאריך אחר – עד אז נספרים 30 ימים.</p>
+            )}
             {calc.snap?.day === 31 && <p className="text-xs text-muted-foreground">31 = היום האחרון בחודש (28/29/30 בחודשים קצרים).</p>}
           </div>
 
