@@ -1,4 +1,5 @@
 "use server";
+import { linkExpiryOf } from "@/lib/requests/expiry";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -31,7 +32,7 @@ export async function openMyStepAction(fd: FormData) {
     .limit(1);
   if (!row) redirect("/admin/inbox?gone=1");
   const { token, hash } = createToken();
-  await db.insert(schema.stepTokens).values({ stepId: row!.step.id, tokenHash: hash, expiresAt: row!.expiresAt });
+  await db.insert(schema.stepTokens).values({ stepId: row!.step.id, tokenHash: hash, expiresAt: linkExpiryOf(row!.step, row!) });
   const secret = process.env.SESSION_SECRET;
   if (row!.step.otpRequired && secret) {
     (await cookies()).set(otpCookieName(row!.step.id), otpCookieValue(secret, row!.step.id, Date.now() + OTP_COOKIE_TTL_MS), {

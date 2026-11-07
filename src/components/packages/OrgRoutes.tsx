@@ -23,8 +23,9 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, fallback, contacts, groups, emailFields, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, heldRoles, save, onRoutesChange,
 }: {
+  dateFields?: Option[];
   org: Option;
   orgs: Option[];
   /** Saved routes, per organization id. */
@@ -143,6 +144,7 @@ export function OrgRoutes({
         contacts={contacts}
         groups={groups}
         emailFields={emailFields}
+        dateFields={dateFields}
         dirty={dirty}
         state={state[org.id] ?? { kind: "idle" }}
         onSave={() => void persist(mine)}
