@@ -53,9 +53,11 @@ export async function runReminders(now = new Date(), opts: { organizationId?: st
     const past = sentByStep.get(step.id) ?? [];
     if (!reminderDue({ activatedAt: step.activatedAt, sent: past.length, lastSentAt: past[0] ?? null }, policy, now)) continue;
 
+    // No reminder with a link that already ended (its request is expired on the sweep, or its deadline moves there).
+    const linkEnds = linkExpiryOf(step, request);
+    if (linkEnds && linkEnds < now) continue;
     // A second valid link, so a reminder never kills a tab the person already has open.
     const { token, hash } = createToken();
-    const linkEnds = linkExpiryOf(step, request);
     await db.insert(stepTokens).values({ stepId: step.id, tokenHash: hash, expiresAt: linkEnds });
     const msg = mail.render("reminder", {
       ...(await requestVars(request)),
