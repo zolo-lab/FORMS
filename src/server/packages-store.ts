@@ -5,7 +5,7 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { Workflow } from "@/lib/workflow/types";
 import { normalizeOrders } from "@/lib/workflow/validate-workflow";
-import { normalizeExpiryRows, withLegacyExpiryRows, withoutStepExpiry, type ExpiryRule, type ExpiryRuleRow } from "@/lib/requests/expiry";
+import { hasStepExpiry, withLegacyExpiryRows, withoutStepExpiry, type ExpiryRule, type ExpiryRuleRow } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { Processing } from "@/lib/processing/types";
 
@@ -141,11 +141,12 @@ export async function setArchived(id: string, archived: boolean) {
  * Link-expiry rules an older form kept on its steps move into the "כללי תוקף" table before its steps are written
  * (the step editors no longer carry them), so saving steps never drops a rule.
  */
-async function absorbStepExpiry(id: string) {
+async function absorbStepExpiry(id: string, next?: Workflow) {
   const [pkg] = await db.select({ workflow: packageTemplates.workflow, orgWorkflows: packageTemplates.orgWorkflows, expiryRules: packageTemplates.expiryRules }).from(packageTemplates).where(eq(packageTemplates.id, id));
-  if (!pkg) return;
-  const rows = withLegacyExpiryRows(pkg.expiryRules, pkg.workflow, pkg.orgWorkflows);
-  if (rows.length === normalizeExpiryRows(pkg.expiryRules).length) return;
+  if (!pkg || !hasStepExpiry(pkg.workflow, pkg.orgWorkflows)) return;
+  // The general route about to be written keeps its steps in order: a rule follows its step to the role it gets now.
+  const sameShape = next && next.steps.length === pkg.workflow.steps.length;
+  const rows = withLegacyExpiryRows(pkg.expiryRules, pkg.workflow, pkg.orgWorkflows, sameShape ? (i) => next.steps[i]?.role : undefined);
   await db.update(packageTemplates).set({
     expiryRules: rows,
     workflow: withoutStepExpiry(pkg.workflow),
@@ -159,7 +160,7 @@ export async function setOrgWorkflows(id: string, routes: Record<string, Workflo
 }
 
 export async function setWorkflow(id: string, workflow: Workflow) {
-  await absorbStepExpiry(id);
+  await absorbStepExpiry(id, workflow);
   await db.update(packageTemplates).set({ workflow: withoutStepExpiry({ steps: normalizeOrders(workflow.steps) }) }).where(eq(packageTemplates.id, id));
 }
 

@@ -388,6 +388,23 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setStepWork(now);
     setStepSaved(now);
     setStepState({ kind: "saved" });
+    // "כללי תוקף" follow the steps: a step whose role changed keeps its rules; a step that is gone takes its rules along
+    // (so a later step that gets the same role does not inherit them).
+    if (flow.expiry) {
+      const movedRoles = new Map<string, string>([...moved].map(([a, b]) => [String(a), String(b)]));
+      const roles = new Set([...now.map((d) => d.role as string), ...Object.values(orgRoutes).flatMap((r) => r.map((d) => d.role as string))]);
+      const follow = (rows: ExpiryRuleRow[]) => rows
+        .map((r) => { const to = r.stepRole ? movedRoles.get(r.stepRole) : undefined; return to ? { ...r, stepRole: to } : r; })
+        .filter((r) => !r.stepRole || roles.has(r.stepRole));
+      const savedRows = follow(expSaved.rows);
+      if (JSON.stringify(savedRows) !== JSON.stringify(expSaved.rows)) {
+        const r2 = await flow.expiry.save(flow.packageId, expSaved.formRule, savedRows);
+        if (r2.ok) {
+          setExpSaved({ ...expSaved, rows: savedRows });
+          setExpWork((w) => ({ ...w, rows: follow(w.rows) }));
+        }
+      } else setExpWork((w) => ({ ...w, rows: follow(w.rows) }));
+    }
   }
 
   async function saveExpiry() {

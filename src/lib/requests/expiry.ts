@@ -285,12 +285,14 @@ export function requestExpiryRule(formRule: unknown, rows: unknown, orgId: strin
   return row ? row.rule : normalizeExpiryRule(formRule);
 }
 
-/** A step's own rule from the table: for this step and organization, else for this step; null = none. */
-export function stepRowRule(rows: unknown, stepRole: string, orgId: string | null): ExpiryRule | null {
+/**
+ * A step's own rule from the table: for this step and organization (or project – a route of a project of its own
+ * came into the table under the project's id), else for this step; null = none.
+ */
+export function stepRowRule(rows: unknown, stepRole: string, orgId: string | null, projectId: string | null = null): ExpiryRule | null {
   const list = normalizeExpiryRows(rows);
-  return (orgId ? list.find((r) => r.stepRole === stepRole && r.orgId === orgId) : undefined)?.rule
-    ?? list.find((r) => r.stepRole === stepRole && !r.orgId)?.rule
-    ?? null;
+  const of = (id: string | null) => (id ? list.find((r) => r.stepRole === stepRole && r.orgId === id)?.rule : undefined);
+  return of(projectId) ?? of(orgId) ?? list.find((r) => r.stepRole === stepRole && !r.orgId)?.rule ?? null;
 }
 
 type LegacyStep = { role: string; expiry?: unknown; expiryByOrg?: Record<string, unknown> };
@@ -299,9 +301,11 @@ type LegacyStep = { role: string; expiry?: unknown; expiryByOrg?: Record<string,
  * Rules older forms kept on their steps ("expiry" / "expiryByOrg", and the steps of an organization's own route), as
  * rows of the table. `rows` (saved in the table) win over them for the same scope.
  */
-export function withLegacyExpiryRows(rows: unknown, workflow: { steps: LegacyStep[] } | null | undefined, orgWorkflows: Record<string, { steps: LegacyStep[] }> | null | undefined): ExpiryRuleRow[] {
+export function withLegacyExpiryRows(rows: unknown, workflow: { steps: LegacyStep[] } | null | undefined, orgWorkflows: Record<string, { steps: LegacyStep[] }> | null | undefined, roleAt?: (index: number) => string | undefined): ExpiryRuleRow[] {
   const legacy: unknown[] = [];
-  for (const s of workflow?.steps ?? []) {
+  for (const [i, step] of (workflow?.steps ?? []).entries()) {
+    // `roleAt`: the role the step gets as it is saved now (older forms had steps sharing a role).
+    const s = { ...step, role: roleAt?.(i) ?? step.role };
     if (s.role === "requester") continue;
     const own = normalizeStepExpiryRule(s.expiry);
     if (own) legacy.push({ id: `${s.role}:*`, stepRole: s.role, rule: own });
@@ -322,4 +326,10 @@ export function withLegacyExpiryRows(rows: unknown, workflow: { steps: LegacySte
 /** The steps without the rules they kept themselves (they live in the table now). */
 export function withoutStepExpiry<W extends { steps: LegacyStep[] }>(w: W): W {
   return { ...w, steps: w.steps.map((s) => { const c = { ...s }; delete c.expiry; delete c.expiryByOrg; return c; }) };
+}
+
+/** Whether any step still keeps a rule of its own (older forms). */
+export function hasStepExpiry(workflow: { steps: LegacyStep[] } | null | undefined, orgWorkflows: Record<string, { steps: LegacyStep[] }> | null | undefined): boolean {
+  const kept = (w?: { steps: LegacyStep[] } | null) => (w?.steps ?? []).some((s) => s.expiry !== undefined || s.expiryByOrg !== undefined);
+  return kept(workflow) || Object.values(orgWorkflows ?? {}).some(kept);
 }

@@ -49,8 +49,9 @@ function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; 
     for (const k of ["addDays", "addMonths", "snap"] as const) if (!next[k]) delete next[k];
     onChange(next);
   };
-  const unit: "days" | "months" = value.addMonths && !value.addDays ? "months" : "days";
-  const amount = unit === "months" ? value.addMonths! : (value.addDays ?? 0);
+  // The unit is kept as chosen: with an amount of 0 the rule itself no longer says whether it was days or months.
+  const [unit, setUnit] = useState<"days" | "months">(value.addMonths && !value.addDays ? "months" : "days");
+  const amount = unit === "months" ? (value.addMonths ?? 0) : (value.addDays ?? 0);
   const fieldId = value.base.from === "field" ? value.base.fieldId : null;
   const baseValue = fieldId !== null ? `field:${fieldId}` : value.base.from;
   const missing = fieldId !== null && !usableOf(dateFields).some((f) => f.id === fieldId);
@@ -61,7 +62,7 @@ function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; 
         <Input id={`${id}-amount`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={amount}
           onChange={(e) => { const n = num(e.target.value, 0, unit === "months" ? 120 : 3650); set(unit === "months" ? { addMonths: n } : { addDays: n }); }} />
         <Select id={`${id}-unit`} aria-label="יחידה" className="w-auto" value={unit}
-          onChange={(e) => set(e.target.value === "months" ? { addMonths: amount, addDays: undefined } : { addDays: amount, addMonths: undefined })}>
+          onChange={(e) => { const u = e.target.value as "days" | "months"; setUnit(u); set(u === "months" ? { addMonths: amount, addDays: undefined } : { addDays: amount, addMonths: undefined }); }}>
           <option value="days">ימים</option>
           <option value="months">חודשים</option>
         </Select>
@@ -155,7 +156,8 @@ function Trail({ calc, answers, start, fieldName }: { calc: ExpiryCalc; answers:
   const fromLabel = calc.base.from === "field" ? fieldName(calc.base.fieldId) : BASE_LABEL[calc.base.from];
   const fromDay = calc.base.from === "field" ? answers[calc.base.fieldId] : ymd(start);
   if (!fromDay) return null;
-  const added = expiryFor({ ...calc, snap: undefined }, answers, at);
+  // Nothing added and no fixed day: the date itself (the rule is not complete yet, so not worked out).
+  const added = calc.addDays || calc.addMonths ? expiryFor({ ...calc, snap: undefined }, answers, at) : noonOf(fromDay);
   const final = expiryFor(calc, answers, at);
   const unit = calc.addMonths && !calc.addDays ? `${calc.addMonths} חודשים` : `${calc.addDays ?? 0} ימים${calc.addMonths ? ` ו-${calc.addMonths} חודשים` : ""}`;
   const chip = (label: string, date: Date | null, strong = false) => (

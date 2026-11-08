@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparesToday, describeExpiryRule, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { comparesToday, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -239,5 +239,21 @@ describe("the table of rules", () => {
     expect(out.map((x) => [x.stepRole, x.orgId ?? null, x.rule.kind])).toEqual([["approver", "org-a", "calc"], ["approver", null, "calc"], ["manager", "org-b", "none"]]);
     expect(out[1]!.rule).toEqual({ kind: "calc", base: { from: "stepStart" }, addDays: 4 });
     expect(withoutStepExpiry(workflow).steps[1]).toEqual({ role: "approver" });
+  });
+});
+
+describe("older forms' rules move with their steps", () => {
+  const rule = (days: number) => ({ kind: "days", days });
+  it("steps that shared a role keep their own rules under the roles they get now", () => {
+    const workflow = { steps: [{ role: "requester" }, { role: "approver", expiry: rule(3) }, { role: "approver", expiry: rule(8) }] };
+    const out = withLegacyExpiryRows([], workflow, null, (i) => ["requester", "approver", "approver_2"][i]);
+    expect(out.map((r) => [r.stepRole, (r.rule as { addDays?: number }).addDays])).toEqual([["approver", 3], ["approver_2", 8]]);
+    expect(hasStepExpiry(workflow, null)).toBe(true);
+    expect(hasStepExpiry(withoutStepExpiry(workflow), {})).toBe(false);
+  });
+  it("a project's route rule is found for requests of that project", () => {
+    const rows = [{ id: "p", stepRole: "approver", orgId: "proj", rule: { kind: "none" as const } }];
+    expect(stepRowRule(rows, "approver", "org", "proj")).toEqual({ kind: "none" });
+    expect(stepRowRule(rows, "approver", "org", null)).toBeNull();
   });
 });

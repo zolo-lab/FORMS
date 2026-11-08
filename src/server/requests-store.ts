@@ -652,7 +652,7 @@ function stepRuleOf(req: typeof requests.$inferSelect, pkg: typeof packageTempla
   const w = routed.steps.find((x) => x.order === s.order && x.role === s.role);
   if (!w || s.role === "requester") return null;
   // The "כללי תוקף" table first; a rule kept on the step itself (older forms) after it.
-  return stepRowRule(pkg.expiryRules, s.role, req.organizationId) ?? stepExpiryRule(w, exceptionsFor);
+  return stepRowRule(pkg.expiryRules, s.role, req.organizationId, req.projectId) ?? stepExpiryRule(w, exceptionsFor);
 }
 
 /**
