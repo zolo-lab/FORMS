@@ -206,16 +206,21 @@ function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?
   const before = useRef(value);
   /** The value a save is in flight for: Enter followed by blur must not send it twice. */
   const saving = useRef<string | null>(null);
-  const commit = async () => {
+  /** The previous save of THIS cell: the next one waits for it, so two edits can never race and land out of order. */
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const commit = () => {
     if (draft.trim() === before.current.trim() || saving.current === draft) return;
-    saving.current = draft;
-    let ok = false;
-    try {
-      ok = await onSave(draft, before.current);
-    } finally {
-      saving.current = null;
-    }
-    if (ok) before.current = draft;
+    const value = draft;
+    saving.current = value;
+    chain.current = chain.current.then(async () => {
+      let ok = false;
+      try {
+        ok = await onSave(value, before.current);
+      } finally {
+        if (saving.current === value) saving.current = null;
+      }
+      if (ok) before.current = value;
+    });
   };
   return (
     <Input
@@ -226,7 +231,7 @@ function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          void commit();
+          commit();
           // Next row, same column.
           const cells = Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-col="${column.key}"]`));
           const i = cells.indexOf(e.currentTarget);
