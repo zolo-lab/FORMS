@@ -44,13 +44,16 @@ const num = (v: string, min: number, max: number) => Math.min(max, Math.max(min,
  * `amount + unit` stand for addDays or addMonths (an older rule with both shows its days and keeps its months).
  */
 function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; value: ExpiryCalc; onChange: (v: ExpiryCalc) => void; dateFields: DateFieldOption[]; bases: BaseKind[] }) {
+  // The unit lives in the rule: months are kept as `addMonths` even at 0, so the choice survives (and follows the
+  // rule when its case moves); saving drops the 0.
+  const unit: "days" | "months" = value.addMonths !== undefined && !value.addDays ? "months" : "days";
   const set = (patch: Partial<ExpiryCalc>) => {
     const next: ExpiryCalc = { ...value, ...patch };
-    for (const k of ["addDays", "addMonths", "snap"] as const) if (!next[k]) delete next[k];
+    if (!next.addDays) delete next.addDays;
+    if (next.addMonths === undefined || (!next.addMonths && next.addDays)) delete next.addMonths;
+    if (!next.snap) delete next.snap;
     onChange(next);
   };
-  // The unit is kept as chosen: with an amount of 0 the rule itself no longer says whether it was days or months.
-  const [unit, setUnit] = useState<"days" | "months">(value.addMonths && !value.addDays ? "months" : "days");
   const amount = unit === "months" ? (value.addMonths ?? 0) : (value.addDays ?? 0);
   const fieldId = value.base.from === "field" ? value.base.fieldId : null;
   const baseValue = fieldId !== null ? `field:${fieldId}` : value.base.from;
@@ -62,7 +65,7 @@ function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; 
         <Input id={`${id}-amount`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={amount}
           onChange={(e) => { const n = num(e.target.value, 0, unit === "months" ? 120 : 3650); set(unit === "months" ? { addMonths: n } : { addDays: n }); }} />
         <Select id={`${id}-unit`} aria-label="יחידה" className="w-auto" value={unit}
-          onChange={(e) => { const u = e.target.value as "days" | "months"; setUnit(u); set(u === "months" ? { addMonths: amount, addDays: undefined } : { addDays: amount, addMonths: undefined }); }}>
+          onChange={(e) => set(e.target.value === "months" ? { addMonths: amount, addDays: undefined } : { addDays: amount, addMonths: undefined })}>
           <option value="days">ימים</option>
           <option value="months">חודשים</option>
         </Select>
