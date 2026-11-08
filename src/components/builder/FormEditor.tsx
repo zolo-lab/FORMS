@@ -98,6 +98,7 @@ const dateFieldsOf = (def: FormDefinition, steps: { role: string }[] = [], moves
   const at = steps.findIndex((d) => d.role === role);
   return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined, roles: [role, ...(f.alsoFilledBy ?? [])] };
 });
+const EXPIRY_FOLLOW_ERROR = "השלבים נשמרו, אבל כללי התוקף לא עודכנו לפיהם – שמרו אותם בלשונית כללי תוקף";
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
@@ -410,7 +411,11 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         const r2 = await flow.expiry.save(flow.packageId, expSaved.formRule, savedRows);
         // On failure the tab keeps the rules as they follow the steps (unsaved), with the error, to save from there.
         if (r2.ok) setExpSaved({ ...expSaved, rows: savedRows });
-        else setExpState({ kind: "error", errors: ["כללי התוקף לא עודכנו לפי השלבים – שמרו אותם בלשונית כללי תוקף", ...r2.errors] });
+        else {
+          // Shown in both tabs: the steps were saved, but their rules still have to be.
+          setExpState({ kind: "error", errors: [EXPIRY_FOLLOW_ERROR, ...r2.errors] });
+          setStepState({ kind: "error", errors: [EXPIRY_FOLLOW_ERROR] });
+        }
       }
     }
   }
@@ -422,6 +427,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     if (!r.ok) { setExpState({ kind: "error", errors: r.errors }); return; }
     setExpSaved(expWork);
     setExpState({ kind: "saved" });
+    setStepState((st) => (st.kind === "error" && st.errors[0] === EXPIRY_FOLLOW_ERROR ? { kind: "saved" } : st));
   }
 
   async function saveProcessing() {

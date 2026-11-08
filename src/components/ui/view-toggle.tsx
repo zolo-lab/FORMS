@@ -12,13 +12,12 @@ export function ViewToggle({ value, onChange, label = "תצוגה" }: { value: V
     { key: "cards" as const, text: "כרטיסים", Icon: LayoutGrid },
   ];
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border p-0.5">
+    <div role="group" aria-label={label} className="inline-flex rounded-md border p-0.5">
       {items.map(({ key, text, Icon }) => (
         <button
           key={key}
           type="button"
-          role="radio"
-          aria-checked={value === key}
+          aria-pressed={value === key}
           onClick={() => onChange(key)}
           className={cn("inline-flex min-h-9 items-center gap-1.5 rounded px-3 text-sm", value === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}
         >
