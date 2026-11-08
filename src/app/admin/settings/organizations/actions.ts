@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeHex } from "@/lib/branding";
-import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, setOrgFieldValues, setOrgsActive, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
+import { createOrg, createOrgFieldDef, createProject, deleteOrgFieldDef, deleteProject, listOrgFieldDefs, renameOrgFieldDef, setOrgActive, updateOrgFieldDef, setOrgFieldValues, setOrgsActive, takenFieldKeys, updateOrg, updateOrgBasics, updateProject } from "@/server/orgs-store";
 import { isAdmin } from "@/lib/auth/permissions";
 import { parseOrgInput, parseProjectName } from "@/lib/orgs/input";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
@@ -129,8 +129,8 @@ export async function createOrgFieldAction(formData: FormData) {
   await requireAdmin();
   const org = String(formData.get("org") ?? "");
   const back = UUID.test(org) ? `${PATH}?edit=${org}` : PATH;
-  const res = await createOrgFieldDef(String(formData.get("key") ?? ""));
-  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : "orgFieldKey"}`);
+  const res = await createOrgFieldDef({ label: String(formData.get("label") ?? ""), key: String(formData.get("key") ?? ""), type: String(formData.get("type") ?? "") });
+  if (!res.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${res.reason === "exists" ? "orgFieldExists" : res.reason === "label" ? "orgFieldLabel" : res.reason === "type" ? "orgFieldType" : "orgFieldKey"}`);
   revalidatePath(PATH);
   redirect(`${back}&saved=orgfield`);
 }
@@ -143,6 +143,11 @@ export async function saveOrgFieldsAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!UUID.test(id)) redirect(PATH);
+
+  // An empty Hebrew name is refused before anything is written (the browser's `required` lets spaces through).
+  for (const [k, v] of formData.entries()) {
+    if (k.startsWith("label.") && typeof v === "string" && !v.trim()) redirect(`${PATH}?edit=${id}&error=orgFieldLabel`);
+  }
 
   // What the admin changed: `was.` carries the name the panel was opened with, so saving values from a panel
   // opened earlier cannot put an old name back for everyone.
@@ -161,10 +166,13 @@ export async function saveOrgFieldsAction(formData: FormData) {
     // Everything is checked before anything is written: a save that cannot go through in full changes nothing,
     // so the admin is never left guessing which half of it was applied.
     const keys = (await listOrgFieldDefs()).map((d) => d.key);
-    const after = new Set(keys.filter((k) => !wanted.some((w) => w.from === k)));
+    // The central dictionary's names count too (one namespace), and case does not make a name different.
+    const orgKeys = new Set(keys);
+    const dictKeys = [...(await takenFieldKeys())].filter((k) => !orgKeys.has(k));
+    const after = new Set([...keys.filter((k) => !wanted.some((w) => w.from === k)), ...dictKeys].map((k) => k.toLowerCase()));
     for (const w of wanted) {
-      if (after.has(w.to)) redirect(`${PATH}?edit=${id}&error=orgFieldExists`);
-      after.add(w.to);
+      if (after.has(w.to.toLowerCase())) redirect(`${PATH}?edit=${id}&error=orgFieldExists`);
+      after.add(w.to.toLowerCase());
     }
     // Renames whose new name is still taken by a field that is itself moving wait their turn; a plain swap has no
     // such turn, so the one in the way steps aside through a name nobody can have typed.
@@ -189,6 +197,13 @@ export async function saveOrgFieldsAction(formData: FormData) {
       taken.delete(next.from);
       taken.add(next.to);
     }
+  }
+
+  // The Hebrew names (and types) of the fields, for every organization.
+  for (const [k, v] of formData.entries()) {
+    if (!k.startsWith("label.") || typeof v !== "string") continue;
+    const defId = k.slice("label.".length);
+    if (UUID.test(defId) && v !== formData.get(`wasLabel.${defId}`)) await updateOrgFieldDef(defId, { label: v });
   }
 
   // The values come in under the names the panel was opened with, so a field renamed just now keeps its value.

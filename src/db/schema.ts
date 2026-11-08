@@ -100,7 +100,54 @@ export const organizationFieldDefs = pgTable("organization_field_defs", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** Stable key used in the forms (`org.fields.<key>`); never changes once forms point at it. */
   key: text("key").notNull().unique(),
+  /** The name people see (Hebrew); `key` is the internal name made from it. */
   label: text("label").notNull(),
+  /** The field type a form field gets when it is added from this definition (single-line types only). */
+  type: text("type").notNull().default("short_text"),
+  order: integer("order").notNull().default(0),
+  ...timestamps,
+});
+
+/**
+ * The central dictionary of identifying fields ("שדות מזהים") that are not the organizations' own: supplier name,
+ * company number, bank… Lists (suppliers, work places) are built from them. A key is unique across this table and
+ * `organization_field_defs` together. See src/lib/fields/.
+ */
+export const listTypes = pgTable("list_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /**
+   * The fields of this kind of list, in order: internal names from `field_dictionary`. Renaming a field's internal
+   * name renames it here too (field-dictionary-store).
+   */
+  fields: jsonb("fields").$type<string[]>().notNull().default([]),
+  /** The field shown when a record is picked (e.g. the supplier's name); null = the first field. */
+  displayKey: text("display_key"),
+  ...timestamps,
+});
+
+/**
+ * The records of a list type: one supplier, one work place… `values` holds a value per field of the type, by
+ * internal name (a renamed field is renamed here too).
+ */
+export const listRecords = pgTable(
+  "list_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listTypeId: uuid("list_type_id")
+      .notNull()
+      .references(() => listTypes.id, { onDelete: "cascade" }),
+    values: jsonb("values").$type<Record<string, string>>().notNull().default({}),
+    ...timestamps,
+  },
+  (t) => [index("list_records_type_idx").on(t.listTypeId)],
+);
+
+export const fieldDictionary = pgTable("field_dictionary", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  type: text("type").notNull().default("short_text"),
   order: integer("order").notNull().default(0),
   ...timestamps,
 });
