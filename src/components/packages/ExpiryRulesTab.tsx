@@ -166,7 +166,7 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
         </div>
         )}
         {value.rows.length === 0 && <p className="text-sm text-muted-foreground">אין כללים נוספים: כל הקישורים נסגרים לפי השורה הראשונה.</p>}
-        <Button type="button" variant="outline" onClick={() => setEditing({ index: -1, stepRole: steps[0]?.id ?? "", orgId: "", rule: { kind: "calc", base: { from: "stepStart" }, addDays: 7 } })}>
+        <Button type="button" variant="outline" onClick={() => setEditing({ index: -1, stepRole: steps[0]?.id ?? "", orgId: "", rule: undefined })}>
           <Plus className="size-4" aria-hidden />הוספת כלל
         </Button>
       </section>
@@ -205,7 +205,6 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
               bases={scope ? ["stepStart", "sent"] : ["sent"]}
               inherit={editing.index === "form" ? DEFAULT_TEXT : undefined}
             />
-            {editing.index !== "form" && !editing.rule && <p className="text-sm text-muted-foreground">בחרו &quot;לפי כלל&quot; או &quot;ללא תוקף&quot;.</p>}
             <p className="text-xs text-muted-foreground">אחרי התאריך הקישור לא נפתח והבקשה מסומנת &quot;פג תוקף&quot; (אפשר להאריך). קישור של שלב פתוח לפחות 3 ימים מתחילת השלב.</p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setEditing(null)}>ביטול</Button>
