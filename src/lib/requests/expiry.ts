@@ -107,9 +107,12 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   return endOfDayIsrael(date.y, date.m, date.d);
 }
 
+/** A condition on the current date itself ("אם היום הוא עד ה-20 בחודש"), not on a field of the form. */
+export const TODAY_FIELD = "__today";
+
 /** Whether a condition holds on `now` – the current day: a rule that compares with today is checked again every day. */
 export function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
-  const date = parseDate(answers[c.fieldId]);
+  const date = c.fieldId === TODAY_FIELD ? israelDate(now) : parseDate(answers[c.fieldId]);
   if (!date) return false;
   if (c.type === "day") return c.op === "lte" ? date.d <= c.day : date.d > c.day;
   const t = israelDate(now);
@@ -129,6 +132,7 @@ function normalizeCondition(raw: unknown): ExpiryCondition | null {
   const fieldId = fieldIdOf(o.fieldId);
   if (!fieldId) return null;
   if (o.type === "day" && (o.op === "lte" || o.op === "gt") && pos(o.day, 31)) return { type: "day", fieldId, op: o.op, day: pos(o.day, 31)! };
+  if (fieldId === TODAY_FIELD) return null; // today against itself says nothing
   if (o.type === "today" && o.op === "past") return { type: "today", fieldId, op: "past" };
   if (o.type === "today" && (o.op === "within" || o.op === "beyond")) return { type: "today", fieldId, op: o.op, days: Math.min(3650, Math.max(0, Math.round(Number(o.days) || 0))) };
   return null;
@@ -191,9 +195,9 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
   const rule = normalizeExpiryRule(raw);
   if (!rule) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
   if (rule.kind === "cases") {
-    const name = (id: string) => `"${fieldLabel?.(id) ?? id}"`;
+    const name = (id: string) => (id === TODAY_FIELD ? "היום" : `"${fieldLabel?.(id) ?? id}"`);
     const cond = (c: ExpiryCondition) => c.type === "day"
-      ? `היום בחודש של ${name(c.fieldId)} ${c.op === "lte" ? `עד ${c.day}` : `אחרי ה-${c.day}`}`
+      ? `${c.fieldId === TODAY_FIELD ? "התאריך של היום" : `היום בחודש של ${name(c.fieldId)}`} ${c.op === "lte" ? `עד ${c.day}` : `אחרי ה-${c.day}`}${c.fieldId === TODAY_FIELD ? " בחודש" : ""}`
       : c.op === "past" ? `${name(c.fieldId)} כבר עבר` : c.op === "within" ? `${name(c.fieldId)} בתוך ${c.days} ימים` : `${name(c.fieldId)} בעוד יותר מ-${c.days} ימים`;
     return [...rule.cases.map((c) => `אם ${cond(c.when)}: ${describeExpiryRule(c.then, fieldLabel)}`), `אחרת: ${describeExpiryRule(rule.otherwise, fieldLabel)}`].join("; ");
   }
@@ -246,13 +250,13 @@ export function expiryRuleFields(raw: unknown): string[] {
   if (!rule || rule.kind === "none") return [];
   const of = (r: ExpiryOutcome) => (r.kind === "calc" && r.base.from === "field" ? [r.base.fieldId] : []);
   if (rule.kind === "calc") return of(rule);
-  return [...new Set([...rule.cases.flatMap((c) => [c.when.fieldId, ...of(c.then)]), ...of(rule.otherwise)])];
+  return [...new Set([...rule.cases.flatMap((c) => [c.when.fieldId, ...of(c.then)]), ...of(rule.otherwise)])].filter((f) => f !== TODAY_FIELD);
 }
 
 /** Whether a rule compares a date with today, so its deadline has to be worked out again as the days pass. */
 export function comparesToday(raw: unknown): boolean {
   const rule = normalizeExpiryRule(raw);
-  return rule?.kind === "cases" && rule.cases.some((c) => c.when.type === "today");
+  return rule?.kind === "cases" && rule.cases.some((c) => c.when.type === "today" || c.when.fieldId === TODAY_FIELD);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparesToday, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { TODAY_FIELD, comparesToday, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -255,5 +255,21 @@ describe("older forms' rules move with their steps", () => {
     const rows = [{ id: "p", stepRole: "approver", orgId: "proj", rule: { kind: "none" as const } }];
     expect(stepRowRule(rows, "approver", "org", "proj")).toEqual({ kind: "none" });
     expect(stepRowRule(rows, "approver", "org", null)).toBeNull();
+  });
+});
+
+describe("a condition on today's date", () => {
+  const rule = {
+    kind: "cases" as const,
+    cases: [{ when: { type: "day" as const, fieldId: TODAY_FIELD, op: "lte" as const, day: 20 }, then: { kind: "calc" as const, base: { from: "sent" as const }, snap: { day: 20, mode: "same" as const } } }],
+    otherwise: { kind: "calc" as const, base: { from: "sent" as const }, snap: { day: 20, mode: "next" as const } },
+  };
+  it("needs no field, and is worked out again as the days pass", () => {
+    const sent = new Date("2026-11-08T08:00:00Z");
+    expect(expiryFor(rule, {}, sent)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(rule, {}, { sent, today: new Date("2026-11-25T08:00:00Z") })).toEqual(endOfDayIsrael(2026, 12, 20));
+    expect(expiryRuleFields(rule)).toEqual([]);
+    expect(comparesToday(rule)).toBe(true);
+    expect(describeExpiryRule(rule)).toBe("אם התאריך של היום עד 20 בחודש: ה-20 באותו חודש של השליחה; אחרת: ה-20 בחודש שאחרי השליחה");
   });
 });

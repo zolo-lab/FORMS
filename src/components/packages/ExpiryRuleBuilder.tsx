@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_EXPIRY_DAYS, describeExpiryRule, expiryFor, expiryRuleFields, holds,
+  DEFAULT_EXPIRY_DAYS, TODAY_FIELD, describeExpiryRule, expiryFor, expiryRuleFields, holds,
   type ExpiryBase, type ExpiryCalc, type ExpiryCase, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
 } from "@/lib/requests/expiry";
 
@@ -133,12 +133,17 @@ function ConditionEditor({ id, value, onChange, dateFields }: { id: string; valu
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold">אם</span>
-        <Select id={`${id}-field`} aria-label="שדה התאריך בתנאי" className="w-auto min-w-0 max-w-full" value={value.fieldId} onChange={(e) => onChange({ ...value, fieldId: e.target.value })}>
-          {!dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שלא זמין כאן" : "בחרו תאריך…"}</option>}
+        <Select id={`${id}-field`} aria-label="איזה תאריך בודקים" className="w-auto min-w-0 max-w-full" value={value.fieldId} onChange={(e) => {
+          const fieldId = e.target.value;
+          // The current date is checked only by its day of the month.
+          onChange(fieldId === TODAY_FIELD && value.type !== "day" ? { type: "day", fieldId, op: "lte", day: 20 } : { ...value, fieldId });
+        }}>
+          <option value={TODAY_FIELD}>התאריך של היום (משתנה כל יום)</option>
+          {value.fieldId !== TODAY_FIELD && !dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שלא זמין כאן" : "בחרו תאריך…"}</option>}
           {dateFields.map((f) => <option key={f.id} value={f.id} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
         </Select>
         <Select id={`${id}-op`} aria-label="התנאי" className="w-auto min-w-0 max-w-full" value={condKey(value)} onChange={(e) => setKey(e.target.value as CondKey)}>
-          {(Object.keys(COND_LABEL) as CondKey[]).map((k) => <option key={k} value={k}>{COND_LABEL[k].replace("…", "N")}</option>)}
+          {(Object.keys(COND_LABEL) as CondKey[]).filter((k) => value.fieldId !== TODAY_FIELD || k.startsWith("day-")).map((k) => <option key={k} value={k}>{COND_LABEL[k].replace("…", "N")}</option>)}
         </Select>
         {value.type === "day" && (
           <Input id={`${id}-n`} aria-label="היום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.day} onChange={(e) => onChange({ ...value, day: num(e.target.value, 1, 31) })} />
@@ -147,7 +152,7 @@ function ConditionEditor({ id, value, onChange, dateFields }: { id: string; valu
           <Input id={`${id}-n`} aria-label="מספר ימים" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={value.days ?? 0} onChange={(e) => onChange({ ...value, days: num(e.target.value, 0, 3650) })} />
         )}
       </div>
-      {value.type === "today" && <p className="text-xs text-muted-foreground">נבדק מול התאריך של כל יום מחדש – כשהמצב משתנה, התוקף מתעדכן.</p>}
+      {(value.type === "today" || value.fieldId === TODAY_FIELD) && <p className="text-xs text-muted-foreground">נבדק מול התאריך של כל יום מחדש – כשהמצב משתנה, התוקף מתעדכן.</p>}
     </div>
   );
 }
@@ -200,7 +205,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const cases: ExpiryCase[] = value?.kind === "cases" ? value.cases : [];
   const otherwise: ExpiryOutcome | null = value?.kind === "cases" ? value.otherwise : value?.kind === "calc" ? value : null;
   const usable = usableOf(dateFields);
-  const newCase = (): ExpiryCase => ({ when: { type: "day", fieldId: usable[0]?.id ?? "", op: "lte", day: 20 }, then: otherwise?.kind === "calc" ? otherwise : fresh() });
+  const newCase = (): ExpiryCase => ({ when: { type: "day", fieldId: usable[0]?.id ?? TODAY_FIELD, op: "lte", day: 20 }, then: otherwise?.kind === "calc" ? otherwise : fresh() });
   const setCases = (next: ExpiryCase[], other: ExpiryOutcome = otherwise ?? fresh()) => onChange(next.length ? { kind: "cases", cases: next, otherwise: other } : other);
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const pick = (m: Mode) => {
@@ -224,10 +229,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
     { id: "simple", title: "תנאי פשוט", hint: "תאריך אחד לכולם – למשל 7 ימים מתחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    {
-      id: "complex", title: "תנאי מורכב", hint: "תאריך שונה לפי מקרה – אם… אז…, אחרת…",
-      disabled: usable.length ? undefined : dateFields.length ? "צריך שדה תאריך שכבר מולא בשלב קודם" : "צריך שדה תאריך בטופס",
-    },
+    { id: "complex", title: "תנאי מורכב", hint: "תאריך שונה לפי מקרה – אם… אז…, אחרת… (לפי תאריך מהטופס או לפי התאריך של היום)" },
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
