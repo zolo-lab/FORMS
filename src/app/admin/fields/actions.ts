@@ -12,7 +12,8 @@ const fail = (r: Extract<DictionaryResult, { ok: false }>) => redirect(`${PATH}?
 export async function createFieldAction(fd: FormData) {
   await requireGrant("manageFields");
   const r = await createDictionaryEntry({ label: String(fd.get("label") ?? ""), key: String(fd.get("key") ?? ""), type: String(fd.get("type") ?? ""), category: category(fd.get("category")) });
-  if (!r.ok) fail(r);
+  // A refused add reopens the window with its own message (`nerror`), apart from the table's (`error`).
+  if (!r.ok) redirect(`${PATH}?nerror=${r.reason}`);
   revalidatePath(PATH);
   redirect(`${PATH}?saved=new&key=${encodeURIComponent(r.ok ? r.key : "")}`);
 }
@@ -30,7 +31,10 @@ export async function updateFieldAction(fd: FormData) {
 export async function deleteFieldAction(fd: FormData) {
   await requireGrant("manageFields");
   const id = String(fd.get("id") ?? "");
-  if (UUID.test(id)) await deleteDictionaryEntry(id);
+  if (UUID.test(id)) {
+    const r = await deleteDictionaryEntry(id);
+    if (!r.ok) redirect(`${PATH}?error=inUse&types=${encodeURIComponent(r.types.join(", "))}`);
+  }
   revalidatePath(PATH);
   redirect(`${PATH}?saved=deleted`);
 }

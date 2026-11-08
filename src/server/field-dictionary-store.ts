@@ -3,11 +3,12 @@
  * (supplier name, company number…) in one list. The two live in two tables but share one namespace of internal
  * names. Lists of suppliers, work places… are built on these fields.
  */
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { normalizeFieldKey, suggestKey } from "@/lib/fields/key";
 import { dictionaryType, isOrgFieldType, type DictionaryType } from "@/lib/fields/types";
 import { createOrgFieldDef, listOrgFieldDefs, renameOrgFieldDef, takenFieldKeys, updateOrgFieldDef } from "./orgs-store";
+import { keyRenameInRecords, keyRenameInTypes, typesUsingKey } from "./list-types-store";
 
 const { fieldDictionary } = schema;
 
@@ -41,7 +42,7 @@ export async function listDictionary(): Promise<DictionaryEntry[]> {
   ];
 }
 
-export type DictionaryResult = { ok: true; key: string } | { ok: false; reason: "label" | "key" | "exists" | "missing" | "type" };
+export type DictionaryResult = { ok: true; key: string } | { ok: false; reason: "label" | "key" | "exists" | "missing" | "type" | "inUse" };
 
 /** A new field: the Hebrew name, a type, and an internal name (made from the name unless typed). */
 export async function createDictionaryEntry(input: { label: string; key?: string; type?: string; category: FieldCategory }): Promise<DictionaryResult> {
@@ -94,10 +95,33 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
     key = typed;
   }
   // A type left out keeps the current one.
-  await db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
-  return { ok: true, key };
+  // Only while the key is still the one read above: a rename that raced ahead wins, and this one moves nothing.
+  const own = db
+    .update(fieldDictionary)
+    .set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() })
+    .where(and(eq(fieldDictionary.id, id), eq(fieldDictionary.key, cur.key)))
+    .returning({ id: fieldDictionary.id });
+  if (key === cur.key) {
+    return (await own).length ? { ok: true, key } : { ok: false, reason: "missing" };
+  }
+  // A new internal name: the field and every list type that lists it change in one batch (one transaction), so a
+  // failure leaves them all as they were, never a type pointing at a name the dictionary no longer has.
+  // When the field's key changed meanwhile, the other two find nothing under the old key and change nothing either.
+  const [moved] = await db.batch([own, keyRenameInTypes(cur.key, key), keyRenameInRecords(cur.key, key)]);
+  return moved.length ? { ok: true, key } : { ok: false, reason: "missing" };
 }
 
-export async function deleteDictionaryEntry(id: string) {
-  await db.delete(fieldDictionary).where(eq(fieldDictionary.id, id));
+/** Deletes a general field, unless a list type uses it (it would silently drop a column of that list). */
+export async function deleteDictionaryEntry(id: string): Promise<{ ok: true } | { ok: false; reason: "inUse"; types: string[] }> {
+  const [cur] = await db.select().from(fieldDictionary).where(eq(fieldDictionary.id, id));
+  if (!cur) return { ok: true };
+  const using = await typesUsingKey(cur.key);
+  if (using.length) return { ok: false, reason: "inUse", types: using.map((t) => t.name) };
+  // The check again inside the delete itself: a type that took the field a moment ago keeps it.
+  const gone = await db
+    .delete(fieldDictionary)
+    .where(and(eq(fieldDictionary.id, id), sql`NOT EXISTS (SELECT 1 FROM ${schema.listTypes} WHERE ${schema.listTypes.fields} ? ${cur.key})`))
+    .returning({ id: fieldDictionary.id });
+  if (!gone.length) return { ok: false, reason: "inUse", types: (await typesUsingKey(cur.key)).map((t) => t.name) };
+  return { ok: true };
 }
