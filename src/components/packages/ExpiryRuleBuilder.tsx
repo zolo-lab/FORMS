@@ -164,6 +164,9 @@ function ConditionEditor({ id, value, onChange, dateFields }: { id: string; valu
           <span className="text-sm">ימים</span>
         </span>
       )}
+      {value.type === "today" && (
+        <p className="basis-full text-xs text-muted-foreground">&quot;היום&quot; = התאריך של כל יום מחדש. המערכת בודקת שוב כל יום, ולכן התוקף יכול להשתנות כשהתנאי מתחיל (או מפסיק) להתקיים. הארכה ידנית של הבקשה עוצרת את זה.</p>
+      )}
     </div>
   );
 }

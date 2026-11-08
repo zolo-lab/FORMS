@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeExpiryRule, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { comparesToday, describeExpiryRule, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -197,5 +197,20 @@ describe("conditions choose the rule", () => {
   });
   it("an incomplete condition is not a rule", () => {
     expect(normalizeExpiryRule({ ...shivat, cases: [{ when: { type: "day", fieldId: "", op: "lte", day: 20 }, then: shivat.otherwise }] })).toBeNull();
+  });
+});
+
+describe("today is the current day", () => {
+  const rule = {
+    kind: "cases" as const,
+    cases: [{ when: { type: "today" as const, fieldId: "start", op: "past" as const }, then: { kind: "none" as const } }],
+    otherwise: { kind: "calc" as const, base: { from: "sent" as const }, addDays: 30 },
+  };
+  it("the same rule gives another deadline on another day", () => {
+    const sent = new Date("2026-11-08T08:00:00Z");
+    expect(expiryFor(rule, { start: "2026-11-10" }, { sent, today: sent })).toEqual(new Date(sent.getTime() + 30 * 86_400_000));
+    expect(expiryFor(rule, { start: "2026-11-10" }, { sent, today: new Date("2026-11-11T08:00:00Z") })).toBeNull();
+    expect(comparesToday(rule)).toBe(true);
+    expect(comparesToday(rule.otherwise)).toBe(false);
   });
 });

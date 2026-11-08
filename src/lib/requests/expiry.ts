@@ -8,8 +8,9 @@
  * A date from a field, or a rounded date, ends at 23:59 Israel time; "N days after sending" keeps the exact time.
  * Without a valid date in the field, the deadline is `fallbackDays` after sending (default 30).
  * Conditions choose between rules ("cases"): if [a date's day of the month ≤ / > D | a date is already past / within
- * N days / more than N days away, counted from when the link is set] then [a rule], …, otherwise [a rule]. The first
- * condition that holds decides; a condition on a missing date does not hold.
+ * N days / more than N days away from today] then [a rule], …, otherwise [a rule]. The first condition that holds
+ * decides; a condition on a missing date does not hold. "Today" is the current day: a rule that compares with it is
+ * worked out again as the days pass (`comparesToday`), so its deadline can move.
  */
 export type ExpiryBase = { from: "sent" } | { from: "stepStart" } | { from: "field"; fieldId: string };
 export type ExpirySnap = { day: number; mode: "sameOrNext" | "next" | "same" };
@@ -66,14 +67,15 @@ function israelDate(at: Date): { y: number; m: number; d: number } {
  * The deadline for a rule. `at.sent` = when the request was sent (created); `at.start` = when the step started (the
  * same as `sent` for the request's own deadline). `null` = no expiry; a missing rule = 30 days after sending.
  */
-export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answers: Record<string, unknown>, at: Date | { sent: Date; start?: Date }): Date | null {
+export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answers: Record<string, unknown>, at: Date | { sent: Date; start?: Date; today?: Date }): Date | null {
   const sent = at instanceof Date ? at : at.sent;
   const start = at instanceof Date ? at : (at.start ?? at.sent);
+  const today = at instanceof Date ? at : (at.today ?? start);
   const plusDays = (from: Date, n: number) => new Date(from.getTime() + n * 86_400_000);
   if (raw === null || raw === undefined) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
   const normalized = normalizeExpiryRule(raw);
   if (!normalized) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
-  const rule = normalized.kind === "cases" ? (normalized.cases.find((c) => holds(c.when, answers, start))?.then ?? normalized.otherwise) : normalized;
+  const rule = normalized.kind === "cases" ? (normalized.cases.find((c) => holds(c.when, answers, today))?.then ?? normalized.otherwise) : normalized;
   if (rule.kind === "none") return null;
   const days = Math.round(rule.addDays ?? 0);
   const months = Math.round(rule.addMonths ?? 0);
@@ -105,7 +107,7 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   return endOfDayIsrael(date.y, date.m, date.d);
 }
 
-/** Whether a condition holds; "today" is when the link is set (the step's start, or the sending). */
+/** Whether a condition holds on `now` – the current day: a rule that compares with today is checked again every day. */
 function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
   const date = parseDate(answers[c.fieldId]);
   if (!date) return false;
@@ -215,8 +217,8 @@ export function stepExpiryRule(step: { expiry?: unknown; expiryByOrg?: Record<st
 export const MIN_STEP_LINK_DAYS = 3;
 
 /** The deadline of a step's link from its own rule, counted from when the step starts; null = never. */
-export function stepLinkDeadline(rule: ExpiryRule, answers: Record<string, unknown>, startedAt: Date, sentAt: Date = startedAt): Date | null {
-  const at = expiryFor(rule, answers, { sent: sentAt, start: startedAt });
+export function stepLinkDeadline(rule: ExpiryRule, answers: Record<string, unknown>, startedAt: Date, sentAt: Date = startedAt, today: Date = startedAt): Date | null {
+  const at = expiryFor(rule, answers, { sent: sentAt, start: startedAt, today });
   if (!at) return null;
   const floor = new Date(startedAt.getTime() + MIN_STEP_LINK_DAYS * 86_400_000);
   return at < floor ? floor : at;
@@ -245,4 +247,10 @@ export function expiryRuleFields(raw: unknown): string[] {
   const of = (r: ExpiryOutcome) => (r.kind === "calc" && r.base.from === "field" ? [r.base.fieldId] : []);
   if (rule.kind === "calc") return of(rule);
   return [...new Set([...rule.cases.flatMap((c) => [c.when.fieldId, ...of(c.then)]), ...of(rule.otherwise)])];
+}
+
+/** Whether a rule compares a date with today, so its deadline has to be worked out again as the days pass. */
+export function comparesToday(raw: unknown): boolean {
+  const rule = normalizeExpiryRule(raw);
+  return rule?.kind === "cases" && rule.cases.some((c) => c.when.type === "today");
 }
