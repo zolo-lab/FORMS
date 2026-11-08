@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ViewToggle, type ViewMode } from "@/components/ui/view-toggle";
 import { describeExpiryRule, expiryRuleFields, normalizeExpiryRule, type ExpiryRule, type ExpiryRuleRow } from "@/lib/requests/expiry";
 import { ExpiryRuleBuilder, type DateFieldOption } from "./ExpiryRuleBuilder";
 import type { StepsSaveState } from "./StepsEditor";
@@ -45,6 +46,7 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
   waitingForForm: boolean;
 }) {
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [view, setView] = useState<ViewMode>("table");
   const stepName = (role?: string) => (role ? (steps.find((s) => s.id === role)?.label ?? "שלב שכבר לא קיים") : "כל השלבים");
   const orgName = (id?: string) => (id ? (orgs.find((o) => o.id === id)?.label ?? "עמותה שכבר לא פעילה") : "כל העמותות");
   const fieldLabel = (scope: string | null) => (fid: string) => dateFieldsFor(scope).find((f) => f.id === fid)?.label ?? "שדה שכבר לא קיים";
@@ -89,7 +91,18 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
     setEditing(null);
   };
 
-  const rowView = (key: string, step: string, org: string, text: string, problem: string | null, actions: React.ReactNode, first = false) => (
+  const rowView = (key: string, step: string, org: string, text: string, problem: string | null, actions: React.ReactNode, first = false) => view === "cards" ? (
+    <li key={key} className={cn("flex flex-col gap-2 rounded-lg border bg-card p-3", first && "bg-muted/30", problem && "border-destructive/50 bg-destructive/5")}>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <span className="rounded-full bg-secondary px-2 py-0.5 font-medium">{step}</span>
+        <span className="rounded-full border px-2 py-0.5">{org}</span>
+        {first && <span className="text-xs text-muted-foreground">כל הטופס</span>}
+      </div>
+      <p className="text-sm">{text}</p>
+      {problem && <p className="text-xs text-destructive">{problem}</p>}
+      <div className="mt-auto flex items-center justify-end gap-0.5 border-t pt-1">{actions}</div>
+    </li>
+  ) : (
     <div key={key} role="row" className={cn("grid items-center gap-x-3 gap-y-1 border-b px-3 py-2.5 last:border-b-0", COLS, first && "bg-muted/30", problem && "bg-destructive/5")}>
       <span role="cell" className="text-sm font-medium">{step}</span>
       <span role="cell" className="text-sm">{org}</span>
@@ -101,6 +114,31 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
     </div>
   );
 
+  const items = (
+    <>
+      {rowView(
+        "form",
+        "כל השלבים",
+        "כל העמותות",
+        value.formRule ? describeExpiryRule(value.formRule, fieldLabel(null)) : `${DEFAULT_TEXT} (ברירת מחדל)`,
+        value.formRule ? problemOf(value.formRule, null) : null,
+        <Button type="button" variant="ghost" size="icon" onClick={() => setEditing({ index: "form", stepRole: "", orgId: "", rule: value.formRule ?? undefined })} aria-label="עריכת הכלל של כל הטופס"><Pencil className="size-4" aria-hidden /></Button>,
+        true,
+      )}
+      {sorted.map(({ r, i }) => rowView(
+        r.id,
+        stepName(r.stepRole),
+        orgName(r.orgId),
+        describeExpiryRule(r.rule, fieldLabel(r.stepRole ?? null)),
+        problemOf(r.rule, r.stepRole ?? null),
+        <>
+          <Button type="button" variant="ghost" size="icon" onClick={() => setEditing({ index: i, stepRole: r.stepRole ?? "", orgId: r.orgId ?? "", rule: r.rule })} aria-label={`עריכת הכלל של ${stepName(r.stepRole)} · ${orgName(r.orgId)}`}><Pencil className="size-4" aria-hidden /></Button>
+          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => onChange({ ...value, rows: value.rows.filter((_, j) => j !== i) })} aria-label={`מחיקת הכלל של ${stepName(r.stepRole)} · ${orgName(r.orgId)}`}><Trash2 className="size-4" aria-hidden /></Button>
+        </>,
+      ))}
+    </>
+  );
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4">
       <section className="space-y-3" aria-labelledby="expiry-h">
@@ -109,36 +147,24 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
           <p className="text-sm text-muted-foreground">מתי נסגר הקישור שנשלח בכל שלב. כשכמה כללים מתאימים, הכלל המדויק ביותר קובע: שלב ועמותה ← שלב ← עמותה ← כל הטופס.</p>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border bg-card">
-          <div role="table" aria-label="כללי תוקף" className="min-w-[40rem]">
+        <div className="flex justify-end"><ViewToggle value={view} onChange={setView} label="תצוגת הכללים" /></div>
+        {view === "cards" ? (
+          <ul aria-label="כללי תוקף" className="grid gap-3 sm:grid-cols-2">
+            {items}
+          </ul>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border bg-card">
+            <div role="table" aria-label="כללי תוקף" className="min-w-[40rem]">
             <div role="row" className={cn("grid items-center gap-3 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground", COLS)}>
               <span role="columnheader">חל על</span>
               <span role="columnheader">עמותה</span>
               <span role="columnheader">מתי הקישור נסגר</span>
               <span role="columnheader"><span className="sr-only">פעולות</span></span>
             </div>
-            {rowView(
-              "form",
-              "כל השלבים",
-              "כל העמותות",
-              value.formRule ? describeExpiryRule(value.formRule, fieldLabel(null)) : `${DEFAULT_TEXT} (ברירת מחדל)`,
-              value.formRule ? problemOf(value.formRule, null) : null,
-              <Button type="button" variant="ghost" size="icon" onClick={() => setEditing({ index: "form", stepRole: "", orgId: "", rule: value.formRule ?? undefined })} aria-label="עריכת הכלל של כל הטופס"><Pencil className="size-4" aria-hidden /></Button>,
-              true,
-            )}
-            {sorted.map(({ r, i }) => rowView(
-              r.id,
-              stepName(r.stepRole),
-              orgName(r.orgId),
-              describeExpiryRule(r.rule, fieldLabel(r.stepRole ?? null)),
-              problemOf(r.rule, r.stepRole ?? null),
-              <>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setEditing({ index: i, stepRole: r.stepRole ?? "", orgId: r.orgId ?? "", rule: r.rule })} aria-label={`עריכת הכלל של ${stepName(r.stepRole)} · ${orgName(r.orgId)}`}><Pencil className="size-4" aria-hidden /></Button>
-                <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => onChange({ ...value, rows: value.rows.filter((_, j) => j !== i) })} aria-label={`מחיקת הכלל של ${stepName(r.stepRole)} · ${orgName(r.orgId)}`}><Trash2 className="size-4" aria-hidden /></Button>
-              </>,
-            ))}
+            {items}
           </div>
         </div>
+        )}
         {value.rows.length === 0 && <p className="text-sm text-muted-foreground">אין כללים נוספים: כל הקישורים נסגרים לפי השורה הראשונה.</p>}
         <Button type="button" variant="outline" onClick={() => setEditing({ index: -1, stepRole: steps[0]?.id ?? "", orgId: "", rule: { kind: "calc", base: { from: "stepStart" }, addDays: 7 } })}>
           <Plus className="size-4" aria-hidden />הוספת כלל

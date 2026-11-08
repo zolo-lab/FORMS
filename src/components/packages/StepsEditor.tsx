@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ViewToggle, type ViewMode } from "@/components/ui/view-toggle";
 import { STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import { defaultEmailField, draftProblems, stepLabel, stepTarget } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
@@ -86,6 +87,7 @@ export function StepsEditor({
   const [dropAt, setDropAt] = useState<number | null>(null);
   // The step open in the dialog, by key (it keeps following the step when rows move).
   const [editKey, setEditKey] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>("table");
   const editing = editKey ? drafts.findIndex((d) => d.key === editKey) : -1;
 
   const firstPeopleStep = drafts.findIndex((d) => d.who === "contact" || d.who === "group_all" || d.who === "group_any");
@@ -100,92 +102,127 @@ export function StepsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <div role="table" aria-label="שלבי הטופס" className="min-w-[46rem]">
-          <div role="row" className={cn("grid items-center gap-3 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground", COLS)}>
-            <span role="columnheader"><span className="sr-only">גרירה</span></span>
-            <span role="columnheader">#</span>
-            <span role="columnheader">מי ממלא</span>
-            <span role="columnheader">מה ממלא</span>
-            <span role="columnheader">תוקף הקישור</span>
-            <span role="columnheader"><span className="sr-only">פעולות</span></span>
-          </div>
-          {drafts.map((s, i) => {
-            const n = i + 1;
-            const missing = problems[i]!;
-            const isSender = s.who === "requester";
-            const movable = !isSender && !orgView;
-            const count = fieldCounts?.[s.role];
-            const editable = !isSender || !orgView;
+      <div className="flex justify-end"><ViewToggle value={view} onChange={setView} label="תצוגת השלבים" /></div>
+      {(() => {
+        const items = drafts.map((s, i) => {
+          const n = i + 1;
+          const missing = problems[i]!;
+          const isSender = s.who === "requester";
+          const movable = !isSender && !orgView;
+          const count = fieldCounts?.[s.role];
+          const editable = !isSender || !orgView;
+          const drag = {
+            onDragOver: (e: React.DragEvent) => { if (dragFrom !== null && i >= pinned) { e.preventDefault(); setDropAt(i); } },
+            onDrop: (e: React.DragEvent) => { e.preventDefault(); if (dragFrom !== null) moveTo(dragFrom, i); setDragFrom(null); setDropAt(null); },
+          };
+          const dropMark = dropAt === i && dragFrom !== null && dragFrom !== i;
+          const grip = movable ? (
+            <span
+              draggable
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragFrom(i); }}
+              onDragEnd={() => { setDragFrom(null); setDropAt(null); }}
+              className="flex size-8 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent active:cursor-grabbing"
+              title="גררו כדי לשנות את הסדר"
+              aria-hidden
+            >
+              <GripVertical className="size-4" />
+            </span>
+          ) : null;
+          const num = <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold", isSender ? "bg-primary text-primary-foreground" : "bg-secondary")}>{n}</span>;
+          const name = (
+            <button type="button" disabled={isSender || !!orgView} onClick={() => setEditKey(s.key)} className="block min-h-10 w-full min-w-0 rounded text-start hover:underline disabled:cursor-default disabled:no-underline">
+              <span className="block truncate text-sm font-medium">{isSender ? "השולח" : stepTarget(s, ctx)}</span>
+              <span className="block truncate text-xs text-muted-foreground">{SHORT_WHO[s.who]}</span>
+            </button>
+          );
+          const fills = (
+            <>
+              {isSender ? "השדות שלו ושליחה" : s.who === "employee" ? "השדות שלו וחתימה" : count === undefined ? "—" : count === 0 ? "רק אישור" : `${count} שדות`}
+              {s.formOnly && <span className="block text-xs text-muted-foreground">רק בטופס</span>}
+            </>
+          );
+          const expiry = isSender || !expiryText ? "—" : expiryText(s.role);
+          const actions = (
+            <>
+              {movable && (
+                <>
+                  <Button type="button" variant="ghost" size="icon" disabled={i <= pinned} onClick={() => moveTo(i, i - 1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => moveTo(i, i + 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>
+                </>
+              )}
+              {editable && !isSender && !orgView && (
+                <Button type="button" variant="ghost" size="icon" onClick={() => setEditKey(s.key)} aria-label={`עריכת שלב ${n}`}><Pencil className="size-4" aria-hidden /></Button>
+              )}
+              {!orgView && (
+                <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={isSender ? "מחיקת שלב השולח" : `מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
+              )}
+            </>
+          );
+          const issues = missing.length > 0 && (
+            <button type="button" onClick={() => setEditKey(s.key)} className="flex flex-wrap gap-x-3 text-start text-sm text-destructive underline-offset-2 hover:underline">
+              {missing.map((m) => <span key={m}>{m}</span>)}
+            </button>
+          );
+          if (view === "cards") {
             return (
-              <div
+              <li
                 key={s.key}
-                role="row"
                 aria-label={`שלב ${n}`}
-                onDragOver={(e) => { if (dragFrom !== null && i >= pinned) { e.preventDefault(); setDropAt(i); } }}
-                onDrop={(e) => { e.preventDefault(); if (dragFrom !== null) moveTo(dragFrom, i); setDragFrom(null); setDropAt(null); }}
-                className={cn(
-                  "grid items-center gap-x-3 gap-y-1 border-b px-3 py-2 last:border-b-0 hover:bg-muted/30",
-                  COLS,
-                  missing.length > 0 && "bg-destructive/5",
-                  dragFrom === i && "opacity-50",
-                  dropAt === i && dragFrom !== null && dragFrom !== i && (dragFrom < i ? "border-b-2 border-b-primary" : "border-t-2 border-t-primary"),
-                )}
+                {...drag}
+                className={cn("flex flex-col gap-2 rounded-lg border bg-card p-3", missing.length > 0 && "border-destructive/50 bg-destructive/5", dragFrom === i && "opacity-50", dropMark && "ring-2 ring-primary")}
               >
-                <span role="cell" className="flex">
-                  {movable && (
-                    <span
-                      draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragFrom(i); }}
-                      onDragEnd={() => { setDragFrom(null); setDropAt(null); }}
-                      className="flex size-8 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent active:cursor-grabbing"
-                      title="גררו כדי לשנות את הסדר"
-                      aria-hidden
-                    >
-                      <GripVertical className="size-4" />
-                    </span>
-                  )}
-                </span>
-                <span role="cell" className={cn("flex size-8 items-center justify-center rounded-full text-sm font-semibold", isSender ? "bg-primary text-primary-foreground" : "bg-secondary")}>{n}</span>
-                <span role="cell" className="min-w-0">
-                  <button type="button" disabled={isSender} onClick={() => setEditKey(s.key)} className="block min-h-10 w-full rounded text-start hover:underline disabled:cursor-default disabled:no-underline">
-                    <span className="block truncate text-sm font-medium">{isSender ? "השולח" : stepTarget(s, ctx)}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{SHORT_WHO[s.who]}</span>
-                  </button>
-                </span>
-                <span role="cell" className="text-sm">
-                  {isSender ? "השדות שלו ושליחה" : s.who === "employee" ? "השדות שלו וחתימה" : count === undefined ? "—" : count === 0 ? "רק אישור" : `${count} שדות`}
-                  {s.formOnly && <span className="block text-xs text-muted-foreground">רק בטופס</span>}
-                </span>
-                <span role="cell" className="min-w-0 text-sm text-muted-foreground">
-                  {isSender || !expiryText ? "—" : expiryText(s.role)}
-                </span>
-                <span role="cell" className="flex items-center justify-end gap-0.5">
-                  {movable && (
-                    <>
-                      <Button type="button" variant="ghost" size="icon" disabled={i <= pinned} onClick={() => moveTo(i, i - 1)} aria-label={`העלאת שלב ${n}`}><ArrowUp className="size-4" aria-hidden /></Button>
-                      <Button type="button" variant="ghost" size="icon" disabled={i === drafts.length - 1} onClick={() => moveTo(i, i + 1)} aria-label={`הורדת שלב ${n}`}><ArrowDown className="size-4" aria-hidden /></Button>
-                    </>
-                  )}
-                  {editable && !isSender && (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => setEditKey(s.key)} aria-label={`עריכת שלב ${n}`}><Pencil className="size-4" aria-hidden /></Button>
-                  )}
-                  {!orgView && (
-                    <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={drafts.length === 1} onClick={() => onChange(drafts.filter((_, j) => j !== i))} aria-label={isSender ? "מחיקת שלב השולח" : `מחיקת שלב ${n}`}><Trash2 className="size-4" aria-hidden /></Button>
-                  )}
-                </span>
-                {missing.length > 0 && (
-                  <div role="cell" className="col-span-full ps-[5.25rem]">
-                    <button type="button" onClick={() => setEditKey(s.key)} className="flex flex-wrap gap-x-3 text-start text-sm text-destructive underline-offset-2 hover:underline">
-                      {missing.map((m) => <span key={m}>{m}</span>)}
-                    </button>
-                  </div>
-                )}
-              </div>
+                <div className="flex items-center gap-2">{grip}{num}<div className="min-w-0 flex-1">{name}</div></div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-muted-foreground">ממלא</dt><dd>{fills}</dd>
+                  <dt className="text-muted-foreground">תוקף</dt><dd className="min-w-0">{expiry}</dd>
+                </dl>
+                {issues}
+                <div className="mt-auto flex items-center justify-end gap-0.5 border-t pt-1">{actions}</div>
+              </li>
             );
-          })}
-        </div>
-      </div>
+          }
+          return (
+            <div
+              key={s.key}
+              role="row"
+              aria-label={`שלב ${n}`}
+              {...drag}
+              className={cn(
+                "grid items-center gap-x-3 gap-y-1 border-b px-3 py-2 last:border-b-0 hover:bg-muted/30",
+                COLS,
+                missing.length > 0 && "bg-destructive/5",
+                dragFrom === i && "opacity-50",
+                dropMark && (dragFrom! < i ? "border-b-2 border-b-primary" : "border-t-2 border-t-primary"),
+              )}
+            >
+              <span role="cell" className="flex">{grip}</span>
+              <span role="cell">{num}</span>
+              <span role="cell" className="min-w-0">{name}</span>
+              <span role="cell" className="text-sm">{fills}</span>
+              <span role="cell" className="min-w-0 text-sm text-muted-foreground">{expiry}</span>
+              <span role="cell" className="flex items-center justify-end gap-0.5">{actions}</span>
+              {issues && <div role="cell" className="col-span-full ps-[5.25rem]">{issues}</div>}
+            </div>
+          );
+        });
+        return view === "cards" ? (
+          <ol aria-label="שלבי הטופס" className="grid gap-3 sm:grid-cols-2">{items}</ol>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border bg-card">
+            <div role="table" aria-label="שלבי הטופס" className="min-w-[46rem]">
+              <div role="row" className={cn("grid items-center gap-3 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground", COLS)}>
+                <span role="columnheader"><span className="sr-only">גרירה</span></span>
+                <span role="columnheader">#</span>
+                <span role="columnheader">מי ממלא</span>
+                <span role="columnheader">מה ממלא</span>
+                <span role="columnheader">תוקף הקישור</span>
+                <span role="columnheader"><span className="sr-only">פעולות</span></span>
+              </div>
+              {items}
+            </div>
+          </div>
+        );
+      })()}
 
       {!orgView && (
         <div className="flex flex-wrap gap-2">
