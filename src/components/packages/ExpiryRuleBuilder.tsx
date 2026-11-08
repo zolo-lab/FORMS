@@ -12,16 +12,24 @@ import {
 } from "@/lib/requests/expiry";
 
 /** A date field of the form; `hint` says who fills it ("שלב 2 · העובד"). */
-export type DateFieldOption = { id: string; label: string; hint?: string; roles?: string[] };
+/** `unavailable`: why the field cannot be used here (filled only later) – listed, but not chosen. */
+export type DateFieldOption = { id: string; label: string; hint?: string; roles?: string[]; unavailable?: string };
+const usableOf = (fields: DateFieldOption[]) => fields.filter((f) => !f.unavailable);
 type BaseKind = "sent" | "stepStart";
 
 const BASE_LABEL: Record<BaseKind, string> = { sent: "שליחת הבקשה", stepStart: "תחילת השלב" };
 const SNAP_LABEL: Record<"" | ExpirySnap["mode"], string> = {
-  "": "בלי עיגול – בדיוק בתאריך שיצא",
-  same: "ליום מסוים באותו חודש",
-  sameOrNext: "ליום מסוים: באותו חודש, ואם כבר עבר – בחודש הבא",
-  next: "ליום מסוים בחודש הבא",
+  "": "לא – התאריך שיצא",
+  same: "כן – יום מסוים באותו חודש",
+  next: "כן – יום מסוים בחודש שאחריו",
+  sameOrNext: "כן – יום מסוים באותו חודש, ואם הוא כבר עבר – בחודש שאחריו",
 };
+/** What the chosen fixed day does, on a sample date (the 12th of March). */
+function snapExample(snap: ExpirySnap): string {
+  const d = String(snap.day).padStart(2, "0");
+  const next = snap.mode === "next" || (snap.mode === "sameOrNext" && snap.day < 12);
+  return `למשל, אם יצא 12.03 – הקישור נסגר ב-${d}.${next ? "04" : "03"}.`;
+}
 type CondKey = "day-lte" | "day-gt" | "today-past" | "today-within" | "today-beyond";
 const COND_LABEL: Record<CondKey, string> = {
   "day-lte": "היום בחודש שלו הוא עד",
@@ -69,12 +77,12 @@ function CalcEditor({ id, value, onChange, dateFields, bases }: { id: string; va
           {bases.map((b) => <option key={b} value={b}>{BASE_LABEL[b]}</option>)}
           {dateFields.length > 0 && (
             <optgroup label="שדה תאריך מהטופס">
-              {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`}>{f.label}{f.hint ? ` · ${f.hint}` : ""}</option>)}
+              {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : f.hint ? ` · ${f.hint}` : ""}</option>)}
             </optgroup>
           )}
           {fieldId !== null && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שלא זמין כאן</option>}
         </Select>
-        {fieldId !== null && !dateFields.some((f) => f.id === fieldId) && (
+        {fieldId !== null && !usableOf(dateFields).some((f) => f.id === fieldId) && (
           <p role="alert" className="text-sm text-destructive">שדה התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו תאריך אחר – כשאין בו תאריך תקין בזמן החישוב, נספרים {value.fallbackDays ?? DEFAULT_EXPIRY_DAYS} ימים.</p>
         )}
       </Block>
@@ -87,9 +95,9 @@ function CalcEditor({ id, value, onChange, dateFields, bases }: { id: string; va
           <span className="text-sm">חודשים</span>
         </div>
       </Block>
-      <Block n={3} title="עיגול ליום קבוע בחודש">
+      <Block n={3} title="להעביר ליום קבוע בחודש? (לא חובה)">
         <div className="flex flex-wrap items-center gap-2">
-          <Select id={`${id}-snap`} aria-label="עיגול ליום קבוע בחודש" className="min-w-0 flex-1" value={value.snap?.mode ?? ""} onChange={(e) => {
+          <Select id={`${id}-snap`} aria-label="להעביר ליום קבוע בחודש" className="min-w-0 flex-1" value={value.snap?.mode ?? ""} onChange={(e) => {
             const m = e.target.value as "" | ExpirySnap["mode"];
             set({ snap: m ? { day: value.snap?.day ?? (m === "next" ? 7 : 20), mode: m } : undefined });
           }}>
@@ -103,7 +111,10 @@ function CalcEditor({ id, value, onChange, dateFields, bases }: { id: string; va
             </span>
           )}
         </div>
-        {value.snap?.day === 31 && <p className="text-xs text-muted-foreground">31 = היום האחרון בחודש (28/29/30 בחודשים קצרים).</p>}
+        <p className="text-xs text-muted-foreground">
+          {value.snap ? snapExample(value.snap) : "למשל כש-Make סוגר תמיד ב-7 לחודש: בוחרים \"כן – יום מסוים בחודש שאחריו\" ויום 7."}
+          {value.snap?.day === 31 && " 31 = היום האחרון בחודש (28/29/30 בחודשים קצרים)."}
+        </p>
       </Block>
     </ol>
   );
@@ -139,7 +150,7 @@ function ConditionEditor({ id, value, onChange, dateFields }: { id: string; valu
       <span className="text-sm font-semibold">אם</span>
       <Select id={`${id}-field`} aria-label="שדה התאריך בתנאי" className="w-auto min-w-0 flex-1" value={value.fieldId} onChange={(e) => onChange({ ...value, fieldId: e.target.value })}>
         {!dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שלא זמין כאן" : "בחרו שדה תאריך…"}</option>}
-        {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+        {dateFields.map((f) => <option key={f.id} value={f.id} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
       </Select>
       <Select id={`${id}-op`} aria-label="התנאי" className="w-auto min-w-0 flex-1" value={condKey(value)} onChange={(e) => setKey(e.target.value as CondKey)}>
         {(Object.keys(COND_LABEL) as CondKey[]).map((k) => <option key={k} value={k}>{COND_LABEL[k]}</option>)}
@@ -180,9 +191,10 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     else onChange(other);
   };
   const addCase = () => setCases([...cases, {
-    when: { type: "day", fieldId: dateFields[0]?.id ?? "", op: "lte", day: 20 },
+    when: { type: "day", fieldId: usable[0]?.id ?? "", op: "lte", day: 20 },
     then: otherwise && otherwise.kind === "calc" ? otherwise : fresh(),
   }]);
+  const usable = usableOf(dateFields);
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
 
   // The example: one date per field the rule reads.
@@ -243,11 +255,15 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
           </section>
 
           <div className="space-y-1">
-            <Button type="button" variant="outline" size="sm" disabled={dateFields.length === 0 || cases.length >= MAX_CASES} onClick={addCase}><Plus className="size-4" aria-hidden />הוספת תנאי (אם…)</Button>
+            <Button type="button" variant="outline" size="sm" disabled={usable.length === 0 || cases.length >= MAX_CASES} onClick={addCase}><Plus className="size-4" aria-hidden />הוספת תנאי (אם…)</Button>
             <p className="text-xs text-muted-foreground">
-              {cases.length >= MAX_CASES ? `אפשר עד ${MAX_CASES} תנאים.` : dateFields.length === 0
-                ? "תנאים בודקים שדה תאריך שממולא לפני השלב הזה – אין כרגע שדה כזה בטופס."
-                : "למשל: אם היום בחודש של תאריך התחילה עד 20 → ה-20 באותו חודש; אם התאריך כבר עבר → 7 ימים מתחילת השלב. התנאי הראשון שמתקיים קובע."}
+              {cases.length >= MAX_CASES
+                ? `אפשר עד ${MAX_CASES} תנאים.`
+                : dateFields.length === 0
+                  ? "תנאי בודק שדה מסוג תאריך – אין כזה בטופס."
+                  : usable.length === 0
+                    ? `אי אפשר להשתמש ב${dateFields.map((f) => `"${f.label}" (${f.unavailable})`).join(", ")}: הקישור נקבע כשהשלב מתחיל, ולכן התאריך צריך להיות ממולא בשלב קודם. שייכו את השדה לשלב קודם בלשונית השדות.`
+                    : "למשל: אם היום בחודש של תאריך התחילה עד 20 → ה-20 באותו חודש; אם התאריך כבר עבר → 7 ימים מתחילת השלב. התנאי הראשון שמתקיים קובע."}
             </p>
           </div>
 

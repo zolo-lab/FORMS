@@ -85,6 +85,11 @@ export function StepsEditor({
     const roles = new Set(drafts.slice(0, i).map((d) => d.role as string));
     return dateFields.filter((f) => !f.roles || f.roles.some((r) => roles.has(r)));
   };
+  // For the dialog: every date field, the ones filled only later marked with why.
+  const dateFieldsFor = (i: number): DateFieldOption[] => {
+    const before = new Set(datesBefore(i).map((f) => f.id));
+    return dateFields.map((f) => (before.has(f.id) ? f : { ...f, unavailable: f.hint ? `ממולא ב${f.hint}, לא לפני השלב` : "לא משויך לשלב שממלא אותו" }));
+  };
   const lateField = (rule: ExpiryRule | undefined, i: number) => {
     const ids = rule ? expiryRuleFields(rule) : [];
     if (ids.some((fid) => !dateFields.some((f) => f.id === fid))) return "תוקף הקישור: שדה תאריך בכלל כבר לא קיים בטופס – בחרו שוב";
@@ -308,7 +313,7 @@ export function StepsEditor({
                 id={`exp-${editing}`}
                 value={expiryOf(ed)}
                 onChange={(r) => setExpiry(editing, r)}
-                dateFields={datesBefore(editing)}
+                dateFields={dateFieldsFor(editing)}
                 bases={["stepStart", "sent"]}
                 inherit={inheritText(ed)}
               />
