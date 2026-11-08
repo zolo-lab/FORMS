@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/card";
@@ -26,8 +27,10 @@ const ERRORS: Record<string, string> = {
  * lists of suppliers, work places… are built from. People work with the Hebrew name; the internal name is made from
  * it and can be changed.
  */
+/** The organizations' columns live on the "רשימות" sheet now; the dictionary stays reachable by its sub-pages. */
 export default async function FieldsPage({ searchParams }: { searchParams: Promise<{ error?: string; nerror?: string; saved?: string; key?: string; q?: string; types?: string; list?: string }> }) {
   const { error, nerror, saved, key, q, types, list } = await searchParams;
+  if (!error && !nerror && !saved && !q && !list) redirect("/admin/lists");
   const [all, listTypes] = await Promise.all([listDictionary(), listListTypes()]);
   const query = q?.trim().toLowerCase() ?? "";
   // Which lists each field is in: the organizations' fields are the built-in "עמותות" list.

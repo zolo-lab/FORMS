@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             ...(builds ? [{ href: "/admin/forms", label: "תבניות טפסים" }] : []),
             ...(admin ? [{ href: "/admin/users", label: "משתמשים" }] : []),
             // The identifying fields (and the lists built on them): whoever has the grant.
-            ...(hasGrant(user, "manageFields") ? [{ href: "/admin/fields", label: "שדות מזהים" }] : []),
+            ...(hasGrant(user, "manageFields") ? [{ href: "/admin/lists", label: "רשימות", also: ["/admin/fields"] }] : []),
             { href: "/admin/archive", label: "נתונים וייצוא", also: ["/admin/settings/exports"] },
           ]}
           settings={[

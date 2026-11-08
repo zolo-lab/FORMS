@@ -3,16 +3,15 @@ import { Trash2, X } from "lucide-react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { AutoSaveForm } from "@/components/ui/auto-save-form";
 import { PageHeader } from "@/components/ui/page-header";
-import { Input, Select } from "@/components/ui/input";
-import { DICTIONARY_TYPE_LABELS, ORG_FIELD_TYPES } from "@/lib/fields/types";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgTheme } from "@/components/branding";
 import { normalizeHex } from "@/lib/branding";
-import { listOrgFieldDefs, listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
+import { listOrgs, listProjects, projectUsage } from "@/server/orgs-store";
 import { ORG_ERRORS } from "@/lib/orgs/input";
-import { createOrgAction, createOrgFieldAction, createProjectAction, deleteOrgFieldAction, deleteProjectAction, saveOrgFieldsAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
+import { createOrgAction, createProjectAction, deleteProjectAction, updateOrgAction, updateOrgBasicsAction, updateProjectAction } from "./actions";
 import { OrgsTable } from "./OrgsTable";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +41,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
 /** Organizations as a table; adding and editing (details, projects, branding, sender) in a centered window that saves itself. */
 export default async function OrganizationsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; edit?: string; n?: string }> }) {
   const { error, saved, edit, n } = await searchParams;
-  const [orgs, projects, usage, orgFields] = await Promise.all([listOrgs(), listProjects(), projectUsage(), listOrgFieldDefs()]);
+  const [orgs, projects, usage] = await Promise.all([listOrgs(), listProjects(), projectUsage()]);
   const rows = orgs.map((o) => ({
     id: o.id,
     name: o.name,
@@ -83,16 +82,9 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
           <Panel
             title={o.name}
             subtitle={o.slug ? `קיצור בקישור: ${o.slug}` : undefined}
-            note="רוב השינויים נשמרים אוטומטית; שדות העמותה נשמרים בכפתור"
+            note="השינויים נשמרים אוטומטית"
             closeHref={PATH}
-            footer={
-              <>
-                {saved === "orgfields" && <span role="status" className="self-center text-sm text-success">נשמר.</span>}
-                <Link href={PATH} scroll={false} className={buttonVariants({ variant: "ghost" })}>סגירה</Link>
-                {/* Submits the organization-fields form above, which is the only part of the panel that waits for it. */}
-                <SubmitButton form={`orgfields-${o.id}`}>שמירה</SubmitButton>
-              </>
-            }
+            footer={<Link href={PATH} scroll={false} className={buttonVariants({ variant: "ghost" })}>סגירה</Link>}
           >
             {errorText && <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{errorText}</p>}
 
@@ -159,111 +151,12 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               </form>
             </section>
 
-            <section aria-label="שדות של העמותה" className="space-y-3 border-t pt-4">
-              <div>
-                <h3 className="font-semibold">שדות מזהים של העמותה</h3>
-                <p className="text-sm text-muted-foreground">
-                  ערכים קבועים של העמותה (תיק ניכויים, מספר חוזה…). שדה שנוסף כאן נוסף לכל העמותות והעסקים – לכל אחד הערך שלו.
-                  כותבים שם בעברית; השם הפנימי (באנגלית, מה שהטפסים מצביעים עליו) נוצר ממנו אוטומטית, ואפשר לשנות
-                  אותו – כל הטפסים והערכים יתעדכנו יחד איתו. כל השדות המזהים מרוכזים גם ב<Link href="/admin/fields" className="underline">שדות מזהים</Link>.
-                  בבונה הטפסים בוחרים אותו תחת &quot;מילוי אוטומטי&quot;: הוא מתמלא לפי העמותה שממנה יצאה הבקשה ומוצג לקריאה בלבד.
-                </p>
-              </div>
-              {/* One explicit save for the whole section: nothing here is written until the admin asks for it. */}
-              <form action={saveOrgFieldsAction} id={`orgfields-${o.id}`} className="space-y-3">
-                <input type="hidden" name="id" value={o.id} />
-                {orgFields.length > 0 && (
-                  <div className="overflow-x-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 text-xs text-muted-foreground">
-                        <tr>
-                          <th scope="col" className="px-3 py-2 text-start font-medium">שם השדה</th>
-                          <th scope="col" className="px-3 py-2 text-start font-medium">שם פנימי</th>
-                          <th scope="col" className="px-3 py-2 text-start font-medium">הערך של {o.name}</th>
-                          <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">פעולות</span></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orgFields.map((f) => (
-                          <tr key={f.id} className="border-t">
-                            <td className="px-3 py-1.5">
-                              <input type="hidden" name={`wasLabel.${f.id}`} value={f.label} />
-                              <Input name={`label.${f.id}`} defaultValue={f.label} required maxLength={80} aria-label={`שם השדה – ${f.label}`} className="h-9 min-w-40" />
-                            </td>
-                            <td className="px-3 py-1.5">
-                              {/* `was.` is what the panel was opened with: only a name the admin changed is renamed. */}
-                              <input type="hidden" name={`was.${f.id}`} value={f.key} />
-                              <Input
-                                name={`key.${f.id}`}
-                                defaultValue={f.key}
-                                required
-                                maxLength={40}
-                                pattern="[a-zA-Z][a-zA-Z0-9_-]*"
-                                title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
-                                dir="ltr"
-                                aria-label={`שם פנימי – ${f.label}`}
-                                className="h-9 min-w-32 font-mono text-xs"
-                              />
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <Input name={`f.${f.key}`} defaultValue={(o.fieldValues ?? {})[f.key] ?? ""} maxLength={200} aria-label={`${f.label} – ${o.name}`} className="h-9" />
-                            </td>
-                            <td className="px-3 py-1.5">
-                              {/*
-                                The button belongs to a delete form of its own, rendered outside this one: pressing
-                                Enter in a text box submits the first submit button of ITS form, and that must be
-                                the save, never a delete that would drop the field from every organization.
-                              */}
-                              <SubmitButton
-                                form={`delorgfield-${f.id}`}
-                                size="icon"
-                                variant="ghost"
-                                className="text-destructive"
-                                aria-label={`מחיקת השדה ${f.label} מכל העמותות`}
-                                title="מחיקה מכל העמותות"
-                              >
-                                <Trash2 className="size-4" aria-hidden />
-                              </SubmitButton>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {saved === "orgfielddel" && <p role="status" className="text-sm text-success">השדה נמחק מכל העמותות.</p>}
-              </form>
-              {/* The delete forms live outside the save form; the buttons above point at them by id. */}
-              {orgFields.map((f) => (
-                <form key={f.id} id={`delorgfield-${f.id}`} action={deleteOrgFieldAction} className="hidden">
-                  <input type="hidden" name="id" value={f.id} />
-                  <input type="hidden" name="org" value={o.id} />
-                </form>
-              ))}
-
-              <form action={createOrgFieldAction} className="flex flex-wrap items-end gap-2">
-                <input type="hidden" name="org" value={o.id} />
-                <Field label="שדה חדש (ייווצר בכל העמותות)" htmlFor={`new-orgfield-${o.id}`}>
-                  <Input id={`new-orgfield-${o.id}`} name="label" required maxLength={80} placeholder="למשל: מספר תיק ניכויים" className="min-w-56" />
-                </Field>
-                <Field label="סוג" htmlFor={`new-orgfield-type-${o.id}`}>
-                  <Select id={`new-orgfield-type-${o.id}`} name="type" defaultValue="short_text" className="min-w-32">
-                    {ORG_FIELD_TYPES.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
-                  </Select>
-                </Field>
-                <Field label="שם פנימי (לא חובה – ייווצר אוטומטית)" htmlFor={`new-orgfield-key-${o.id}`}>
-                  <Input
-                    id={`new-orgfield-key-${o.id}`}
-                    name="key"
-                    maxLength={40}
-                    pattern="[a-zA-Z][a-zA-Z0-9_-]*"
-                    title="אות באנגלית בהתחלה, ואחריה אותיות, ספרות, מקף או קו תחתון"
-                    dir="ltr"
-                    className="min-w-40 font-mono text-xs"
-                  />
-                </Field>
-                <SubmitButton variant="outline" saved={saved === "orgfield"} savedText="נוסף">הוספת שדה</SubmitButton>
-              </form>
+            <section aria-label="עמודות של העמותה" className="space-y-1 border-t pt-4">
+              <h3 className="font-semibold">הפרטים הקבועים של העמותה</h3>
+              <p className="text-sm text-muted-foreground">
+                תיק ניכויים, מספר חוזה וכל פרט אחר שהטפסים ממלאים לבד – ב
+                <Link href="/admin/lists" className="underline">רשימות</Link>, שורה אחת לכל עמותה.
+              </p>
             </section>
 
             <section aria-label="מיתוג ושולח" className="space-y-3 border-t pt-4">

@@ -247,3 +247,48 @@ export async function setOrgFieldValues(id: string, values: Record<string, strin
   }
   await db.update(organizations).set({ fieldValues: clean }).where(eq(organizations.id, id));
 }
+
+/** One cell of the organizations sheet: this organization's value for one field. Empty clears it. */
+export async function setOrgFieldValue(orgId: string, key: string, value: string): Promise<boolean> {
+  const [def] = await db.select({ id: organizationFieldDefs.id }).from(organizationFieldDefs).where(eq(organizationFieldDefs.key, key));
+  if (!def) return false;
+  const text = value.trim();
+  await db
+    .update(organizations)
+    .set({
+      fieldValues: text
+        ? sql`${organizations.fieldValues} || jsonb_build_object(${key}::text, ${text}::text)`
+        : sql`${organizations.fieldValues} - ${key}`,
+    })
+    .where(eq(organizations.id, orgId));
+  return true;
+}
+
+/**
+ * What deleting a column would touch: how many organizations filled it in, and which forms point at it.
+ * Shown before the deletion so the admin sees the real cost, not a generic "are you sure".
+ */
+export async function orgFieldUsage(key: string): Promise<{ filled: number; forms: { id: string; title: string }[] }> {
+  const [{ n } = { n: 0 }] = await db
+    .select({ n: count() })
+    .from(organizations)
+    .where(sql`${organizations.fieldValues} ? ${key} AND ${organizations.fieldValues} ->> ${key} <> ''`);
+  const rows = await db
+    .selectDistinct({ id: schema.formTemplates.id, title: schema.formTemplates.title })
+    .from(formTemplateVersions)
+    .innerJoin(schema.formTemplates, eq(schema.formTemplates.id, formTemplateVersions.templateId))
+    .where(sql`${formTemplateVersions.definition}::text LIKE ${`%"${ORG_FIELD_PREFIX}${key}"%`}`);
+  return { filled: Number(n), forms: rows };
+}
+
+/** Which columns are pointed at by at least one form (for the 🔗 mark on the sheet's headers). */
+export async function orgFieldKeysInForms(keys: string[]): Promise<Set<string>> {
+  if (!keys.length) return new Set();
+  const versions = await db.select({ definition: formTemplateVersions.definition }).from(formTemplateVersions);
+  const used = new Set<string>();
+  for (const v of versions) {
+    const text = JSON.stringify(v.definition);
+    for (const k of keys) if (text.includes(`"${ORG_FIELD_PREFIX}${k}"`)) used.add(k);
+  }
+  return used;
+}
