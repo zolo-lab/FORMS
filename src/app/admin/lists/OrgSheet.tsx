@@ -77,7 +77,8 @@ export function OrgSheet({ columns, rows }: { columns: SheetColumn[]; rows: Shee
     if (value.trim() === before.trim()) return true;
     const cell = `${orgId}:${key}`;
     begin();
-    const r = await saveCellAction(orgId, key, value);
+    // A thrown error (network, a lost session) is a failed save like any other, never a chip stuck on "שומר…".
+    const r = await saveCellAction(orgId, key, value).catch((): { ok: false; error: string } => ({ ok: false, error: "אין חיבור לשרת" }));
     const next = new Set(failedRef.current);
     if (r.ok) next.delete(cell);
     else next.add(cell);
@@ -208,8 +209,12 @@ function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?
   const commit = async () => {
     if (draft.trim() === before.current.trim() || saving.current === draft) return;
     saving.current = draft;
-    const ok = await onSave(draft, before.current);
-    saving.current = null;
+    let ok = false;
+    try {
+      ok = await onSave(draft, before.current);
+    } finally {
+      saving.current = null;
+    }
     if (ok) before.current = draft;
   };
   return (
