@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, newFormFromPdf } from "./helpers";
+import { login, newFormFromPdf, openEditView } from "./helpers";
 
 // Israel, 2.11: "when this box is ticked / this field is filled, open those fields" – set from the source field by
 // typing the target's name, and working in the filled form.
@@ -10,7 +10,7 @@ test.setTimeout(180_000);
 test("a ticked box and a filled field open other fields; hidden ones are not required", async ({ page }) => {
   await login(page, "/admin/forms");
   const id = await newFormFromPdf(page, `תנאים e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תאריך|סכום \(₪\)|הצהרה \/ אישור)$/ });
   const quick = page.getByRole("group", { name: "עריכה מהירה" }).or(page.locator('[aria-label="עריכה מהירה"]'));
   const add = async (type: string, label: string) => {

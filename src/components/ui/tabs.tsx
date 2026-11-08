@@ -6,14 +6,16 @@ export function Tabs<T extends string>({
   value,
   onChange,
   className,
+  "aria-label": ariaLabel,
 }: {
+  "aria-label"?: string;
   tabs: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
   className?: string;
 }) {
   return (
-    <div role="tablist" className={cn("flex gap-1 border-b", className)}>
+    <div role="tablist" aria-label={ariaLabel} className={cn("flex gap-1 border-b", className)}>
       {tabs.map((t) => (
         <button
           key={t.id}

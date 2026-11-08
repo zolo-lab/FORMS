@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb } from "pdf-lib";
 import { drawHebrew } from "../../src/lib/pdf/hebrew";
-import { login, newFormFromPdf } from "./helpers";
+import { login, newFormFromPdf, openEditView } from "./helpers";
 
 // builder-plan.md part 5 (5.4): a new form starts from a PDF and the fields are proposed from the document.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -56,7 +56,7 @@ test("a new form from a PDF proposes its fields, and adding them puts them in th
   await expect(page.getByRole("button", { name: "עמוד חדש מכאן" })).toHaveCount(0);
 
   // The same fields are the responsive form, in the order of the document; the date of birth opens page 2.
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   for (const label of ["שם העובד", "מספר זהות", "תאריך לידה", "מין"]) await expect(page.getByText(label).first()).toBeVisible();
   await page.getByRole("button", { name: /^תאריך לידה/ }).first().click();
   await page.getByRole("button", { name: "עמוד חדש מכאן" }).click();

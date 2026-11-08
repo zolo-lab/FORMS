@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { addOnPdf, login, newFormFromPdf } from "./helpers";
+import { addOnPdf, login, newFormFromPdf, openEditView } from "./helpers";
 
 // builder-plan.md §1.7 (route B): a form built from an existing PDF, iForms-style.
 // Needs the dev database; skipped when DATABASE_URL is not provided.
@@ -47,7 +47,7 @@ test("PDF form: upload, draw, publish, package, request, fill on the document, f
   await steps.getByRole("checkbox", { name: /השולח/ }).uncheck();
 
   // The drawn fields are ordinary fields of the form: they show in the editor like any other (no hidden page).
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   await expect(page.getByText("מספר זהות").first()).toBeVisible();
   await expect(page.getByText("שדות במסמך")).toHaveCount(0);
 

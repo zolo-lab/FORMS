@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, newFormFromPdf, openPalette } from "./helpers";
+import { login, newFormFromPdf, openEditView, openPalette } from "./helpers";
 
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
@@ -7,7 +7,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   const id = await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
 
   await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
@@ -40,7 +40,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 test("form settings: layout, description and thank-you message", async ({ page }) => {
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   // With nothing selected the panel shows the form's own settings.
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");
@@ -63,7 +63,7 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   await openPalette(page);
   for (const label of ["ראשון", "שני", "שלישי"]) {
     await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();

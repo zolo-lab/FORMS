@@ -44,6 +44,8 @@ import type { Processing } from "@/lib/processing/types";
 import type { Recipient } from "@/lib/requests/recipients";
 
 type TabId = "edit" | "preview" | "pdf" | "steps" | "process" | "json";
+/** The tabs above: "עריכה" stands for both the PDF and the responsive form (switched just below it). */
+type TopTab = Exclude<TabId, "edit" | "pdf"> | "build";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
@@ -177,7 +179,11 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [past, setPast] = useState<HistoryEntry[]>([]);
   const [future, setFuture] = useState<HistoryEntry[]>([]);
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
-  const [tab, setTab] = useState<TabId>(initialTab);
+  const [tab, setTabState] = useState<TabId>(initialTab);
+  // "עריכה" holds two views of the same fields, the PDF and the responsive form; it reopens on the one used last.
+  const building = tab === "pdf" || tab === "edit";
+  const [lastBuild, setLastBuild] = useState<"pdf" | "edit">(initialTab === "edit" ? "edit" : "pdf");
+  const setTab = (t: TabId) => { if (t === "pdf" || t === "edit") setLastBuild(t); setTabState(t); };
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   // The "כלים" menu closes on a click anywhere outside it.
@@ -430,17 +436,20 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         {!published && <Badge tone="warning">טיוטה</Badge>}
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
-        <Tabs<TabId>
-          // Five tabs are wider than a phone: the strip scrolls sideways instead of overflowing the header,
-          // which on a 390px screen pushed the builder's layout out from under the pointer.
+        <Tabs<TopTab>
+          // The strip scrolls sideways on a phone instead of overflowing the header, which on a 390px screen pushed
+          // the builder's layout out from under the pointer.
           className="-mb-2 max-w-full self-end overflow-x-auto overflow-y-hidden border-b-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:mb-0 [&>button]:shrink-0"
-          value={tab}
-          onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
+          value={building ? "build" : (tab as TopTab)}
+          onChange={(t) => {
+            if (t === "build") { setTab(lastBuild); return; }
+            setTab(t);
+            if (t === "json") { setJsonText(exportJson); setJsonError(null); }
+          }}
           tabs={[
-            { id: "pdf", label: "PDF" },
-            { id: "edit", label: "רספונסיבי" },
-            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
-            ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד טופס •" : "עיבוד טופס" }] : []),
+            { id: "build", label: "עריכה" },
+            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבים •" : "שלבים" }] : []),
+            ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד •" : "עיבוד" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
           ]}
@@ -515,6 +524,17 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </span>
           <Button size="sm" onClick={savePick}>שמירה</Button>
           <Button variant="ghost" size="sm" onClick={() => setPicking(null)}>ביטול</Button>
+        </div>
+      )}
+      {building && (
+        <div className="flex items-center gap-3 border-b bg-card px-4">
+          <Tabs<"pdf" | "edit">
+            aria-label="תצוגת העריכה"
+            className="border-b-0"
+            value={tab as "pdf" | "edit"}
+            onChange={setTab}
+            tabs={[{ id: "pdf", label: "PDF" }, { id: "edit", label: "רספונסיבי" }]}
+          />
         </div>
       )}
       {!picking && views && (tab === "edit" || tab === "pdf") && (
