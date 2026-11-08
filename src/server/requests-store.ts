@@ -678,7 +678,7 @@ async function refreshTodayDeadlines(r: typeof requests.$inferSelect, waiting: A
     }
   }
   for (const { s, rule } of stepRules) {
-    if (ext && (!s.activatedAt || ext.at > s.activatedAt)) continue;
+    if (ext && (!s.activatedAt || ext.at >= s.activatedAt)) continue;
     const at = stepLinkDeadline(rule!, answers, s.activatedAt ?? r.createdAt, r.createdAt, now);
     if (same(at, s.linkExpiresAt)) continue;
     await db.update(signingSteps).set({ linkExpiresAt: at }).where(eq(signingSteps.id, s.id));
@@ -695,7 +695,12 @@ export async function expireOverdue(now = new Date()) {
     const before = await loadSteps(r.id);
     // Each open step by its own deadline when it has one, else by the request's.
     const waiting = before.filter((s) => s.status === "active" || s.status === "in_progress");
-    await refreshTodayDeadlines(r, waiting, now, pkgs);
+    // A failure here must not stop the sweep: the request is then checked by the deadlines it has.
+    try {
+      await refreshTodayDeadlines(r, waiting, now, pkgs);
+    } catch (e) {
+      console.error("refreshTodayDeadlines failed", { requestId: r.id, error: e instanceof Error ? e.message : String(e) });
+    }
     const passed = waiting.length ? waiting.some((s) => { const at = linkExpiryOf(s, r); return !!at && at < now; }) : !!r.expiresAt && r.expiresAt < now;
     if (passed) {
       await persist(r.id, before, expire(before.map(toEngine)), { type: "system" });
@@ -753,7 +758,8 @@ export async function extendExpiry(requestId: string, days: number, actor: { typ
     await db.update(signingSteps).set({ linkExpiresAt: mine }).where(eq(signingSteps.id, s.id));
     await db.update(stepTokens).set({ expiresAt: mine }).where(eq(stepTokens.stepId, s.id));
   }
-  await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_extended", payload: { days, expiresAt: next.toISOString() } });
+  // Dated by the app's clock, as the steps' activatedAt: a rule that compares with today leaves a later extension alone.
+  await db.insert(events).values({ requestId, actorType: actor.type, actorId: actor.id, type: "request_extended", payload: { days, expiresAt: next.toISOString() }, createdAt: new Date() });
   return next;
 }
 
