@@ -75,7 +75,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // Publish and attach to a package.
   await page.goto(`/admin/forms/${id}`);
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "פורסם", exact: true })).toBeDisabled({ timeout: 20_000 });
   // The signing route is part of the form ("שלבי הטופס"), like in iForms.
   await page.getByRole("tab", { name: "שלבי הטופס" }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();

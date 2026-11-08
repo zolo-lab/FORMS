@@ -10,10 +10,10 @@ import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, s
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, ExternalLink, History, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, History, Pencil, Redo2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
 import { Badge } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -179,8 +179,18 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
   const [tab, setTab] = useState<TabId>(initialTab);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  // The "כלים" menu closes on a click anywhere outside it.
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (e: PointerEvent) => {
+      const menu = toolsRef.current;
+      if (menu?.open && !menu.contains(e.target as Node)) menu.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
   const [save, setSave] = useState<SaveState>("saved");
-  const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
   const [pdf, setPdfState] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
   // The latest boxes, for handlers that run before React re-renders (kept in step with every write below).
@@ -286,7 +296,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       setSave("saving");
       const r = await saveDraftAction(templateId, def, { pdfFileId: pdf?.file.id ?? null, pdfMapping: pdf?.mapping ?? null });
       if ("error" in r) { setSave("error"); return; }
-      setVersion(r.version);
       setPublished(false);
       setSave("saved");
       const then = afterSave.current;
@@ -388,7 +397,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     const r = await publishAction(templateId);
     if (!r.ok) { setSave("error"); setIssues(r.issues); return; }
     setIssues([]);
-    setVersion(r.version);
     setPublished(true);
     setSave("saved");
   }
@@ -400,15 +408,26 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     <div className="flex h-[calc(100dvh-3rem)] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b bg-card px-4 py-2">
         <Link href="/admin/forms" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground">← טפסים</Link>
-        {/* The editable title is an input, so the page has no heading of its own without this. */}
-        <h1 className="sr-only">{`עריכת טופס: ${def.title || "ללא שם"}`}</h1>
-        <Input
-          aria-label="שם הטופס"
-          value={def.title}
-          onChange={(e) => commit({ ...def, title: e.target.value })}
-          className="h-9 max-w-xs font-semibold"
-        />
-        <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
+        {/* The name is the page's heading; the pencil next to it turns it into a field to edit (Enter or leaving ends). */}
+        {editingTitle ? (
+          <Input
+            aria-label="שם הטופס"
+            autoFocus
+            value={def.title}
+            onChange={(e) => commit({ ...def, title: e.target.value })}
+            onBlur={() => setEditingTitle(false)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingTitle(false); } }}
+            className="h-9 max-w-xs font-semibold"
+          />
+        ) : (
+          <div className="flex min-w-0 items-center gap-1">
+            <h1 className="truncate text-base font-semibold">{def.title || "ללא שם"}</h1>
+            <Button variant="ghost" size="icon" className="size-11 shrink-0 sm:size-8" aria-label="עריכת שם הטופס" title="עריכת שם הטופס" onClick={() => setEditingTitle(true)}>
+              <Pencil className="size-4" aria-hidden />
+            </Button>
+          </div>
+        )}
+        {!published && <Badge tone="warning">טיוטה</Badge>}
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
         <Tabs<TabId>
@@ -427,15 +446,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           ]}
         />
         <div className="ms-auto flex flex-wrap items-center gap-1">
-          <details className="relative">
+          <details
+            ref={toolsRef}
+            className="relative"
+            // Choosing an item closes the menu (a click outside it closes it too, see the effect above).
+            onClick={(e) => { if ((e.target as HTMLElement).closest("button, a")) toolsRef.current?.removeAttribute("open"); }}
+          >
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
             <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
-              <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("edit"); setSelection(null); }}>
-                <Settings2 className="size-4" />הגדרות הטופס
-              </Button>
-              <a href={`/preview/form/${templateId}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm", className: "justify-start" })}>
-                <ExternalLink className="size-4" />צפייה בטופס (בחלון חדש)
-              </a>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
                 <Sparkles className="size-4" />שמות מזהים לשדות
               </Button>

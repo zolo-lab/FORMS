@@ -39,7 +39,7 @@ test("a form with two steps: the employee fills step 1 on a phone, leaves, and c
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
   await expect(page.getByText("עמוד 2").filter({ visible: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "פורסם", exact: true })).toBeDisabled({ timeout: 20_000 });
 
   // The form carries its own route (requester → employee by default): open a request from it.
   await page.goto("/admin/requests/new");

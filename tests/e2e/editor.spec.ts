@@ -41,8 +41,7 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
-  await page.getByText("כלים", { exact: true }).click();
-  await page.getByRole("button", { name: "הגדרות הטופס" }).click();
+  // With nothing selected the panel shows the form's own settings.
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");
   await page.getByLabel("הודעה אחרי השליחה").fill("תודה רבה");
@@ -78,4 +77,21 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 8 } });
   await expect.poll(labels).toEqual(["שלישי", "ראשון", "שני"]);
 });
+});
+
+test("the form's name is edited from the pencil next to it, and the tools menu closes on a click outside", async ({ page }) => {
+  await login(page, "/admin/forms");
+  const name = `שם ${Date.now()}`;
+  await newFormFromPdf(page, name);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await page.getByRole("button", { name: "עריכת שם הטופס" }).click();
+  await page.getByLabel("שם הטופס").fill(`${name} חדש`);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1, name: `${name} חדש` })).toBeVisible();
+  await expect(page.getByText("טיוטה", { exact: true })).toBeVisible();
+
+  await page.getByText("כלים", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "גרסאות קודמות" })).toBeVisible();
+  await page.getByRole("heading", { level: 1 }).click();
+  await expect(page.getByRole("button", { name: "גרסאות קודמות" })).toBeHidden();
 });
