@@ -85,15 +85,29 @@ export async function listRecordsOf(typeId: string): Promise<ListRecord[]> {
   return orEmpty(db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.createdAt)));
 }
 
+export async function recordCount(typeId: string): Promise<number> {
+  const [row] = await orEmpty(db.select({ n: sql<number>`count(*)::int` }).from(listRecords).where(eq(listRecords.listTypeId, typeId)));
+  return row?.n ?? 0;
+}
+
 export async function recordCounts(): Promise<Map<string, number>> {
   const rows = await orEmpty(db.select({ id: listRecords.listTypeId, n: sql<number>`count(*)::int` }).from(listRecords).groupBy(listRecords.listTypeId));
   return new Map(rows.map((r) => [r.id, r.n]));
 }
 
-export async function saveRecord(typeId: string, id: string | null, values: Record<string, string>): Promise<string> {
+/**
+ * Adds or updates a record. On update, `fields` are the type's current fields: their values are replaced by `values`
+ * (a cleared field is dropped), while values of fields since taken off the type stay, so adding the field back
+ * brings them back. Returns null when the record is gone (deleted meanwhile, or of another type).
+ */
+export async function saveRecord(typeId: string, id: string | null, values: Record<string, string>, fields: string[] = Object.keys(values)): Promise<string | null> {
   if (id) {
-    await db.update(listRecords).set({ values, updatedAt: new Date() }).where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)));
-    return id;
+    const rows = await db
+      .update(listRecords)
+      .set({ values: sql`(${listRecords.values} - ${fields}::text[]) || ${JSON.stringify(values)}::jsonb`, updatedAt: new Date() })
+      .where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)))
+      .returning({ id: listRecords.id });
+    return rows.length ? id : null;
   }
   const [row] = await db.insert(listRecords).values({ listTypeId: typeId, values }).returning({ id: listRecords.id });
   return row!.id;

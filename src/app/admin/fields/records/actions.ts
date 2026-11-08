@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireGrant } from "@/server/guards";
 import { cleanRecord, MAX_RECORDS } from "@/lib/fields/record";
 import { listDictionary } from "@/server/field-dictionary-store";
-import { deleteRecord, getListType, listRecordsOf, saveRecord } from "@/server/list-types-store";
+import { deleteRecord, getListType, recordCount, saveRecord } from "@/server/list-types-store";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const PATH = "/admin/fields/records";
@@ -21,8 +21,8 @@ export async function saveRecordAction(typeId: string, id: string | null, values
   const r = cleanRecord(values, fields);
   if (Object.keys(r.problems).length) return { ok: false, problems: r.problems };
   if (!Object.keys(r.values).length) return { ok: false, error: "צריך למלא לפחות שדה אחד" };
-  if (!id && (await listRecordsOf(typeId)).length >= MAX_RECORDS) return { ok: false, error: `ברשימה אפשר עד ${MAX_RECORDS} רשומות` };
-  await saveRecord(typeId, id, r.values);
+  if (!id && (await recordCount(typeId)) >= MAX_RECORDS) return { ok: false, error: `ברשימה אפשר עד ${MAX_RECORDS} רשומות` };
+  if (!(await saveRecord(typeId, id, r.values, fields.map((f) => f.key)))) return { ok: false, error: "הרשומה נמחקה בינתיים. רעננו את הדף." };
   revalidatePath(PATH);
   return { ok: true };
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
+import { requireGrant } from "@/server/guards";
 import { cn } from "@/lib/utils";
 import { listDictionary } from "@/server/field-dictionary-store";
 import { listListTypes, listRecordsOf, recordCounts } from "@/server/list-types-store";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 /** The records of a list type: pick the type, then add and edit its records (each supplier, each work place…). */
 export default async function RecordsPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
+  await requireGrant("manageFields");
   const { type: typeId } = await searchParams;
   const [types, dict, counts] = await Promise.all([listListTypes(), listDictionary(), recordCounts()]);
   const type = types.find((t) => t.id === typeId) ?? types[0];

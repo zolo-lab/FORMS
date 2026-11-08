@@ -85,7 +85,7 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
               <tbody>
                 {rows.map((f) => {
                   const form = `field-${f.id}`;
-                  const types = f.category === "org" ? ORG_FIELD_TYPES : DICTIONARY_TYPES;
+                  const typeOptions = f.category === "org" ? ORG_FIELD_TYPES : DICTIONARY_TYPES;
                   return (
                     <tr key={f.id} className="border-t">
                       <td className="px-3 py-1.5">
@@ -96,7 +96,7 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
                       </td>
                       <td className="px-3 py-1.5">
                         <Select form={form} name="type" defaultValue={f.type} aria-label={`סוג – ${f.label}`} className="h-9">
-                          {types.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
+                          {typeOptions.map((t) => <option key={t} value={t}>{DICTIONARY_TYPE_LABELS[t]}</option>)}
                         </Select>
                       </td>
                       <td className="px-3 py-1.5">

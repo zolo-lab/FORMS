@@ -95,15 +95,20 @@ export async function updateDictionaryEntry(id: string, category: FieldCategory,
     key = typed;
   }
   // A type left out keeps the current one.
-  const own = db.update(fieldDictionary).set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() }).where(eq(fieldDictionary.id, id));
+  // Only while the key is still the one read above: a rename that raced ahead wins, and this one moves nothing.
+  const own = db
+    .update(fieldDictionary)
+    .set({ key, label, ...(patch.type ? { type: dictionaryType(patch.type) } : {}), updatedAt: new Date() })
+    .where(and(eq(fieldDictionary.id, id), eq(fieldDictionary.key, cur.key)))
+    .returning({ id: fieldDictionary.id });
   if (key === cur.key) {
-    await own;
-    return { ok: true, key };
+    return (await own).length ? { ok: true, key } : { ok: false, reason: "missing" };
   }
   // A new internal name: the field and every list type that lists it change in one batch (one transaction), so a
   // failure leaves them all as they were, never a type pointing at a name the dictionary no longer has.
-  await db.batch([own, keyRenameInTypes(cur.key, key), keyRenameInRecords(cur.key, key)]);
-  return { ok: true, key };
+  // When the field's key changed meanwhile, the other two find nothing under the old key and change nothing either.
+  const [moved] = await db.batch([own, keyRenameInTypes(cur.key, key), keyRenameInRecords(cur.key, key)]);
+  return moved.length ? { ok: true, key } : { ok: false, reason: "missing" };
 }
 
 /** Deletes a general field, unless a list type uses it (it would silently drop a column of that list). */

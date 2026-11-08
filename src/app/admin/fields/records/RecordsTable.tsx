@@ -19,6 +19,7 @@ function inputProps(type: RecordField["type"]): React.ComponentProps<"input"> {
     case "number":
     case "currency":
     case "percent":
+      return { inputMode: "decimal", dir: "ltr" };
     case "id_number":
       return { inputMode: "numeric", dir: "ltr" };
     case "phone":
@@ -42,6 +43,7 @@ export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { t
   const [editing, setEditing] = useState<{ id: string | null; values: Record<string, string> } | null>(null);
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const shown = useMemo(() => {
@@ -69,7 +71,16 @@ export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { t
   const remove = (row: Row) => {
     const title = recordTitle(row.values, fields, displayKey) || "הרשומה";
     if (!confirm(`למחוק את "${title}" מ${typeName}?`)) return;
-    start(async () => { await deleteRecordAction(typeId, row.id); router.refresh(); });
+    setListError(null);
+    start(async () => {
+      try {
+        await deleteRecordAction(typeId, row.id);
+      } catch {
+        setListError("המחיקה נכשלה. נסו שוב.");
+        return;
+      }
+      router.refresh();
+    });
   };
 
   return (
@@ -84,6 +95,7 @@ export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { t
         <span className="text-sm text-muted-foreground">{rows.length} רשומות{query && ` · ${shown.length} תואמות`}</span>
       </div>
 
+      {listError && <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{listError}</p>}
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">לסוג הזה עדיין אין שדות. הוסיפו שדות בלשונית סוגי רשימות.</p>
       ) : (
