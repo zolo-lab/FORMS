@@ -104,7 +104,7 @@ export async function saveRecord(typeId: string, id: string | null, values: Reco
   if (id) {
     const rows = await db
       .update(listRecords)
-      .set({ values: sql`(${listRecords.values} - ${fields}::text[]) || ${JSON.stringify(values)}::jsonb`, updatedAt: new Date() })
+      .set({ values: sql`(${listRecords.values} - ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(fields)}::jsonb))) || ${JSON.stringify(values)}::jsonb`, updatedAt: new Date() })
       .where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)))
       .returning({ id: listRecords.id });
     return rows.length ? id : null;
