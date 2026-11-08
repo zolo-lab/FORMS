@@ -641,7 +641,17 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             <aside className="order-3 rounded-lg border bg-card p-3 lg:order-none lg:overflow-auto" aria-label="הגדרות">
               {selection && (
                 // A field or a page is shown; the form's own settings are one click away.
-                <Button variant="ghost" size="sm" className="mb-2 min-h-11 justify-start sm:min-h-9" onClick={() => setSelection(null)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-2 min-h-11 justify-start sm:min-h-9"
+                  onClick={(e) => {
+                    // The button goes away with the switch: keyboard focus moves to the first setting, not to nowhere.
+                    const panel = e.currentTarget.closest("aside");
+                    setSelection(null);
+                    requestAnimationFrame(() => panel?.querySelector<HTMLElement>("input, textarea, select")?.focus());
+                  }}
+                >
                   <Settings2 className="size-4" aria-hidden />הגדרות הטופס
                 </Button>
               )}
