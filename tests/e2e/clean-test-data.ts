@@ -45,6 +45,8 @@ export async function cleanTestData(sql: NeonQueryFunction<false, false>): Promi
     sql`delete from notifications where template_key = 'test' and "to" like '%@e2e.test'`,
     // Projects added by the organizations e2e (deleted there unless the test failed half-way).
     sql`delete from projects where name like 'פרויקט בדיקה %'`,
+    // List types made by the lists e2e (their fields and lists go with them).
+    sql`delete from list_types where name like 'סוג בדיקה %'`,
   ]);
   // Positional: r[11] is the form_templates delete and r[20] the organizations delete, both "returning id".
   // Adding a statement before either one shifts these.

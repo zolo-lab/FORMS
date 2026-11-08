@@ -132,19 +132,10 @@ export async function listOrgFieldDefs(): Promise<OrgFieldDef[]> {
   return db.select().from(organizationFieldDefs).orderBy(asc(organizationFieldDefs.order), asc(organizationFieldDefs.label));
 }
 
-/** Every internal name in use: the organizations' fields and the central dictionary share one namespace. */
+/** Every internal name the organizations' fields already use. */
 export async function takenFieldKeys(): Promise<Set<string>> {
-  const [orgKeys, dictKeys] = await Promise.all([
-    db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs),
-    // Only a missing table (a database the migration has not reached) counts as empty; any other error must stop
-    // the uniqueness check rather than let it pass silently.
-    db.select({ key: schema.fieldDictionary.key }).from(schema.fieldDictionary).catch((e: unknown) => {
-      const code = (e as { cause?: { code?: string }; code?: string }).cause?.code ?? (e as { code?: string }).code;
-      if (code === "42P01") return [] as { key: string }[];
-      throw e;
-    }),
-  ]);
-  return new Set([...orgKeys, ...dictKeys].map((r) => r.key));
+  const rows = await db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs);
+  return new Set(rows.map((r) => r.key));
 }
 
 /**

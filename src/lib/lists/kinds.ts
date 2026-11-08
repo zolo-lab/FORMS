@@ -1,0 +1,98 @@
+/**
+ * The fields of a list type ("ספק": name, company id, e-mail…) and the values a list (one supplier) holds in them.
+ * Pure and unit tested: the store and the sheet both go through it, so a value is checked the same way everywhere.
+ */
+import { valueProblem } from "@/lib/fields/record";
+import type { DictionaryType } from "@/lib/fields/types";
+
+/** Single-value kinds that are plain text underneath, checked by `valueProblem`. */
+export const TEXT_KINDS = ["short_text", "long_text", "number", "currency", "percent", "id_number", "phone", "email", "date"] as const;
+/** Every kind a list field can have: the text kinds, yes/no, a choice from options, and "belongs to" another list. */
+export const LIST_FIELD_KINDS = [...TEXT_KINDS, "yes_no", "select", "ref"] as const;
+export type ListFieldKind = (typeof LIST_FIELD_KINDS)[number];
+
+export const KIND_LABELS: Record<ListFieldKind, string> = {
+  short_text: "טקסט",
+  long_text: "טקסט ארוך",
+  number: "מספר",
+  currency: "סכום",
+  percent: "אחוז",
+  id_number: "תעודת זהות",
+  phone: "טלפון",
+  email: "מייל",
+  date: "תאריך",
+  yes_no: "כן / לא",
+  select: "בחירה מרשימה",
+  ref: "שייך ל…",
+};
+
+/** Kinds whose value reads left to right even inside a Hebrew table. */
+export const LTR_KINDS = new Set<ListFieldKind>(["number", "currency", "percent", "id_number", "phone", "email", "date"]);
+
+export const isListFieldKind = (k: unknown): k is ListFieldKind => typeof k === "string" && (LIST_FIELD_KINDS as readonly string[]).includes(k);
+export const isTextKind = (k: ListFieldKind): k is (typeof TEXT_KINDS)[number] => (TEXT_KINDS as readonly string[]).includes(k);
+
+export const MAX_OPTIONS = 200;
+export const MAX_OPTION_LENGTH = 120;
+export const MAX_CELL = 500;
+
+/** The options of a choice field: trimmed, without empties or repeats, in the order given. */
+export function cleanOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const o of raw) {
+    if (typeof o !== "string") continue;
+    const v = o.replace(/\s+/g, " ").trim().slice(0, MAX_OPTION_LENGTH);
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= MAX_OPTIONS) break;
+  }
+  return out;
+}
+
+export interface ListField {
+  key: string;
+  label: string;
+  kind: ListFieldKind;
+  options?: string[];
+  multi?: boolean;
+}
+
+/** A cell's value: one string, or several for a multiple choice. Empty is `""` (or `[]`). */
+export type CellValue = string | string[];
+
+/**
+ * Checks one cell against its field. `refIds` are the lists a "belongs to" field may point at.
+ * Returns the value to store (empty means "clear it") or the reason it was refused, in Hebrew.
+ */
+export function cleanCell(field: ListField, raw: unknown, refIds?: ReadonlySet<string>): { ok: true; value: CellValue } | { ok: false; error: string } {
+  if (field.kind === "select") {
+    const options = field.options ?? [];
+    if (field.multi) {
+      const list = Array.isArray(raw) ? raw : typeof raw === "string" && raw ? [raw] : [];
+      const picked = cleanOptions(list);
+      const bad = picked.find((p) => !options.includes(p));
+      return bad ? { ok: false, error: `"${bad}" אינו אחת האפשרויות` } : { ok: true, value: options.filter((o) => picked.includes(o)) };
+    }
+    const v = typeof raw === "string" ? raw.trim() : "";
+    return !v || options.includes(v) ? { ok: true, value: v } : { ok: false, error: `"${v}" אינו אחת האפשרויות` };
+  }
+  const v = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, MAX_CELL) : "";
+  if (!v) return { ok: true, value: "" };
+  if (field.kind === "yes_no") return v === "yes" || v === "no" ? { ok: true, value: v } : { ok: false, error: "כן או לא" };
+  if (field.kind === "ref") return refIds?.has(v) ? { ok: true, value: v } : { ok: false, error: "הרשימה שנבחרה לא קיימת" };
+  const problem = valueProblem(field.kind as DictionaryType, v);
+  return problem ? { ok: false, error: problem } : { ok: true, value: v };
+}
+
+/** What a list is called in a dropdown: its first non-empty text value, else "ללא שם". */
+export function listTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[]): string {
+  for (const f of fields) {
+    if (f.kind === "ref" || f.kind === "select" || f.kind === "yes_no") continue;
+    const v = values[f.key];
+    if (typeof v === "string" && v) return v;
+  }
+  return "ללא שם";
+}
