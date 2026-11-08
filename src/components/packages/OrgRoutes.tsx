@@ -11,24 +11,12 @@ import { stepLabel } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
 import { StepsEditor, type EditorDraft, type EmailField, type StepsSaveState } from "./StepsEditor";
 
-import type { DateFieldOption } from "./ExpiryRuleBuilder";
-
 type Option = { id: string; label: string };
 export type SaveRoute = (organizationId: string, drafts: StepDraft[] | null) => Promise<{ ok: true } | { ok: false; errors: string[] }>;
 
 const strip = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
-/**
- * Editable copies of steps. A route of its own already belongs to one organization, so per-organization link-expiry
- * exceptions have no meaning in it (and are not shown here): they are dropped, and the step's own rule is what applies.
- */
-const fresh = (drafts: StepDraft[], forOrg?: string): EditorDraft[] =>
-  drafts.map((d) => {
-    // Copied for one organization: its exception (if it had one) becomes the step's own rule, so nothing changes for it.
-    const own = (forOrg && d.expiryByOrg?.[forOrg]) || d.expiry;
-    const copy: EditorDraft = { ...d, key: crypto.randomUUID(), origRole: d.role, ...(own ? { expiry: own } : {}) };
-    delete copy.expiryByOrg;
-    return copy;
-  });
+/** Editable copies of steps. */
+const fresh = (drafts: StepDraft[]): EditorDraft[] => drafts.map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role }));
 const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringify(a?.map(strip) ?? null) === JSON.stringify(b?.map(strip) ?? null);
 
 /**
@@ -36,17 +24,10 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, generalDateFields, defaultExpiry, general, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, expiryText, heldRoles, save, onRoutesChange,
 }: {
-  dateFields?: DateFieldOption[];
-  /** The date fields as the general route's unsaved step changes will place them (for the general route's rows). */
-  generalDateFields?: DateFieldOption[];
-  defaultExpiry?: string;
-  /**
-   * The general route, editable for this organization's link expiry only (an organization – not a project – that
-   * follows it). Saved with the general route.
-   */
-  general?: { drafts: EditorDraft[]; onChange: (next: EditorDraft[]) => void; onSave: () => void; dirty: boolean; state: StepsSaveState; waitingForForm: boolean };
+  /** The link rule of a step of this organization (by role), in words – from the "כללי תוקף" tab. */
+  expiryText?: (role: string) => string;
   org: Option;
   orgs: Option[];
   /** Saved routes, per organization id. */
@@ -108,31 +89,11 @@ export function OrgRoutes({
             <p className="text-sm text-muted-foreground">כשצריך אצלה מנהלים אחרים או שלב נוסף, יוצרים לה מסלול משלה. אפשר להתחיל מהמסלול הכללי או לשכפל מסלול של עמותה אחרת ולשנות רק את השמות.</p>
           </div>
         </div>
-        {general ? (
-          <>
-            <p className="text-sm">אפשר לתת ל{org.label} תוקף קישור משלה לכל שלב, בלי מסלול נפרד: לחצו על שם השלב או על כפתור העריכה בשורה.</p>
-            <StepsEditor
-              drafts={general.drafts}
-              onChange={general.onChange}
-              contacts={contacts}
-              groups={groups}
-              emailFields={emailFields}
-              dateFields={generalDateFields ?? dateFields}
-              defaultExpiry={defaultExpiry}
-              dirty={general.dirty}
-              state={general.state}
-              onSave={general.onSave}
-              waitingForForm={general.waitingForForm}
-              orgView={org}
-            />
-          </>
-        ) : (
-          <ol className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
-            {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
-          </ol>
-        )}
+        <ol className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
+          {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
+        </ol>
         <div className="flex flex-wrap items-end gap-3">
-          <Button type="button" onClick={() => setMine(fresh(fallback.drafts, org.id))}>
+          <Button type="button" onClick={() => setMine(fresh(fallback.drafts))}>
             <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מ{fallback.label})
           </Button>
           {withRoute.length > 0 && (
@@ -185,8 +146,7 @@ export function OrgRoutes({
         contacts={contacts}
         groups={groups}
         emailFields={emailFields}
-        dateFields={dateFields}
-        defaultExpiry={defaultExpiry}
+        expiryText={expiryText}
         dirty={dirty}
         state={state[org.id] ?? { kind: "idle" }}
         onSave={() => void persist(mine)}

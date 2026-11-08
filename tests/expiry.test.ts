@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparesToday, describeExpiryRule, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { comparesToday, describeExpiryRule, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -212,5 +212,32 @@ describe("today is the current day", () => {
     expect(expiryFor(rule, { start: "2026-11-10" }, { sent, today: new Date("2026-11-11T08:00:00Z") })).toBeNull();
     expect(comparesToday(rule)).toBe(true);
     expect(comparesToday(rule.otherwise)).toBe(false);
+  });
+});
+
+describe("the table of rules", () => {
+  const form = { kind: "calc" as const, base: { from: "sent" as const }, addDays: 14 };
+  const r = (stepRole: string | undefined, orgId: string | undefined, days: number) => ({ id: `${stepRole}-${orgId}`, ...(stepRole ? { stepRole } : {}), ...(orgId ? { orgId } : {}), rule: { kind: "calc" as const, base: { from: "sent" as const }, addDays: days } });
+  const rows = [r("approver", undefined, 5), r("approver", "org-a", 6), r(undefined, "org-a", 20)];
+  it("the most specific rule applies", () => {
+    expect(stepRowRule(rows, "approver", "org-a")).toEqual(rows[1]!.rule);
+    expect(stepRowRule(rows, "approver", "org-b")).toEqual(rows[0]!.rule);
+    expect(stepRowRule(rows, "employee", "org-a")).toBeNull();
+    expect(requestExpiryRule(form, rows, "org-a")).toEqual(rows[2]!.rule);
+    expect(requestExpiryRule(form, rows, "org-b")).toEqual(form);
+    expect(requestExpiryRule(null, [], null)).toBeNull();
+  });
+  it("drops rows without a scope or a valid rule, and a second row for a scope", () => {
+    expect(normalizeExpiryRows([{ id: "x", rule: form }, { id: "y", stepRole: "a", rule: { kind: "bad" } }, r("a", undefined, 1), r("a", undefined, 2)])).toEqual([r("a", undefined, 1)]);
+  });
+  it("takes in the rules older forms kept on their steps, after the table's own", () => {
+    const workflow = { steps: [
+      { role: "requester", expiry: { kind: "none" } },
+      { role: "approver", expiry: { kind: "days", days: 4 }, expiryByOrg: { "org-a": { kind: "none" } } },
+    ] };
+    const out = withLegacyExpiryRows([r("approver", "org-a", 9)], workflow, { "org-b": { steps: [{ role: "manager", expiry: { kind: "none" } }] } });
+    expect(out.map((x) => [x.stepRole, x.orgId ?? null, x.rule.kind])).toEqual([["approver", "org-a", "calc"], ["approver", null, "calc"], ["manager", "org-b", "none"]]);
+    expect(out[1]!.rule).toEqual({ kind: "calc", base: { from: "stepStart" }, addDays: 4 });
+    expect(withoutStepExpiry(workflow).steps[1]).toEqual({ role: "approver" });
   });
 });

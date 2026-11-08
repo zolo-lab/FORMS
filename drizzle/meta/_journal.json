@@ -260,6 +260,13 @@
       "when": 1794090904713,
       "tag": "0036_list_records",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794163039449,
+      "tag": "0037_expiry_rules",
+      "breakpoints": true
     }
   ]
 }

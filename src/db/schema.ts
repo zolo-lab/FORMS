@@ -26,7 +26,7 @@ import type { Condition } from "@/lib/forms/schema";
 import type { ReminderPolicy, Workflow } from "@/lib/workflow/types";
 import type { ExportTemplate } from "@/lib/export/template";
 import type { UserGrants } from "@/lib/auth/permissions";
-import type { ExpiryRule } from "@/lib/requests/expiry";
+import type { ExpiryRule, ExpiryRuleRow } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { RecipientKind } from "@/lib/notifications/triggers";
 import type { Processing } from "@/lib/processing/types";
@@ -338,6 +338,8 @@ export const packageTemplates = pgTable("package_templates", {
   workflow: jsonb("workflow").$type<Workflow>().notNull(),
   /** When the links of a request expire (see src/lib/requests/expiry.ts); null = the default 30 days. */
   expiryRule: jsonb("expiry_rule").$type<ExpiryRule>(),
+  /** "כללי תוקף": rules for one step and/or one organization; the most specific applies (src/lib/requests/expiry.ts). */
+  expiryRules: jsonb("expiry_rules").$type<ExpiryRuleRow[]>().notNull().default([]),
   /** Fixed people who get the completion e-mail with the signed PDFs attached. */
   completionRecipients: jsonb("completion_recipients").$type<{ name: string; email: string }[]>().notNull().default([]),
   /** "עיבוד טופס": cutting the signed documents and where each piece goes (src/lib/processing/types.ts).

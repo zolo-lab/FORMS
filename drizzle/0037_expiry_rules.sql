@@ -1,0 +1,1 @@
+ALTER TABLE "package_templates" ADD COLUMN "expiry_rules" jsonb DEFAULT '[]'::jsonb NOT NULL;

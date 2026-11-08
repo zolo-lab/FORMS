@@ -9,11 +9,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { describeExpiryRule, expiryRuleFields, normalizeExpiryRule, type ExpiryRule } from "@/lib/requests/expiry";
 import { STEP_WHO, STEP_WHO_LABELS, type StepDraft, type StepWho } from "@/lib/workflow/step-who";
 import { defaultEmailField, draftProblems, stepLabel, stepTarget } from "@/lib/workflow/step-fields";
 import type { StepRole } from "@/lib/workflow/types";
-import { ExpiryRuleBuilder, type DateFieldOption } from "./ExpiryRuleBuilder";
 
 type Option = { id: string; label: string };
 /** An email field (or group list) of the form, with the step role that fills it. */
@@ -31,12 +29,6 @@ const HINT: Partial<Record<StepWho, string>> = {
   group_all: "כולם מקבלים קישור; השלב נגמר כשכולם חתמו.",
 };
 
-/** A rule that is not complete yet (a date rule with no field chosen) – shown on the step until fixed. */
-function expiryProblem(rule: ExpiryRule | undefined): string | null {
-  if (!rule) return null;
-  return normalizeExpiryRule(rule) ? null : "תוקף הקישור: הכלל לא שלם (למשל לא נבחר שדה תאריך)";
-}
-
 const COLS = "grid-cols-[2rem_2.25rem_minmax(10rem,1.3fr)_minmax(8rem,0.8fr)_minmax(12rem,1.3fr)_auto]";
 const SHORT_WHO: Record<StepWho, string> = {
   requester: "פותח את הבקשה",
@@ -50,13 +42,12 @@ const SHORT_WHO: Record<StepWho, string> = {
 
 /**
  * "שלבי הטופס" as a list of records: one row per step, in order – who fills it, what they fill and when its link
- * expires. Rows are dragged by their handle (or moved with the arrows); step 1, the sender, stays first. A row opens
- * a dialog with all of the step's settings. On a narrow screen the table scrolls sideways.
- * `orgView`: an organization that follows this route – the dialog edits only that organization's own expiry for the
- * step (stored on the route as `expiryByOrg`).
+ * expires (read from the "כללי תוקף" tab, edited there). Rows are dragged by their handle (or moved with the arrows);
+ * step 1, the sender, stays first. A row opens a dialog with the step's settings. On a narrow screen the table
+ * scrolls sideways. `orgView`: an organization that follows this route – the rows are shown, not edited.
  */
 export function StepsEditor({
-  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts, dateFields = [], defaultExpiry, orgView,
+  drafts, onChange, contacts, groups, emailFields, dirty, state, onSave, waitingForForm, fieldCounts, expiryText, orgView,
 }: {
   drafts: EditorDraft[];
   onChange: (next: EditorDraft[]) => void;
@@ -70,39 +61,12 @@ export function StepsEditor({
   waitingForForm: boolean;
   /** How many fields each step edits (by role): a step with none only looks the document over and approves it. */
   fieldCounts?: Partial<Record<string, number>>;
-  /** Date fields of the form, for expiry rules counted from a date. */
-  dateFields?: DateFieldOption[];
-  /** The form's default expiry, in words ("30 ימים מהשליחה"). */
-  defaultExpiry?: string;
+  /** The rule that applies to a step's link (by role), in words – from the "כללי תוקף" tab. */
+  expiryText?: (role: string) => string;
   orgView?: Option;
 }) {
   const ctx = { contacts, groups, fields: emailFields };
-  const fieldLabel = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? fid;
-  const formDefault = defaultExpiry ?? "30 ימים מהשליחה";
-  const expiryOf = (d: EditorDraft) => (orgView ? d.expiryByOrg?.[orgView.id] : d.expiry);
-  // A step's rule can count only from a date filled before the step starts (by an earlier step).
-  const datesBefore = (i: number) => {
-    const roles = new Set(drafts.slice(0, i).map((d) => d.role as string));
-    return dateFields.filter((f) => !f.roles || f.roles.some((r) => roles.has(r)));
-  };
-  // For the dialog: every date field, the ones filled only later marked with why.
-  const dateFieldsFor = (i: number): DateFieldOption[] => {
-    const before = new Set(datesBefore(i).map((f) => f.id));
-    return dateFields.map((f) => (before.has(f.id) ? f : { ...f, unavailable: f.hint ? `ממולא ב${f.hint}, לא לפני השלב` : "לא משויך לשלב שממלא אותו" }));
-  };
-  const lateField = (rule: ExpiryRule | undefined, i: number) => {
-    const ids = rule ? expiryRuleFields(rule) : [];
-    if (ids.some((fid) => !dateFields.some((f) => f.id === fid))) return "תוקף הקישור: שדה תאריך בכלל כבר לא קיים בטופס – בחרו שוב";
-    const before = datesBefore(i);
-    return ids.some((fid) => !before.some((f) => f.id === fid)) ? "תוקף הקישור: הכלל משתמש בתאריך משלב שעוד לא מולא כשהשלב מתחיל" : null;
-  };
-  // Every rule on the step blocks saving when incomplete: its own and each organization's (the route is shared).
-  const problems = draftProblems(drafts, emailFields).map((p, i) => {
-    const d = drafts[i]!;
-    const own = expiryProblem(d.expiry) ?? lateField(d.expiry, i);
-    const org = Object.values(d.expiryByOrg ?? {}).map((r) => expiryProblem(r) ?? lateField(r, i)).find(Boolean);
-    return [...p, ...(own ? [own] : []), ...(org ? [`תוקף מיוחד לעמותה – ${org.replace(/^תוקף הקישור: /, "")}`] : [])];
-  });
+  const problems = draftProblems(drafts, emailFields);
   const patch = (i: number, p: Partial<EditorDraft>) => onChange(drafts.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const choose = (i: number, who: StepWho) => {
     const fieldId = who === "from_field" && !drafts[i]!.fieldId ? defaultEmailField(drafts, i, emailFields) : drafts[i]!.fieldId;
@@ -124,16 +88,6 @@ export function StepsEditor({
   const [editKey, setEditKey] = useState<string | null>(null);
   const editing = editKey ? drafts.findIndex((d) => d.key === editKey) : -1;
 
-  const inheritText = (d: EditorDraft) =>
-    orgView ? `כמו במסלול הכללי (${d.expiry ? describeExpiryRule(d.expiry, fieldLabel) : formDefault})` : `כמו בהגדרות השליחה (${formDefault})`;
-  const setExpiry = (i: number, rule: ExpiryRule | undefined) => {
-    const d = drafts[i]!;
-    if (!orgView) return patch(i, { expiry: rule });
-    const byOrg = { ...(d.expiryByOrg ?? {}) };
-    if (rule) byOrg[orgView.id] = rule;
-    else delete byOrg[orgView.id];
-    patch(i, { expiryByOrg: Object.keys(byOrg).length ? byOrg : undefined });
-  };
   const firstPeopleStep = drafts.findIndex((d) => d.who === "contact" || d.who === "group_all" || d.who === "group_any");
   const addStep = () => {
     const key = crypto.randomUUID();
@@ -153,7 +107,7 @@ export function StepsEditor({
             <span role="columnheader">#</span>
             <span role="columnheader">מי ממלא</span>
             <span role="columnheader">מה ממלא</span>
-            <span role="columnheader">תוקף הקישור{orgView ? ` · ${orgView.label}` : ""}</span>
+            <span role="columnheader">תוקף הקישור</span>
             <span role="columnheader"><span className="sr-only">פעולות</span></span>
           </div>
           {drafts.map((s, i) => {
@@ -161,7 +115,6 @@ export function StepsEditor({
             const missing = problems[i]!;
             const isSender = s.who === "requester";
             const movable = !isSender && !orgView;
-            const own = expiryOf(s);
             const count = fieldCounts?.[s.role];
             const editable = !isSender || !orgView;
             return (
@@ -204,8 +157,8 @@ export function StepsEditor({
                   {isSender ? "השדות שלו ושליחה" : s.who === "employee" ? "השדות שלו וחתימה" : count === undefined ? "—" : count === 0 ? "רק אישור" : `${count} שדות`}
                   {s.formOnly && <span className="block text-xs text-muted-foreground">רק בטופס</span>}
                 </span>
-                <span role="cell" className={cn("min-w-0 text-sm", !own && "text-muted-foreground")}>
-                  {isSender ? "—" : own ? describeExpiryRule(own, fieldLabel) : orgView ? "כמו במסלול הכללי" : `ברירת מחדל · ${formDefault}`}
+                <span role="cell" className="min-w-0 text-sm text-muted-foreground">
+                  {isSender || !expiryText ? "—" : expiryText(s.role)}
                 </span>
                 <span role="cell" className="flex items-center justify-end gap-0.5">
                   {movable && (
@@ -243,10 +196,10 @@ export function StepsEditor({
         </div>
       )}
 
-      <Dialog open={!!ed} onClose={() => setEditKey(null)} title={ed ? `${stepLabel(ed, editing, ctx)}${orgView ? ` · ${orgView.label}` : ""}` : ""} className="w-[min(94vw,44rem)]">
+      <Dialog open={!!ed && !orgView} onClose={() => setEditKey(null)} title={ed ? stepLabel(ed, editing, ctx) : ""} className="w-[min(94vw,40rem)]">
         {ed && (
           <div className="space-y-5">
-            {!orgView && (
+            {(
               <fieldset className="space-y-3">
                 <legend className="mb-1 text-sm font-semibold">מי ממלא</legend>
                 <div className="space-y-1">
@@ -301,24 +254,17 @@ export function StepsEditor({
                     </Select>
                   </div>
                 )}
-                <label className="flex min-h-10 items-center gap-2 text-sm">
-                  <Checkbox checked={!!ed.formOnly} onChange={(e) => patch(editing, { formOnly: e.target.checked })} />
-                  ממלא רק בטופס (בלי מילוי על גבי המסמך)
-                </label>
+                <div>
+                  <label className="flex min-h-10 items-center gap-2 text-sm">
+                    <Checkbox checked={!!ed.formOnly} onChange={(e) => patch(editing, { formOnly: e.target.checked })} />
+                    ממלא רק בטופס, בלי המסמך
+                  </label>
+                  <p className="ps-7 text-xs text-muted-foreground">מקבל השלב רואה רק טופס למילוי, בלי ה-PDF לידו.</p>
+                </div>
                 {editing === firstPeopleStep && <p className="text-xs text-muted-foreground">משתמשים וקבוצות מגדירים ב<Link href="/admin/users" className="underline">משתמשים</Link>.</p>}
               </fieldset>
             )}
-            <div className={cn(!orgView && "border-t pt-4")}>
-              <ExpiryRuleBuilder
-                id={`exp-${editing}`}
-                value={expiryOf(ed)}
-                onChange={(r) => setExpiry(editing, r)}
-                dateFields={dateFieldsFor(editing)}
-                bases={["stepStart", "sent"]}
-                inherit={inheritText(ed)}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">אחרי התאריך הקישור של השלב לא נפתח והבקשה מסומנת &quot;פג תוקף&quot; (אפשר להאריך). הקישור פתוח לפחות 3 ימים מתחילת השלב.</p>
-            </div>
+            <p className="border-t pt-4 text-sm text-muted-foreground">מתי הקישור של השלב נסגר – בלשונית &quot;כללי תוקף&quot;.{expiryText ? ` עכשיו: ${expiryText(ed.role)}.` : ""}</p>
             {problems[editing]!.length > 0 && (
               <ul className="space-y-0.5 text-sm text-destructive">{problems[editing]!.map((m) => <li key={m}>{m}</li>)}</ul>
             )}

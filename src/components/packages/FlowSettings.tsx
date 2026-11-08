@@ -8,12 +8,6 @@ import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
 import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction } from "@/app/admin/packages/actions";
-import { getWizardPackage } from "@/server/packages-store";
-import { getEditorData } from "@/server/forms-store";
-import { answerFields, fieldRole } from "@/lib/workflow/step-fields";
-import { fillsIn } from "@/lib/forms/schema";
-import { normalizeExpiryRule } from "@/lib/requests/expiry";
-import { ExpiryRuleField } from "./ExpiryRuleBuilder";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
 import { formatRecipients } from "@/lib/requests/recipients";
 
@@ -35,15 +29,6 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const addable = forms.filter((f) => !inPackage.has(f.id));
   const problems = validateWorkflow(pkg.workflow);
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
-  // Date fields the sender fills (the request's deadline is set when it is sent), from the form as being edited.
-  const editing = formId ? await getEditorData(formId) : null;
-  const wizard = editing ? null : await getWizardPackage(id);
-  const def = editing?.version.definition ?? wizard?.requesterDefinition;
-  const dateFields = def ? answerFields(def).filter((f) => f.type === "date" && fillsIn(f, "requester")).map((f) => {
-    const at = pkg.workflow.steps.findIndex((s) => s.role === fieldRole(f));
-    return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined };
-  }) : [];
-  const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
 
   const orgCard = (
@@ -149,7 +134,7 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
         <h2 id="settings-h" className="text-lg font-semibold">{formId ? "הגדרות שליחה" : "הגדרות התהליך"}</h2>
         {settingsError && (
           <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {settingsError === "expiry" ? "כלל התוקף לא שלם (למשל לא נבחר שדה תאריך)" : `כתובות לא תקינות: ${settingsError}`}
+            {`כתובות לא תקינות: ${settingsError}`}
           </p>
         )}
         <Card className="p-0">
@@ -173,12 +158,8 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
               </div>
             </fieldset>
             <fieldset className="space-y-3 p-4">
-              <legend className="sr-only">תוקף ותזכורות</legend>
-              <ExpiryRuleField name="expiryRule" initial={rule} dateFields={dateFields} inherit="ברירת מחדל: 30 ימים מהשליחה" />
-              <p className="text-xs text-muted-foreground">
-                חל על כל השלבים, חוץ משלב שקיבל תוקף משלו בטבלת השלבים. כאן רק תאריכים שהשולח ממלא; לפי תאריך של שלב מאוחר – בתוקף של השלב עצמו. אפשר להאריך כל בקשה בנפרד.
-                {dateFields.length === 0 && " אין בטופס שדה תאריך שהשולח ממלא."}
-              </p>
+              <legend className="sr-only">תזכורות</legend>
+              {formId && <p className="text-sm text-muted-foreground">מתי הקישורים נסגרים – בלשונית <Link href={`/admin/forms/${formId}?tab=expiry`} className="underline">כללי תוקף</Link>.</p>}
               <label className="flex min-h-10 items-center gap-2 text-sm">
                 <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
                 לשלוח תזכורות אוטומטיות עד שהשלב מסתיים

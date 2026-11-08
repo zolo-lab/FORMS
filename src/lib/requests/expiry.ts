@@ -254,3 +254,72 @@ export function comparesToday(raw: unknown): boolean {
   const rule = normalizeExpiryRule(raw);
   return rule?.kind === "cases" && rule.cases.some((c) => c.when.type === "today");
 }
+
+/**
+ * A rule of the "כללי תוקף" table: for one step (by its role) and/or one organization – never for both "all" (that is
+ * the form's own rule, `packages.expiry_rule`). The most specific applies: step + organization, then the step, then the
+ * organization, then the form's rule.
+ */
+export type ExpiryRuleRow = { id: string; stepRole?: string; orgId?: string; rule: ExpiryRule };
+
+/** Stored rows (possibly junk) to rows: each needs a scope and a valid rule; one row per scope. */
+export function normalizeExpiryRows(raw: unknown): ExpiryRuleRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExpiryRuleRow[] = [];
+  for (const r of raw.slice(0, 200)) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const stepRole = typeof o.stepRole === "string" && o.stepRole ? o.stepRole.slice(0, 80) : undefined;
+    const orgId = typeof o.orgId === "string" && o.orgId ? o.orgId.slice(0, 80) : undefined;
+    const rule = normalizeExpiryRule(o.rule);
+    if ((!stepRole && !orgId) || !rule) continue;
+    if (out.some((x) => x.stepRole === stepRole && x.orgId === orgId)) continue;
+    out.push({ id: typeof o.id === "string" && o.id ? o.id.slice(0, 80) : `${stepRole ?? "*"}:${orgId ?? "*"}`, ...(stepRole ? { stepRole } : {}), ...(orgId ? { orgId } : {}), rule });
+  }
+  return out;
+}
+
+/** The rule of the request for an organization: its row ("every step, this organization"), else the form's. */
+export function requestExpiryRule(formRule: unknown, rows: unknown, orgId: string | null): ExpiryRule | null {
+  const row = orgId ? normalizeExpiryRows(rows).find((r) => !r.stepRole && r.orgId === orgId) : undefined;
+  return row ? row.rule : normalizeExpiryRule(formRule);
+}
+
+/** A step's own rule from the table: for this step and organization, else for this step; null = none. */
+export function stepRowRule(rows: unknown, stepRole: string, orgId: string | null): ExpiryRule | null {
+  const list = normalizeExpiryRows(rows);
+  return (orgId ? list.find((r) => r.stepRole === stepRole && r.orgId === orgId) : undefined)?.rule
+    ?? list.find((r) => r.stepRole === stepRole && !r.orgId)?.rule
+    ?? null;
+}
+
+type LegacyStep = { role: string; expiry?: unknown; expiryByOrg?: Record<string, unknown> };
+
+/**
+ * Rules older forms kept on their steps ("expiry" / "expiryByOrg", and the steps of an organization's own route), as
+ * rows of the table. `rows` (saved in the table) win over them for the same scope.
+ */
+export function withLegacyExpiryRows(rows: unknown, workflow: { steps: LegacyStep[] } | null | undefined, orgWorkflows: Record<string, { steps: LegacyStep[] }> | null | undefined): ExpiryRuleRow[] {
+  const legacy: unknown[] = [];
+  for (const s of workflow?.steps ?? []) {
+    if (s.role === "requester") continue;
+    const own = normalizeStepExpiryRule(s.expiry);
+    if (own) legacy.push({ id: `${s.role}:*`, stepRole: s.role, rule: own });
+    for (const [orgId, r] of Object.entries(s.expiryByOrg ?? {})) {
+      const rule = normalizeStepExpiryRule(r);
+      if (rule) legacy.push({ id: `${s.role}:${orgId}`, stepRole: s.role, orgId, rule });
+    }
+  }
+  for (const [orgId, w] of Object.entries(orgWorkflows ?? {})) {
+    for (const s of w.steps ?? []) {
+      const rule = s.role === "requester" ? null : normalizeStepExpiryRule(s.expiry);
+      if (rule) legacy.push({ id: `${s.role}:${orgId}`, stepRole: s.role, orgId, rule });
+    }
+  }
+  return normalizeExpiryRows([...normalizeExpiryRows(rows), ...legacy]);
+}
+
+/** The steps without the rules they kept themselves (they live in the table now). */
+export function withoutStepExpiry<W extends { steps: LegacyStep[] }>(w: W): W {
+  return { ...w, steps: w.steps.map((s) => { const c = { ...s }; delete c.expiry; delete c.expiryByOrg; return c; }) };
+}

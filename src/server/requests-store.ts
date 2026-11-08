@@ -34,7 +34,7 @@ import {
 import { listContacts, peopleForWorkflow } from "./people-store";
 import { deliveryTargets, isPlaceholderEmail } from "@/lib/notifications/channels";
 import { statusNotices } from "@/lib/notifications/status";
-import { comparesToday, expiryFor, linkExpiryOf, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { comparesToday, expiryFor, linkExpiryOf, requestExpiryRule, stepExpiryRule, stepLinkDeadline, stepRowRule } from "@/lib/requests/expiry";
 import { normalizeCampaign } from "@/lib/requests/campaign";
 import { findOrCreateEmployee } from "./employees-store";
 import { orgTrackers } from "./users-store";
@@ -127,7 +127,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
   // An explicit deadline (API / wizard) wins; otherwise the package's rule (e.g. the 4th of the month after the start date).
   const byRule = !input.expiresAt && !input.expiresInDays;
   const expiresAt = input.expiresAt
-    ?? (input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86_400_000) : expiryFor(normalizeExpiryRule(pkg.expiryRule), input.requesterAnswers ?? {}, new Date()));
+    ?? (input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86_400_000) : expiryFor(requestExpiryRule(pkg.expiryRule, pkg.expiryRules, input.organizationId), input.requesterAnswers ?? {}, new Date()));
   const employeeId = await findOrCreateEmployee({ idNumber: input.subject.idNumber, name: input.subject.name, email: input.subject.email, phone: input.subject.phone, organizationId: input.organizationId, projectId: input.projectId });
   await db.insert(requests).values({
     id,
@@ -143,7 +143,7 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
     campaign: normalizeCampaign(input.campaign),
     employeeId,
     expiresAt,
-    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}), ...(input.workflowOverride ? { workflowOverride: input.workflowOverride } : {}), ...(byRule && comparesToday(pkg.expiryRule) ? { expiryByRule: true } : {}) },
+    apiParams: { requesterAnswers: input.requesterAnswers ?? {}, ...(input.extra?.redirectUrl ? { redirectUrl: input.extra.redirectUrl } : {}), ...(input.extra?.custom ? { custom: input.extra.custom } : {}), ...(input.workflowOverride ? { workflowOverride: input.workflowOverride } : {}), ...(byRule && comparesToday(requestExpiryRule(pkg.expiryRule, pkg.expiryRules, input.organizationId)) ? { expiryByRule: true } : {}) },
   });
   if (docs.length) await db.insert(packageDocuments).values(docs.map((d) => ({ ...d, requestId: id })));
   await db.insert(events).values({ requestId: id, actorType: input.createdBy ? "user" : "system", actorId: input.createdBy, type: "request_created" });
@@ -650,7 +650,9 @@ function stepRuleOf(req: typeof requests.$inferSelect, pkg: typeof packageTempla
   const routed = override ?? routeFor(pkg, req.organizationId, req.projectId);
   const exceptionsFor = !override && routed === pkg.workflow ? req.organizationId : null;
   const w = routed.steps.find((x) => x.order === s.order && x.role === s.role);
-  return w && s.role !== "requester" ? stepExpiryRule(w, exceptionsFor) : null;
+  if (!w || s.role === "requester") return null;
+  // The "כללי תוקף" table first; a rule kept on the step itself (older forms) after it.
+  return stepRowRule(pkg.expiryRules, s.role, req.organizationId) ?? stepExpiryRule(w, exceptionsFor);
 }
 
 /**
@@ -662,7 +664,7 @@ async function refreshTodayDeadlines(r: typeof requests.$inferSelect, waiting: A
   if (!pkgs.has(r.packageTemplateId)) pkgs.set(r.packageTemplateId, (await db.select().from(packageTemplates).where(eq(packageTemplates.id, r.packageTemplateId)))[0] ?? null);
   const pkg = pkgs.get(r.packageTemplateId);
   if (!pkg) return;
-  const requestRule = (r.apiParams as { expiryByRule?: boolean } | null)?.expiryByRule ? normalizeExpiryRule(pkg.expiryRule) : null;
+  const requestRule = (r.apiParams as { expiryByRule?: boolean } | null)?.expiryByRule ? requestExpiryRule(pkg.expiryRule, pkg.expiryRules, r.organizationId) : null;
   const stepRules = waiting.filter((s) => s.ownLinkExpiry).map((s) => ({ s, rule: stepRuleOf(r, pkg, s) })).filter((x) => x.rule && comparesToday(x.rule));
   if (!comparesToday(requestRule) && !stepRules.length) return;
   const [ext] = await db.select({ at: events.createdAt }).from(events).where(and(eq(events.requestId, r.id), eq(events.type, "request_extended"))).orderBy(sql`${events.createdAt} desc`).limit(1);

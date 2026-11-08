@@ -87,8 +87,9 @@ function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; 
       <div className="space-y-2">
         <label className="flex min-h-10 items-center gap-2 text-sm">
           <Checkbox checked={!!value.snap} onChange={(e) => set({ snap: e.target.checked ? { day: value.snap?.day ?? 20, mode: value.snap?.mode ?? "same" } : undefined })} />
-          ואז להעביר ליום קבוע בחודש
+          לסגור תמיד ביום קבוע בחודש (למשל ב-7 לחודש)
         </label>
+        {!value.snap && <p className="ps-7 text-xs text-muted-foreground">כשמסמנים, התאריך שיצא למעלה מוזז ליום שבוחרים – באותו חודש או בחודש שאחריו.</p>}
         {value.snap && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2 ps-7 text-sm">
             <Label htmlFor={`${id}-day`}>ליום</Label>
@@ -289,16 +290,5 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
         </div>
       )}
     </div>
-  );
-}
-
-/** For a server form: the builder plus a hidden input with the rule as JSON (empty = the default). */
-export function ExpiryRuleField({ name, initial, dateFields, inherit }: { name: string; initial: ExpiryRule | null; dateFields: DateFieldOption[]; inherit: string }) {
-  const [rule, setRule] = useState<ExpiryRule | undefined>(initial ?? undefined);
-  return (
-    <>
-      <ExpiryRuleBuilder id={name} value={rule} onChange={setRule} dateFields={dateFields} bases={["sent"]} inherit={inherit} />
-      <input type="hidden" name={name} value={rule ? JSON.stringify(rule) : ""} />
-    </>
   );
 }

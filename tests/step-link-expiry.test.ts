@@ -143,4 +143,32 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
     await store.expireOverdue(new Date(stamp + 4 * 86_400_000));
     expect((await stepOf()).linkExpiresAt).toEqual(extended);
   });
+  it("rules of the \"כללי תוקף\" table: the step's row for the organization, and the organization's row for the request", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const stamp = Date.now();
+    const [org] = await db.insert(schema.organizations).values({ name: `ארגון טבלה ${stamp}`, registrationNumber: `TB${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.organizations).where(eq(schema.organizations.id, org!.id)));
+    const [pkg] = await db.insert(schema.packageTemplates).values({
+      name: `test-expiry-table-${stamp}`,
+      workflow: { steps: [{ order: 1, role: "requester", action: "fill" }, { order: 2, role: "employee", action: "fill" }] },
+      expiryRule: { kind: "calc", base: { from: "sent" }, addDays: 30 },
+      expiryRules: [
+        { id: "a", stepRole: "employee", rule: { kind: "calc", base: { from: "stepStart" }, addDays: 5 } },
+        { id: "b", stepRole: "employee", orgId: org!.id, rule: { kind: "calc", base: { from: "stepStart" }, addDays: 9 } },
+        { id: "c", orgId: org!.id, rule: { kind: "calc", base: { from: "sent" }, addDays: 12 } },
+      ],
+    }).returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: `table${stamp}@example.test` } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    const [req] = await db.select().from(schema.requests).where(eq(schema.requests.id, id));
+    expect(req!.expiresAt!.getTime() - req!.createdAt.getTime()).toBeGreaterThan(11.9 * 86_400_000);
+    expect(req!.expiresAt!.getTime() - req!.createdAt.getTime()).toBeLessThan(12.1 * 86_400_000);
+    await store.sendRequest(id);
+    const step = (await db.select().from(schema.signingSteps).where(eq(schema.signingSteps.requestId, id))).find((s) => s.role === "employee")!;
+    expect(step.ownLinkExpiry).toBe(true);
+    expect(step.linkExpiresAt!.getTime() - step.activatedAt!.getTime()).toBe(9 * 86_400_000);
+  });
 });
