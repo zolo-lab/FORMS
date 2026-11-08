@@ -108,7 +108,7 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
 }
 
 /** Whether a condition holds on `now` – the current day: a rule that compares with today is checked again every day. */
-function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
+export function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
   const date = parseDate(answers[c.fieldId]);
   if (!date) return false;
   if (c.type === "day") return c.op === "lte" ? date.d <= c.day : date.d > c.day;
