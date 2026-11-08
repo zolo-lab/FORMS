@@ -10,7 +10,7 @@ import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, s
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, History, Pencil, Redo2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, History, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
@@ -422,7 +422,11 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             value={def.title}
             onChange={(e) => commit({ ...def, title: e.target.value })}
             onBlur={() => setEditingTitle(false)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingTitle(false); } }}
+            onKeyDown={(e) => {
+              // Enter that confirms an input-method composition is not "done".
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingTitle(false); }
+            }}
             className="h-9 max-w-xs font-semibold"
           />
         ) : (
@@ -530,7 +534,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         <div className="flex items-center gap-3 border-b bg-card px-4">
           <Tabs<"pdf" | "edit">
             aria-label="תצוגת העריכה"
-            className="border-b-0"
+            className="border-b-0 [&>button]:min-h-11"
             value={tab as "pdf" | "edit"}
             onChange={setTab}
             tabs={[{ id: "pdf", label: "PDF" }, { id: "edit", label: "רספונסיבי" }]}
@@ -635,6 +639,12 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               />
             </div>
             <aside className="order-3 rounded-lg border bg-card p-3 lg:order-none lg:overflow-auto" aria-label="הגדרות">
+              {selection && (
+                // A field or a page is shown; the form's own settings are one click away.
+                <Button variant="ghost" size="sm" className="mb-2 min-h-11 justify-start sm:min-h-9" onClick={() => setSelection(null)}>
+                  <Settings2 className="size-4" aria-hidden />הגדרות הטופס
+                </Button>
+              )}
               {selectedField ? (
                 <FieldSettings
                   key={selectedField.id}

@@ -41,7 +41,7 @@ test("form settings: layout, description and thank-you message", async ({ page }
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
   await openEditView(page, "רספונסיבי");
-  // With nothing selected the panel shows the form's own settings.
+  await page.getByRole("complementary", { name: "הגדרות" }).getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");
   await page.getByLabel("הודעה אחרי השליחה").fill("תודה רבה");
@@ -84,6 +84,8 @@ test("the form's name is edited from the pencil next to it, and the tools menu c
   const name = `שם ${Date.now()}`;
   await newFormFromPdf(page, name);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  const pencil = (await page.getByRole("button", { name: "עריכת שם הטופס" }).boundingBox())!;
+  expect(Math.min(pencil.width, pencil.height)).toBeGreaterThanOrEqual(44); // a touch target on a 390px phone
   await page.getByRole("button", { name: "עריכת שם הטופס" }).click();
   await page.getByLabel("שם הטופס").fill(`${name} חדש`);
   await page.keyboard.press("Enter");
