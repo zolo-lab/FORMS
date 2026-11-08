@@ -40,7 +40,7 @@ function inputProps(type: RecordField["type"]): React.ComponentProps<"input"> {
 export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { typeId: string; typeName: string; fields: RecordField[]; displayKey: string | null; rows: Row[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<{ id: string | null; values: Record<string, string> } | null>(null);
+  const [editing, setEditing] = useState<{ id: string | null; values: Record<string, string>; keys: string[] } | null>(null);
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -51,14 +51,14 @@ export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { t
     return q ? rows.filter((r) => Object.values(r.values).some((v) => v.toLowerCase().includes(q))) : rows;
   }, [rows, query]);
 
-  const open = (id: string | null, values: Record<string, string> = {}) => { setEditing({ id, values: { ...values } }); setProblems({}); setError(null); };
+  const open = (id: string | null, values: Record<string, string> = {}) => { setEditing({ id, values: { ...values }, keys: fields.map((f) => f.key) }); setProblems({}); setError(null); };
   const close = () => setEditing(null);
 
   const save = () =>
     start(async () => {
       if (!editing) return;
       try {
-        const r = await saveRecordAction(typeId, editing.id, editing.values, fields.map((f) => f.key));
+        const r = await saveRecordAction(typeId, editing.id, editing.values, editing.keys);
         if (!r.ok) { setProblems(r.problems ?? {}); setError(r.error ?? (r.problems ? "יש ערכים שצריך לתקן" : null)); return; }
       } catch {
         setError("השמירה נכשלה. נסו שוב.");
