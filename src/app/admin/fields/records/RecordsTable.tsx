@@ -58,7 +58,7 @@ export function RecordsTable({ typeId, typeName, fields, displayKey, rows }: { t
     start(async () => {
       if (!editing) return;
       try {
-        const r = await saveRecordAction(typeId, editing.id, editing.values);
+        const r = await saveRecordAction(typeId, editing.id, editing.values, fields.map((f) => f.key));
         if (!r.ok) { setProblems(r.problems ?? {}); setError(r.error ?? (r.problems ? "יש ערכים שצריך לתקן" : null)); return; }
       } catch {
         setError("השמירה נכשלה. נסו שוב.");

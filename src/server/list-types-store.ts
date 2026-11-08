@@ -98,14 +98,22 @@ export async function recordCounts(): Promise<Map<string, number>> {
 /**
  * Adds or updates a record. On update, `fields` are the type's current fields: their values are replaced by `values`
  * (a cleared field is dropped), while values of fields since taken off the type stay, so adding the field back
- * brings them back. Returns null when the record is gone (deleted meanwhile, or of another type).
+ * brings them back. Returns null when the record is gone (deleted meanwhile, or of another type), or the type's fields are no longer
+ * `typeFieldsRead`.
  */
-export async function saveRecord(typeId: string, id: string | null, values: Record<string, string>, fields: string[] = Object.keys(values)): Promise<string | null> {
+export async function saveRecord(typeId: string, id: string | null, values: Record<string, string>, fields: string[] = Object.keys(values), typeFieldsRead?: string[]): Promise<string | null> {
   if (id) {
     const rows = await db
       .update(listRecords)
       .set({ values: sql`(${listRecords.values} - ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(fields)}::jsonb))) || ${JSON.stringify(values)}::jsonb`, updatedAt: new Date() })
-      .where(and(eq(listRecords.id, id), eq(listRecords.listTypeId, typeId)))
+      .where(
+        and(
+          eq(listRecords.id, id),
+          eq(listRecords.listTypeId, typeId),
+          // The type's fields as the caller read them: a field renamed or removed meanwhile makes the save miss.
+          typeFieldsRead ? sql`EXISTS (SELECT 1 FROM ${listTypes} WHERE ${listTypes.id} = ${typeId} AND ${listTypes.fields} = ${JSON.stringify(typeFieldsRead)}::jsonb)` : undefined,
+        ),
+      )
       .returning({ id: listRecords.id });
     return rows.length ? id : null;
   }
