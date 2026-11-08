@@ -18,18 +18,19 @@ test("lists: add a column, fill a cell that saves itself, then delete the column
   await page.getByLabel("שם העמודה").fill(col);
   await page.getByLabel("סוג").selectOption("number");
   await page.getByRole("button", { name: "הוספה" }).click();
-  await expect(page.getByRole("button", { name: col, exact: true }).or(page.getByText(col, { exact: true })).first()).toBeVisible();
+  // The header exists twice (sheet and phone chips); the one for this viewport is visible.
+  await expect(page.getByRole("button", { name: col, exact: true }).locator("visible=true")).toBeVisible();
 
   // The first cell of the new column saves on blur, and the chip says so.
-  const cell = page.getByRole("textbox", { name: new RegExp(`^${col} – `) }).first();
+  const cell = page.getByRole("textbox", { name: new RegExp(`^${col} – `) }).locator("visible=true").first();
   await cell.fill("123456");
   await cell.press("Tab");
   await expect(page.getByRole("status")).toContainText("כל השינויים נשמרו");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: new RegExp(`^${col} – `) }).first()).toHaveValue("123456");
+  await expect(page.getByRole("textbox", { name: new RegExp(`^${col} – `) }).locator("visible=true").first()).toHaveValue("123456");
 
   // Delete: the dialog says one organization filled it and no form uses it.
-  await page.getByRole("button", { name: `פעולות – ${col}` }).click();
+  await page.getByRole("button", { name: `פעולות – ${col}` }).locator("visible=true").click();
   await page.getByRole("menuitem", { name: "מחיקת העמודה…" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("העמודה מלאה ב-1 עמותות");

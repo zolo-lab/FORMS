@@ -44,6 +44,8 @@ export function OrgSheet({ columns, rows }: { columns: SheetColumn[]; rows: Shee
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState<Set<string>>(new Set());
+  // The same set as a ref: `end` runs inside async code where the state above would be stale.
+  const failedRef = useRef<Set<string>>(new Set());
   const pending = useRef(0);
 
   const begin = () => {
@@ -58,25 +60,32 @@ export function OrgSheet({ columns, rows }: { columns: SheetColumn[]; rows: Shee
       setMessage(error ?? "לא נשמר");
       return;
     }
+    // "Everything saved" is only true when no cell is still sitting on a failure.
     if (pending.current === 0) {
-      setState("saved");
-      setLastSaved(new Date());
+      if (failedRef.current.size === 0) {
+        setState("saved");
+        setLastSaved(new Date());
+      } else {
+        setState("error");
+        setMessage("יש תא שלא נשמר");
+      }
     }
   };
 
-  const saveCell = async (orgId: string, key: string, value: string, before: string) => {
-    if (value.trim() === before.trim()) return;
+  /** Saves one cell; resolves to whether it took, so the cell knows what its last saved value really is. */
+  const saveCell = async (orgId: string, key: string, value: string, before: string): Promise<boolean> => {
+    if (value.trim() === before.trim()) return true;
     const cell = `${orgId}:${key}`;
     begin();
     const r = await saveCellAction(orgId, key, value);
-    setFailed((s) => {
-      const n = new Set(s);
-      if (r.ok) n.delete(cell);
-      else n.add(cell);
-      return n;
-    });
+    const next = new Set(failedRef.current);
+    if (r.ok) next.delete(cell);
+    else next.add(cell);
+    failedRef.current = next;
+    setFailed(next);
     end(r.ok, r.ok ? undefined : r.error);
     if (r.ok) router.refresh();
+    return r.ok;
   };
 
   return (
@@ -185,17 +194,23 @@ function SaveChip({ state, at, message }: { state: SaveState; at: Date | null; m
 }
 
 /** One editable cell. Saves on blur and on Enter; Enter also moves to the cell below, as in a spreadsheet. */
-function Cell(props: { id?: string; column: SheetColumn; value: string; failed: boolean; label: string; onSave: (value: string, before: string) => void; bordered?: boolean }) {
+function Cell(props: { id?: string; column: SheetColumn; value: string; failed: boolean; label: string; onSave: (value: string, before: string) => Promise<boolean>; bordered?: boolean }) {
   // A fresh value from the server (another admin, a rename) remounts the cell rather than syncing state in an effect.
   return <CellInner key={props.value} {...props} />;
 }
 
-function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?: string; column: SheetColumn; value: string; failed: boolean; label: string; onSave: (value: string, before: string) => void; bordered?: boolean }) {
+function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?: string; column: SheetColumn; value: string; failed: boolean; label: string; onSave: (value: string, before: string) => Promise<boolean>; bordered?: boolean }) {
   const [draft, setDraft] = useState(value);
+  /** The last value the server is known to hold; it moves only when a save succeeds, so a failed one is retried. */
   const before = useRef(value);
-  const commit = () => {
-    onSave(draft, before.current);
-    before.current = draft;
+  /** The value a save is in flight for: Enter followed by blur must not send it twice. */
+  const saving = useRef<string | null>(null);
+  const commit = async () => {
+    if (draft.trim() === before.current.trim() || saving.current === draft) return;
+    saving.current = draft;
+    const ok = await onSave(draft, before.current);
+    saving.current = null;
+    if (ok) before.current = draft;
   };
   return (
     <Input
@@ -206,7 +221,7 @@ function CellInner({ id, column, value, failed, label, onSave, bordered }: { id?
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          commit();
+          void commit();
           // Next row, same column.
           const cells = Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-col="${column.key}"]`));
           const i = cells.indexOf(e.currentTarget);

@@ -29,8 +29,10 @@ const ERRORS: Record<string, string> = {
  */
 /** The organizations' columns live on the "רשימות" sheet now; the dictionary stays reachable by its sub-pages. */
 export default async function FieldsPage({ searchParams }: { searchParams: Promise<{ error?: string; nerror?: string; saved?: string; key?: string; q?: string; types?: string; list?: string }> }) {
-  const { error, nerror, saved, key, q, types, list } = await searchParams;
-  if (!error && !nerror && !saved && !q && !list) redirect("/admin/lists");
+  const params = await searchParams;
+  // Only a bare visit goes to the sheet; a search or a filter, even an emptied one, stays on the dictionary.
+  if (Object.keys(params).length === 0) redirect("/admin/lists");
+  const { error, nerror, saved, key, q, types, list } = params;
   const [all, listTypes] = await Promise.all([listDictionary(), listListTypes()]);
   const query = q?.trim().toLowerCase() ?? "";
   // Which lists each field is in: the organizations' fields are the built-in "עמותות" list.
