@@ -26,8 +26,8 @@ const SNAP_LABEL: Record<"" | ExpirySnap["mode"], string> = {
 };
 /** What the chosen fixed day does, on a sample date (the 12th of March). */
 function snapExample(snap: ExpirySnap): string {
-  const d = String(snap.day).padStart(2, "0");
   const next = snap.mode === "next" || (snap.mode === "sameOrNext" && snap.day < 12);
+  const d = String(Math.min(snap.day, next ? 30 : 31)).padStart(2, "0"); // April has 30 days
   return `למשל, אם יצא 12.03 – הקישור נסגר ב-${d}.${next ? "04" : "03"}.`;
 }
 type CondKey = "day-lte" | "day-gt" | "today-past" | "today-within" | "today-beyond";
