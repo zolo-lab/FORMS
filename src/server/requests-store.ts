@@ -695,11 +695,13 @@ export async function expireOverdue(now = new Date()) {
     const before = await loadSteps(r.id);
     // Each open step by its own deadline when it has one, else by the request's.
     const waiting = before.filter((s) => s.status === "active" || s.status === "in_progress");
-    // A failure here must not stop the sweep: the request is then checked by the deadlines it has.
+    // A failure here must not stop the sweep, nor expire the request by a deadline that may already have moved:
+    // this request waits for the next run.
     try {
       await refreshTodayDeadlines(r, waiting, now, pkgs);
     } catch (e) {
       console.error("refreshTodayDeadlines failed", { requestId: r.id, error: e instanceof Error ? e.message : String(e) });
+      continue;
     }
     const passed = waiting.length ? waiting.some((s) => { const at = linkExpiryOf(s, r); return !!at && at < now; }) : !!r.expiresAt && r.expiresAt < now;
     if (passed) {
