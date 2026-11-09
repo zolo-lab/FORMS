@@ -1,0 +1,1 @@
+ALTER TABLE "organization_field_defs" ADD COLUMN "multi" boolean DEFAULT false NOT NULL;

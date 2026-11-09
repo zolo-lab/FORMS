@@ -1,0 +1,1 @@
+ALTER TABLE "organization_field_defs" ADD COLUMN "options" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -4,7 +4,7 @@ import { projectSlug } from "@/lib/forms/public-link";
 import { labelKey } from "@/lib/forms/field-keys";
 import { normalizeOrgFieldKey } from "@/lib/orgs/field-key";
 import { suggestKey } from "@/lib/fields/key";
-import { dictionaryType, isOrgFieldType } from "@/lib/fields/types";
+import { dictionaryType, isOrgFieldKind } from "@/lib/fields/types";
 import { renameOrgFieldInDefinition } from "@/lib/orgs/rename-prefill";
 import { ORG_FIELD_PREFIX } from "@/lib/forms/prefill";
 import { db, schema } from "@/db";
@@ -132,19 +132,10 @@ export async function listOrgFieldDefs(): Promise<OrgFieldDef[]> {
   return db.select().from(organizationFieldDefs).orderBy(asc(organizationFieldDefs.order), asc(organizationFieldDefs.label));
 }
 
-/** Every internal name in use: the organizations' fields and the central dictionary share one namespace. */
+/** Every internal name the organizations' fields already use. */
 export async function takenFieldKeys(): Promise<Set<string>> {
-  const [orgKeys, dictKeys] = await Promise.all([
-    db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs),
-    // Only a missing table (a database the migration has not reached) counts as empty; any other error must stop
-    // the uniqueness check rather than let it pass silently.
-    db.select({ key: schema.fieldDictionary.key }).from(schema.fieldDictionary).catch((e: unknown) => {
-      const code = (e as { cause?: { code?: string }; code?: string }).cause?.code ?? (e as { code?: string }).code;
-      if (code === "42P01") return [] as { key: string }[];
-      throw e;
-    }),
-  ]);
-  return new Set([...orgKeys, ...dictKeys].map((r) => r.key));
+  const rows = await db.select({ key: organizationFieldDefs.key }).from(organizationFieldDefs);
+  return new Set(rows.map((r) => r.key));
 }
 
 /**
@@ -152,11 +143,11 @@ export async function takenFieldKeys(): Promise<Set<string>> {
  * People type the Hebrew name; the internal name (the key the forms point at) is made from it unless one is given,
  * and can be renamed later (`renameOrgFieldDef` moves the forms and the values with it).
  */
-export async function createOrgFieldDef(input: { label: string; key?: string; type?: string }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" | "type" }> {
+export async function createOrgFieldDef(input: { label: string; key?: string; type?: string; options?: string[]; multi?: boolean }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" | "type" }> {
   const label = input.label.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!label) return { ok: false, reason: "label" };
   // An organization's value is one line of text: a multi-line type is refused, never silently replaced.
-  if (input.type && !isOrgFieldType(input.type)) return { ok: false, reason: "type" };
+  if (input.type && !isOrgFieldKind(input.type)) return { ok: false, reason: "type" };
   const taken = await takenFieldKeys();
   let key: string;
   if (input.key?.trim()) {
@@ -166,7 +157,10 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
     key = typed;
   } else key = suggestKey(label, taken);
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(organizationFieldDefs);
-  await db.insert(organizationFieldDefs).values({ key, label, type: dictionaryType(input.type, true), order: Number(n) });
+  const choice = input.type === "select";
+  // A choice nobody could pick from is refused.
+  if (choice && !input.options?.some((o) => o.trim())) return { ok: false, reason: "type" };
+  await db.insert(organizationFieldDefs).values({ key, label, type: choice ? "select" : dictionaryType(input.type, true), options: choice ? (input.options ?? []) : [], multi: choice && input.multi === true, order: Number(n) });
   return { ok: true, key };
 }
 
@@ -174,12 +168,13 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
  * The Hebrew name and the type of an organization field (the internal name has its own rename). A type left out
  * (or empty) keeps the current one; a multi-line type is refused.
  */
-export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string }): Promise<{ ok: true } | { ok: false; reason: "type" }> {
-  if (patch.type && !isOrgFieldType(patch.type)) return { ok: false, reason: "type" };
+export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string; options?: string[]; multi?: boolean }): Promise<{ ok: true } | { ok: false; reason: "type" }> {
+  if (patch.type && !isOrgFieldKind(patch.type)) return { ok: false, reason: "type" };
   const label = patch.label?.replace(/\s+/g, " ").trim().slice(0, 80);
+  const type = patch.type === "select" ? "select" : patch.type ? dictionaryType(patch.type, true) : undefined;
   await db
     .update(organizationFieldDefs)
-    .set({ ...(label ? { label } : {}), ...(patch.type ? { type: dictionaryType(patch.type, true) } : {}), updatedAt: new Date() })
+    .set({ ...(label ? { label } : {}), ...(type ? { type } : {}), ...(patch.options ? { options: patch.options } : {}), ...(patch.multi !== undefined ? { multi: patch.multi } : {}), updatedAt: new Date() })
     .where(eq(organizationFieldDefs.id, id));
   return { ok: true };
 }
