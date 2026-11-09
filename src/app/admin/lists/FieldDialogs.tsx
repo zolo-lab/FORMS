@@ -122,7 +122,7 @@ export function FieldDialog({ field, typeId, onClose }: { field: SheetField; typ
               disabled={busy}
               onClick={() =>
                 start(async () => {
-                  const r = await deleteFieldAction(field.id);
+                  const r = await deleteFieldAction(typeId, field.id);
                   if (!r.ok) return setError(r.error);
                   onClose();
                 })
@@ -139,7 +139,7 @@ export function FieldDialog({ field, typeId, onClose }: { field: SheetField; typ
             e.preventDefault();
             if (field.fixed) return onClose();
             start(async () => {
-              const r = await updateFieldAction(field.id, { label, ...(select ? { options, multi } : {}) });
+              const r = await updateFieldAction(typeId, field.id, { label, ...(select ? { options, multi } : {}) });
               if (!r.ok) return setError(r.error);
               onClose();
             });

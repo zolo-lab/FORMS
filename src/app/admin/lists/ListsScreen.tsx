@@ -15,7 +15,18 @@ import { TypeNav } from "./TypeNav";
 
 type Status = { state: "idle" } | { state: "saving" } | { state: "saved"; at: string } | { state: "error"; error: string };
 
-export function ListsScreen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
+export function ListsScreen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet | null }) {
+  if (!sheet)
+    return (
+      <div className="flex flex-col gap-4 md:flex-row md:items-start">
+        <TypeNav types={types} current="" />
+        <p className="flex-1 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">עוד אין סוגי רשימות. מתחילים ב&quot;סוג רשימה&quot;.</p>
+      </div>
+    );
+  return <Screen types={types} sheet={sheet} />;
+}
+
+function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
   const { type, fields } = sheet;
   const isOrg = type.id === "org";
   const [status, setStatus] = useState<Status>({ state: "idle" });

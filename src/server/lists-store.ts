@@ -99,6 +99,9 @@ export async function listTypeUsage(id: string): Promise<{ lists: number; pointe
 
 export async function deleteListType(id: string): Promise<Result> {
   if (id === ORG_TYPE) return fail("את סוג העמותות אי אפשר למחוק");
+  // Checked here too, not only on screen: a "belongs to" field left without its type could never be filled again.
+  const { pointedBy } = await listTypeUsage(id);
+  if (pointedBy.length) return fail(`אי אפשר למחוק: ${pointedBy.join(", ")} משויכים לסוג הזה`);
   await db.delete(listTypes).where(eq(listTypes.id, id));
   return { ok: true };
 }
@@ -202,16 +205,16 @@ export async function addField(typeId: string, input: FieldInput): Promise<Resul
 }
 
 /** The name, the options (for a choice) or one/several of a field. The internal name and the kind stay. */
-export async function updateField(fieldId: string, patch: { label?: string; options?: unknown; multi?: boolean }): Promise<Result> {
+export async function updateField(typeId: string, fieldId: string, patch: { label?: string; options?: unknown; multi?: boolean }): Promise<Result> {
   if (fieldId.startsWith("org:")) return fail("את השם והח\"פ אי אפשר לשנות");
-  const [f] = await db.select().from(listTypeFields).where(eq(listTypeFields.id, fieldId));
-  if (!f) {
-    // An organization field.
+  if (typeId === ORG_TYPE) {
     const label = patch.label !== undefined ? cleanName(patch.label) : undefined;
     if (patch.label !== undefined && !label) return fail("צריך שם לשדה");
     const r = await updateOrgFieldDef(fieldId, { label });
     return r.ok ? { ok: true } : fail("השדה לא עודכן");
   }
+  const [f] = await db.select().from(listTypeFields).where(and(eq(listTypeFields.id, fieldId), eq(listTypeFields.listTypeId, typeId)));
+  if (!f) return fail("השדה לא נמצא");
   const set: Partial<typeof listTypeFields.$inferInsert> = { updatedAt: new Date() };
   if (patch.label !== undefined) {
     const label = cleanName(patch.label);
@@ -242,13 +245,14 @@ export async function fieldUsage(typeId: string, key: string): Promise<{ filled:
 }
 
 /** Drops a field from the type and its value from every list (values first: no transactions over neon-http). */
-export async function deleteField(fieldId: string): Promise<Result> {
+export async function deleteField(typeId: string, fieldId: string): Promise<Result> {
   if (fieldId.startsWith("org:")) return fail("את השם והח\"פ אי אפשר למחוק");
-  const [f] = await db.select().from(listTypeFields).where(eq(listTypeFields.id, fieldId));
-  if (!f) {
+  if (typeId === ORG_TYPE) {
     await deleteOrgFieldDef(fieldId);
     return { ok: true };
   }
+  const [f] = await db.select().from(listTypeFields).where(and(eq(listTypeFields.id, fieldId), eq(listTypeFields.listTypeId, typeId)));
+  if (!f) return fail("השדה לא נמצא");
   await db.update(listRecords).set({ values: sql`${listRecords.values} - ${f.key}` }).where(eq(listRecords.listTypeId, f.listTypeId));
   await db.delete(listTypeFields).where(eq(listTypeFields.id, fieldId));
   return { ok: true };

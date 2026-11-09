@@ -92,6 +92,8 @@ function CellInner({ field, value, refs, label, failed, save, boxed, id }: CellP
 
 function TextCell({ id, field, value, label, failed, className, onCommit }: { id?: string; field: SheetField; value: string; label: string; failed: boolean; className: string; onCommit: (v: string) => void }) {
   const [draft, setDraft] = useState(value);
+  // Escape blurs the cell; the blur must not save the edit Escape just threw away.
+  const cancelled = useRef(false);
   const ltr = LTR_KINDS.has(field.kind);
   return (
     <Input
@@ -99,7 +101,10 @@ function TextCell({ id, field, value, label, failed, className, onCommit }: { id
       type={field.kind === "date" ? "date" : "text"}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => onCommit(draft)}
+      onBlur={() => {
+        if (cancelled.current) cancelled.current = false;
+        else onCommit(draft);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -109,6 +114,7 @@ function TextCell({ id, field, value, label, failed, className, onCommit }: { id
           cells[cells.indexOf(e.currentTarget) + 1]?.focus();
         }
         if (e.key === "Escape") {
+          cancelled.current = true;
           setDraft(value);
           e.currentTarget.blur();
         }
