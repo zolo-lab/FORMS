@@ -10,8 +10,10 @@ import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, s
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, History, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, History, Link2, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
+import { LinkedFieldsDialog } from "./LinkedFieldsDialog";
+import type { OrgListField } from "@/lib/forms/linked";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
@@ -64,6 +66,8 @@ export interface FormEditorProps {
   groups?: { id: string; name: string }[];
   /** The organizations' own fields, offered in "מילוי אוטומטי" (filled from the request's organization). */
   orgFields?: { key: string; label: string }[];
+  /** The organizations' list (name, number and their own fields): the "שדות מקושרים" dialog links form fields to it. */
+  orgList?: OrgListField[];
   /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
   flow?: {
     packageId: string;
@@ -92,7 +96,7 @@ export interface FormEditorProps {
 const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -196,6 +200,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
+  const [linkedOpen, setLinkedOpen] = useState(false);
   const [save, setSave] = useState<SaveState>("saved");
   const [published, setPublished] = useState(initiallyPublished);
   const [pdf, setPdfState] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
@@ -467,6 +472,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           >
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
             <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
+              <Button variant="ghost" size="sm" className="justify-start" onClick={() => setLinkedOpen(true)} title="שדות שמתמלאים מהעמותה של הבקשה, ושדות בחירה שמציגים את האפשרויות שלה">
+                <Link2 className="size-4" />שדות מקושרים
+              </Button>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
                 <Sparkles className="size-4" />שמות מזהים לשדות
               </Button>
@@ -492,6 +500,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       </div>
 
       <VersionsDialog templateId={templateId} open={versionsOpen} onClose={() => setVersionsOpen(false)} />
+      <LinkedFieldsDialog
+        open={linkedOpen}
+        onClose={() => setLinkedOpen(false)}
+        def={def}
+        listFields={orgList}
+        page={selection?.kind === "page" ? selection.index : selection?.kind === "field" ? (findLocation(def, selection.id)?.page ?? 0) : 0}
+        onChange={(d) => commit(d)}
+      />
       <CheckboxLinksDialog
         suggestions={links}
         onClose={() => setLinks(null)}
@@ -663,6 +679,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   stamps={pdf?.mapping.stamps}
                   groups={groups}
                   orgFields={orgFields}
+                  orgChoices={orgList.filter((f) => f.kind === "select")}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onDefChange={(d) => commit(d)}

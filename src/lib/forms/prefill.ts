@@ -2,6 +2,7 @@
 import type { Answers } from "./conditions";
 import { renameFieldId, updateField } from "./builder";
 import { allFields, type FormDefinition, type FormField } from "./schema";
+import { validateAnswers } from "./validate";
 
 export interface PrefillSubject {
   name: string;
@@ -83,7 +84,7 @@ export function prefillGroups(orgFields: { key: string; label: string }[] = [], 
 export const ORG_FIELD_IDS: Record<string, "org.name" | "org.registrationNumber"> = { org_name: "org.name", org_number: "org.registrationNumber" };
 
 /** The prefill of a field: its own setting, or the organization's for the fixed ids (org_name, org_number). */
-export const prefillOf = (f: { id: string; prefill?: string }): string | undefined => f.prefill ?? ORG_FIELD_IDS[f.id];
+export const prefillOf = (f: { id: string; prefill?: string }): string | undefined => f.prefill ?? (Object.hasOwn(ORG_FIELD_IDS, f.id) ? ORG_FIELD_IDS[f.id] : undefined);
 
 /** Filled by the system from the request's organization: shown read-only, and the server sets the value. */
 export const isOrgField = (f: { id: string; prefill?: string }) => !!prefillOf(f)?.startsWith("org.");
@@ -140,10 +141,19 @@ export function withOrgFields(def: FormDefinition, org: PrefillSubject["org"], a
     const key = prefillOf(f);
     if (!key?.startsWith("org.")) continue;
     const v = valueFor(key, f.type, { name: "", org });
-    if (v === undefined) delete out[f.id];
-    else out[f.id] = v as Answers[string];
+    // The field is locked and skips its own check, so a value it would refuse (free text in an e-mail field, an
+    // ID number that fails its check digit) is left out rather than stored as if it were valid.
+    // Set even when empty (not deleted), so a value saved earlier – a draft, a stored answer – cannot show through
+    // when the answers are merged after this.
+    out[f.id] = (v === undefined || !passes(f, v) ? undefined : v) as Answers[string];
   }
   return out;
+}
+
+/** Whether a value passes the field's own check, as if typed into it (not required, not locked). */
+function passes(f: FormField, v: unknown): boolean {
+  const alone: FormDefinition = { schemaVersion: 1, title: "", pages: [{ id: "p", title: "", fields: [{ ...f, required: false, readOnly: false, visibleIf: undefined, disabledIf: undefined, requiredIf: undefined, fields: undefined }] }] };
+  return validateAnswers(alone, { [f.id]: v as Answers[string] }).ok;
 }
 
 /** The organization's fields shown read-only (the system fills them; see `withOrgFields`). */

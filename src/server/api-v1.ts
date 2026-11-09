@@ -6,6 +6,8 @@ import { parseCreateBody } from "@/lib/api/create-request";
 import { REQUEST_STATUSES } from "@/lib/workflow/types";
 import { allFields } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
+import { withOrgOptions } from "@/lib/forms/linked";
+import { orgListFields } from "./lists-store";
 import { getWizardPackage, listPackagesForWizard } from "./packages-store";
 import { cancelRequest, collectedAnswers, createRequest, getRequest, sendRequest } from "./requests-store";
 import { tempFileUrl } from "./webhooks";
@@ -109,7 +111,9 @@ export async function createApiRequest(orgId: string, raw: unknown): Promise<Api
   const pkg = await getWizardPackage(b.packageTemplateId);
   if (!pkg || (pkg.organizationId && pkg.organizationId !== orgId)) return { ok: false, status: 404, errors: { packageTemplateId: "not found" } };
 
-  const v = validateAnswers(pkg.requesterDefinition, b.answers);
+  // A choice linked to the organizations' list accepts only this organization's options.
+  const [org] = await db.select({ fieldValues: schema.organizations.fieldValues }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  const v = validateAnswers(withOrgOptions(pkg.requesterDefinition, org?.fieldValues, await orgListFields()), b.answers);
   if (!v.ok) return { ok: false, status: 422, errors: Object.fromEntries(Object.entries(v.errors).map(([k, m]) => [`answers.${k}`, m])) };
 
   const id = await createRequest({

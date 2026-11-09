@@ -1,5 +1,6 @@
 import { formLinkOrgs } from "@/server/public-fill";
 import { listOrgFieldDefs, listOrgs, listProjects } from "@/server/orgs-store";
+import { orgListFields } from "@/server/lists-store";
 import { notFound, redirect } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
@@ -22,7 +23,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   if (!data) notFound();
   const pkgId = await formPackageId(id, data.template.title);
   const [pdf, groups, contacts, pkg, orgs] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups(), listContacts(), getPackage(pkgId), listOrgs()]);
-  const orgFields = await listOrgFieldDefs();
+  const [orgFields, orgList] = await Promise.all([listOrgFieldDefs(), orgListFields()]);
   const projects = await listProjects();
 
   // Every step that goes to a person has its own role, so every step can be picked for a field ("שלב 2", "שלב 3"…).
@@ -43,6 +44,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
       needsPdf={!data.version.pdfFileId && data.template.publishedVersion === null}
       groups={groups.map((g) => ({ id: g.id, name: g.name }))}
       orgFields={orgFields.map((f) => ({ key: f.key, label: f.label }))}
+      orgList={orgList}
       flow={{
         packageId: pkgId,
         drafts,
