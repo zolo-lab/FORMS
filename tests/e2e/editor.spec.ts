@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, newFormFromPdf, openPalette } from "./helpers";
+import { login, newFormFromPdf, openEditView, openPalette } from "./helpers";
 
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
 
@@ -7,7 +7,7 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   const id = await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
 
   await openPalette(page);
   await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
@@ -40,9 +40,8 @@ test("edit a field inline, style it, and see it in the form preview", async ({ p
 test("form settings: layout, description and thank-you message", async ({ page }) => {
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `הגדרות ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
-  await page.getByText("כלים", { exact: true }).click();
-  await page.getByRole("button", { name: "הגדרות הטופס" }).click();
+  await openEditView(page, "רספונסיבי");
+  await page.getByRole("complementary", { name: "הגדרות" }).getByRole("button", { name: "הגדרות הטופס" }).click();
   await page.getByLabel("הסבר בראש הטופס").fill("מלאו בבקשה את כל השדות");
   await page.getByLabel("אופן המילוי").selectOption("card");
   await page.getByLabel("הודעה אחרי השליחה").fill("תודה רבה");
@@ -64,7 +63,7 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   test.setTimeout(120_000);
   await login(page, "/admin/forms");
   await newFormFromPdf(page, `טופס e2e ${Date.now()}`);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   await openPalette(page);
   for (const label of ["ראשון", "שני", "שלישי"]) {
     await page.getByRole("button", { name: /תשובה קצרה/ }).first().click();
@@ -78,4 +77,23 @@ test("fields are reordered by dragging a row onto another", async ({ page }) => 
   await rows.filter({ hasText: "שלישי" }).dragTo(first, { targetPosition: { x: 40, y: 8 } });
   await expect.poll(labels).toEqual(["שלישי", "ראשון", "שני"]);
 });
+});
+
+test("the form's name is edited from the pencil next to it, and the tools menu closes on a click outside", async ({ page }) => {
+  await login(page, "/admin/forms");
+  const name = `שם ${Date.now()}`;
+  await newFormFromPdf(page, name);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  const pencil = (await page.getByRole("button", { name: "עריכת שם הטופס" }).boundingBox())!;
+  expect(Math.min(pencil.width, pencil.height)).toBeGreaterThanOrEqual(44); // a touch target on a 390px phone
+  await page.getByRole("button", { name: "עריכת שם הטופס" }).click();
+  await page.getByLabel("שם הטופס").fill(`${name} חדש`);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1, name: `${name} חדש` })).toBeVisible();
+  await expect(page.getByText("טיוטה", { exact: true })).toBeVisible();
+
+  await page.getByText("כלים", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "גרסאות קודמות" })).toBeVisible();
+  await page.getByRole("heading", { level: 1 }).click();
+  await expect(page.getByRole("button", { name: "גרסאות קודמות" })).toBeHidden();
 });

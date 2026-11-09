@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, newFormFromPdf } from "./helpers";
+import { login, newFormFromPdf, openEditView } from "./helpers";
 
 // builder-plan.md §2.7 (route A): a form built from scratch, Google-Forms style, then filled and published.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -10,7 +10,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await login(page, "/admin/forms");
   const title = `בונה e2e ${Date.now()}`;
   const id = await newFormFromPdf(page, title);
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   const palette = page.getByRole("button", { name: /^(תשובה קצרה|תעודת זהות|בחירה יחידה|תאריך|סכום \(₪\)|כן \/ לא|שם מלא|חתימה)$/ });
 
   // Eight field types from the palette; the last one added is selected in the settings panel.
@@ -75,9 +75,9 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   // Publish and attach to a package.
   await page.goto(`/admin/forms/${id}`);
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "פורסם", exact: true })).toBeDisabled({ timeout: 20_000 });
   // The signing route is part of the form ("שלבי הטופס"), like in iForms.
-  await page.getByRole("tab", { name: "שלבי הטופס" }).click();
+  await page.getByRole("tab", { name: "שלבים", exact: true }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
   // A new form starts with the sender → the employee. Step 1 is fixed; add a third step.
   await expect(page.getByRole("listitem", { name: "שלב 1" })).toContainText("שלב 1 · השולח");
@@ -95,7 +95,7 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
 
   // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   const show = page.getByLabel("הצגת שלב");
   await expect(show.locator("option")).toHaveText(["— כל השלבים —", "שלב 1 · השולח", "שלב 2 · העובד", "שלב 3 · payroll@example.test (רק אישור)"]);
   await show.selectOption({ label: "שלב 2 · העובד" });

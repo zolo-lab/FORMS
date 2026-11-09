@@ -41,3 +41,9 @@ export async function addOnPdf(page: Page, label: string): Promise<void> {
   await page.getByRole("button", { name: `הוספת ${label}`, exact: true }).click();
   await page.getByRole("button", { name: "במקום פנוי בעמוד" }).click();
 }
+
+/** The form editor's "עריכה" tab, on one of its two views (the PDF or the responsive form). */
+export async function openEditView(page: Page, view: "PDF" | "רספונסיבי"): Promise<void> {
+  await page.getByRole("tab", { name: "עריכה", exact: true }).click();
+  await page.getByRole("tablist", { name: "תצוגת העריכה" }).getByRole("tab", { name: view, exact: true }).click();
+}
