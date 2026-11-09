@@ -324,7 +324,8 @@ export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lo
     const records = lookups[pickerKey(typeId)] as RecordOption[] | undefined;
     if (!records) continue;
     let chosen = answers[picker.id];
-    if (typeof chosen !== "string" || !records.some((r) => r.value === chosen)) chosen = records.length === 1 ? records[0]!.value : undefined;
+    // A list of one needs no choosing – but only where the picker is: another step's record is that step's to pick.
+    if (typeof chosen !== "string" || !records.some((r) => r.value === chosen)) chosen = records.length === 1 && inView.has(picker.id) ? records[0]!.value : undefined;
     if (inView.has(picker.id)) set(picker.id, chosen);
     const data = records.find((r) => r.value === chosen)?.data;
     for (const f of fields) {

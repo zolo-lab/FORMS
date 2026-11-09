@@ -310,5 +310,9 @@ describe("a picker of another role", async () => {
     expect(withListPicks(view, sent, lookups, full).pay).toBeUndefined();
     // With the pick already saved (by the other role), it fills.
     expect(withListPicks(view, { ...sent, [pick]: "r1" }, lookups, full).pay).toBe(7);
+    // A list of one is picked by itself only where the picker is.
+    const one = { [pickerKey(T)]: lookups[pickerKey(T)]!.slice(0, 1) };
+    expect(withListPicks(view, {}, one, full).pay).toBeUndefined();
+    expect(withListPicks(full, {}, one).pay).toBe(7);
   });
 });
