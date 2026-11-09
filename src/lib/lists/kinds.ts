@@ -96,3 +96,35 @@ export function listTitle(values: Record<string, CellValue>, fields: { key: stri
   }
   return "ללא שם";
 }
+
+/**
+ * An organization's several picks are kept as one line ("א, ב") so a form pre-filled from it reads naturally. Read
+ * back against the options: pieces are joined again while they do not make an option, so an option that itself holds
+ * ", " survives the round trip.
+ */
+export function splitPicks(line: string, options: readonly string[]): string[] {
+  const text = line.trim();
+  if (!text) return [];
+  if (options.includes(text)) return [text];
+  const out: string[] = [];
+  let cur = "";
+  for (const piece of text.split(", ")) {
+    cur = cur ? `${cur}, ${piece}` : piece;
+    if (options.includes(cur)) {
+      out.push(cur);
+      cur = "";
+    }
+  }
+  if (cur) out.push(...cur.split(", "));
+  return out;
+}
+
+/** Pasted text as option lines: rows and cells (tabs) both split, blanks and repeats dropped, each line tidied. */
+export function splitPasted(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/\r?\n|\t/)) {
+    const line = raw.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (line && !out.includes(line)) out.push(line);
+  }
+  return out;
+}

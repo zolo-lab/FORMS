@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCell, cleanOptions, listTitle, type ListField } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, listTitle, splitPicks, type ListField } from "@/lib/lists/kinds";
 
 const f = (kind: ListField["kind"], extra: Partial<ListField> = {}): ListField => ({ key: "k", label: "ש", kind, ...extra });
 
@@ -51,5 +51,15 @@ describe("a list's title", () => {
     expect(listTitle({ city: "c1", name: "", tel: "050" }, fields)).toBe("050");
     expect(listTitle({ name: "בצלאל" }, fields)).toBe("בצלאל");
     expect(listTitle({}, fields)).toBe("ללא שם");
+  });
+});
+
+describe("splitPicks", () => {
+  it("reads several picks back, keeping an option that holds a comma", () => {
+    expect(splitPicks("א, ב", ["א", "ב"])).toEqual(["א", "ב"]);
+    expect(splitPicks("צפון, מרכז, דרום", ["צפון, מרכז", "דרום"])).toEqual(["צפון, מרכז", "דרום"]);
+    expect(splitPicks("צפון, מרכז", ["צפון, מרכז"])).toEqual(["צפון, מרכז"]);
+    expect(splitPicks("", ["א"])).toEqual([]);
+    expect(splitPicks("ישן", ["א"])).toEqual(["ישן"]);
   });
 });

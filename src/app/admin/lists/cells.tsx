@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { updateFieldAction } from "./actions";
 import { Input, Select } from "@/components/ui/input";
-import { LTR_KINDS, type CellValue } from "@/lib/lists/kinds";
+import { LTR_KINDS, splitPasted, type CellValue } from "@/lib/lists/kinds";
 import type { SheetField } from "@/server/lists-store";
 import { cn } from "@/lib/utils";
 
@@ -296,7 +296,17 @@ function ChoiceCell({
               void addOption();
             }}
           >
-            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="אפשרות חדשה" aria-label={`אפשרות חדשה ל${field.label}`} maxLength={120} className="h-10" />
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              // A column pasted from Excel adds every line as an option at once (none picked).
+              onPaste={(e) => {
+                const lines = splitPasted(e.clipboardData.getData("text"));
+                if (lines.length < 2) return;
+                e.preventDefault();
+                void saveOptions([...options, ...lines.filter((l) => !options.includes(l))]);
+              }}
+              placeholder="אפשרות חדשה (או הדבקה מאקסל)" aria-label={`אפשרות חדשה ל${field.label}`} maxLength={120} className="h-10" />
             <button type="submit" disabled={busy || !draft.trim()} aria-label="הוספת האפשרות" className="flex size-10 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-50">
               <Plus className="size-4" aria-hidden />
             </button>

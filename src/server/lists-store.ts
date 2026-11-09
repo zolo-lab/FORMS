@@ -7,7 +7,7 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
 import { isOrgFieldKind } from "@/lib/fields/types";
-import { cleanCell, cleanOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, splitPicks, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
 
@@ -124,7 +124,7 @@ async function fieldsOf(typeId: string): Promise<SheetField[]> {
     return [
       { id: "org:name", key: NAME, label: "שם", kind: "short_text", options: [], multi: false, parentTypeId: null, fixed: true },
       { id: "org:reg", key: REG, label: 'ח"פ', kind: "id_number", options: [], multi: false, parentTypeId: null, fixed: true },
-      ...defs.map((d) => ({ id: d.id, key: d.key, label: d.label, kind: (isListFieldKind(d.type) ? d.type : "short_text") as ListFieldKind, options: d.options ?? [], multi: false, parentTypeId: null })),
+      ...defs.map((d) => ({ id: d.id, key: d.key, label: d.label, kind: (isListFieldKind(d.type) ? d.type : "short_text") as ListFieldKind, options: d.options ?? [], multi: d.type === "select" && d.multi, parentTypeId: null })),
     ];
   }
   const rows = await db.select().from(listTypeFields).where(eq(listTypeFields.listTypeId, typeId)).orderBy(asc(listTypeFields.order), asc(listTypeFields.createdAt));
@@ -147,7 +147,13 @@ export async function loadSheet(typeId: string): Promise<Sheet | null> {
   const fields = await fieldsOf(typeId);
   let rows: SheetRow[];
   if (typeId === ORG_TYPE) {
-    rows = (await listOrgs()).map((o) => ({ id: o.id, values: { ...(o.fieldValues ?? {}), [NAME]: o.name, [REG]: o.registrationNumber } }));
+    // A choice of several is kept on the organization as one line; the sheet gets it back as a list.
+    const multi = fields.filter((f) => f.multi);
+    rows = (await listOrgs()).map((o) => {
+      const values: SheetRow["values"] = { ...(o.fieldValues ?? {}), [NAME]: o.name, [REG]: o.registrationNumber };
+      for (const f of multi) if (typeof values[f.key] === "string") values[f.key] = splitPicks(values[f.key] as string, f.options);
+      return { id: o.id, values };
+    });
   } else {
     const r = await db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt));
     rows = r.map((x) => ({ id: x.id, values: x.values }));
@@ -177,7 +183,7 @@ export async function addField(typeId: string, input: FieldInput): Promise<Resul
   if (typeId === ORG_TYPE) {
     // An organization's value is one line: a text kind, or one option of a choice.
     if (!isOrgFieldKind(input.kind)) return fail("לעמותות אפשר להוסיף שדה של שורה אחת או בחירה מרשימה");
-    const r = await createOrgFieldDef({ label, type: input.kind, options: input.kind === "select" ? options : [] });
+    const r = await createOrgFieldDef({ label, type: input.kind, options: input.kind === "select" ? options : [], multi: input.kind === "select" && input.multi === true });
     return r.ok ? { ok: true, key: r.key } : fail(r.reason === "exists" ? "כבר יש שדה בשם הזה" : "השדה לא נוסף");
   }
   let parentTypeId: string | null = null;
@@ -247,7 +253,13 @@ export async function updateField(typeId: string, fieldId: string, patch: { labe
       options = patch.options !== undefined ? cleanOptions(patch.options) : def.type === "select" ? def.options : await valuesIn(typeId, def.key);
       if (!options.length) return fail("שדה בחירה צריך לפחות אפשרות אחת");
     }
-    const r = await updateOrgFieldDef(fieldId, { label, type: patch.kind, options });
+    const multi = kind === "select" ? (patch.multi ?? def.multi) : false;
+    // From several picks to one: refused while an organization still holds more than one.
+    if (def.type === "select" && def.multi && !multi) {
+      const many = (await listOrgs()).filter((o) => splitPicks((o.fieldValues as Record<string, string> | null)?.[def.key] ?? "", def.options).length > 1).length;
+      if (many) return fail(`ב־${many} עמותות נבחרו כמה ערכים. בחרו ערך אחד בכל אחת ונסו שוב.`);
+    }
+    const r = await updateOrgFieldDef(fieldId, { label, type: patch.kind, options, multi });
     return r.ok ? { ok: true } : fail("השדה לא עודכן");
   }
 

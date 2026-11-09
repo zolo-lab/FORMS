@@ -143,7 +143,7 @@ export async function takenFieldKeys(): Promise<Set<string>> {
  * People type the Hebrew name; the internal name (the key the forms point at) is made from it unless one is given,
  * and can be renamed later (`renameOrgFieldDef` moves the forms and the values with it).
  */
-export async function createOrgFieldDef(input: { label: string; key?: string; type?: string; options?: string[] }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" | "type" }> {
+export async function createOrgFieldDef(input: { label: string; key?: string; type?: string; options?: string[]; multi?: boolean }): Promise<{ ok: true; key: string } | { ok: false; reason: "key" | "exists" | "label" | "type" }> {
   const label = input.label.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!label) return { ok: false, reason: "label" };
   // An organization's value is one line of text: a multi-line type is refused, never silently replaced.
@@ -160,7 +160,7 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
   const choice = input.type === "select";
   // A choice nobody could pick from is refused.
   if (choice && !input.options?.some((o) => o.trim())) return { ok: false, reason: "type" };
-  await db.insert(organizationFieldDefs).values({ key, label, type: choice ? "select" : dictionaryType(input.type, true), options: choice ? (input.options ?? []) : [], order: Number(n) });
+  await db.insert(organizationFieldDefs).values({ key, label, type: choice ? "select" : dictionaryType(input.type, true), options: choice ? (input.options ?? []) : [], multi: choice && input.multi === true, order: Number(n) });
   return { ok: true, key };
 }
 
@@ -168,13 +168,13 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
  * The Hebrew name and the type of an organization field (the internal name has its own rename). A type left out
  * (or empty) keeps the current one; a multi-line type is refused.
  */
-export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string; options?: string[] }): Promise<{ ok: true } | { ok: false; reason: "type" }> {
+export async function updateOrgFieldDef(id: string, patch: { label?: string; type?: string; options?: string[]; multi?: boolean }): Promise<{ ok: true } | { ok: false; reason: "type" }> {
   if (patch.type && !isOrgFieldKind(patch.type)) return { ok: false, reason: "type" };
   const label = patch.label?.replace(/\s+/g, " ").trim().slice(0, 80);
   const type = patch.type === "select" ? "select" : patch.type ? dictionaryType(patch.type, true) : undefined;
   await db
     .update(organizationFieldDefs)
-    .set({ ...(label ? { label } : {}), ...(type ? { type } : {}), ...(patch.options ? { options: patch.options } : {}), updatedAt: new Date() })
+    .set({ ...(label ? { label } : {}), ...(type ? { type } : {}), ...(patch.options ? { options: patch.options } : {}), ...(patch.multi !== undefined ? { multi: patch.multi } : {}), updatedAt: new Date() })
     .where(eq(organizationFieldDefs.id, id));
   return { ok: true };
 }

@@ -106,6 +106,8 @@ export const organizationFieldDefs = pgTable("organization_field_defs", {
   type: text("type").notNull().default("short_text"),
   /** For a choice field (`type` "select"): the options an organization picks one of. */
   options: jsonb("options").$type<string[]>().notNull().default([]),
+  /** A choice of several: the value is still one line, the picks joined with ", " (see `splitPicks`). */
+  multi: boolean("multi").notNull().default(false),
   order: integer("order").notNull().default(0),
   ...timestamps,
 });

@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { splitPasted } from "@/lib/lists/kinds";
 
 /**
  * The options of a choice field, edited in place: a line per option, Enter adds the next one, arrows reorder, ✕
@@ -16,6 +17,20 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
     const next = [...list.slice(0, i + 1), "", ...list.slice(i + 1)];
     onChange(next);
     requestAnimationFrame(() => refs.current[i + 1]?.focus());
+  };
+  /** Several lines pasted (a column copied from Excel or Sheets, a list from a document) become several options. */
+  const paste = (i: number, text: string) => {
+    const lines = splitPasted(text);
+    if (lines.length < 2) return false;
+    const before = list.slice(0, i);
+    const after = list.slice(i + 1);
+    // The line pasted into keeps what was typed in it if it was not empty.
+    const here = list[i]?.trim() ? [list[i]!] : [];
+    const seen = new Set([...before, ...here, ...after].map((o) => o.trim()));
+    const fresh = lines.filter((l) => !seen.has(l) && (seen.add(l), true));
+    onChange([...before, ...here, ...fresh, ...after]);
+    requestAnimationFrame(() => refs.current[before.length + here.length + fresh.length - 1]?.focus());
+    return true;
   };
   const remove = (i: number) => onChange(list.filter((_, j) => j !== i));
   const move = (i: number, d: -1 | 1) => {
@@ -38,6 +53,9 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
               }}
               value={o}
               onChange={(e) => set(i, e.target.value)}
+              onPaste={(e) => {
+                if (paste(i, e.clipboardData.getData("text"))) e.preventDefault();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -69,7 +87,8 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
       <Button type="button" variant="ghost" size="sm" onClick={() => insertAfter(list.length - 1)}>
         <Plus className="size-4" aria-hidden /> אפשרות
       </Button>
-      <p className="text-xs text-muted-foreground">Enter מוסיף שורה; Backspace בשורה ריקה מוחק אותה.</p>
+      <p className="text-xs text-muted-foreground">אפשר להדביק עמודה מאקסל או כמה שורות – כל שורה תהיה אפשרות. Enter מוסיף שורה; Backspace בשורה ריקה מוחק אותה.</p>
     </fieldset>
   );
 }
+

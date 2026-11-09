@@ -82,7 +82,7 @@ export function AddFieldDialog({
             ))}
           </Select>
           {KIND_HINTS[kind] && <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>}
-          {isOrg && <p className="text-xs text-muted-foreground">לעמותה יש ערך אחד בכל שדה (גם בבחירה מרשימה – אפשרות אחת).</p>}
+          {isOrg && kind === "select" && multi && <p className="text-xs text-muted-foreground">בבחירה של כמה אפשרויות, הטופס יקבל אותן בשורה אחת מופרדות בפסיקים.</p>}
           {!isOrg && parents.length === 0 && (
             <p className="text-xs text-muted-foreground">
               &quot;שייך ל…&quot; מקשר כל רשומה כאן לרשומה מסוג רשימה אחר (למשל חנות → עיר). כשיהיה עוד סוג רשימה, הוא יופיע כאן.
@@ -93,11 +93,9 @@ export function AddFieldDialog({
           <>
             <OptionsEditor value={options} onChange={setOptions} />
             <p className="text-xs text-muted-foreground">בשלב הבא בוחרים לאילו רשומות שייכת כל אפשרות.</p>
-            {!isOrg && (
-              <label className="flex min-h-11 items-center gap-2 text-sm">
-                <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-              </label>
-            )}
+                        <label className="flex min-h-11 items-center gap-2 text-sm">
+              <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
+            </label>
           </>
         )}
         {kind === "ref" && (
@@ -155,7 +153,6 @@ export function FieldDialog({
       const found = [...new Set(rows.flatMap((r) => [r.values[field.key]].flat()).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.trim()))];
       setOptions(found.length ? found : [""]);
     }
-    if (isOrg) setMulti(false);
   };
   const asArray = (v: unknown) => (Array.isArray(v) ? (v as string[]) : typeof v === "string" && v ? [v] : []);
   // Only what was changed here; every other record shows its current value, even if it arrives after the dialog opened.
@@ -262,11 +259,9 @@ export function FieldDialog({
           {select && !assignFirst && (
             <>
               <OptionsEditor value={options} onChange={setOptions} />
-              {!isOrg && (
-                <label className="flex min-h-11 items-center gap-2 text-sm">
-                  <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-                </label>
-              )}
+                            <label className="flex min-h-11 items-center gap-2 text-sm">
+                <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
+              </label>
             </>
           )}
           {select && rows.length > 0 && choices.length > 0 && (
@@ -369,10 +364,13 @@ function AssignGrid({
                     <td key={o} className="p-0 text-center">
                       <label className="flex min-h-11 cursor-pointer items-center justify-center">
                         <input
-                          type="checkbox"
+                          type={multi ? "checkbox" : "radio"}
+                          name={multi ? undefined : `assign-${r.id}`}
                           className="size-5"
                           checked={(picks[r.id] ?? []).includes(o)}
                           onChange={() => toggle(r.id, o)}
+                          // A second click on the picked one clears it (a radio fires no change for that).
+                          onClick={() => !multi && (picks[r.id] ?? [])[0] === o && toggle(r.id, o)}
                           aria-label={`${label}: ${o} – ${title}`}
                         />
                       </label>
