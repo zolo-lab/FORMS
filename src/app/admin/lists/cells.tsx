@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { updateFieldAction } from "./actions";
 import { Input, Select } from "@/components/ui/input";
-import { LTR_KINDS, splitPasted, type CellValue } from "@/lib/lists/kinds";
+import { LTR_KINDS, MAX_OPTIONS, splitPasted, type CellValue } from "@/lib/lists/kinds";
 import type { SheetField } from "@/server/lists-store";
 import { cn } from "@/lib/utils";
 
@@ -166,7 +166,6 @@ function ChoiceCell({
   const [dropped, setDropped] = useState<string[]>([]);
   const options = [...field.options.filter((o) => !dropped.includes(o)), ...added.filter((o) => !field.options.includes(o) && !dropped.includes(o))];
   const [draft, setDraft] = useState("");
-  const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -232,8 +231,9 @@ function ChoiceCell({
     setDraft("");
     if (!picked.includes(o)) choose(o);
   };
+  // Taking an option off the list also drops it from this cell; other records keep it, marked as no longer listed.
   const removeOption = async (o: string) => {
-    if (await saveOptions(options.filter((x) => x !== o))) setRemoving(null);
+    if ((await saveOptions(options.filter((x) => x !== o))) && picked.includes(o)) choose(o);
   };
   const strays = picked.filter((p) => !options.includes(p));
 
@@ -265,25 +265,15 @@ function ChoiceCell({
               const stray = !options.includes(o);
               return (
                 <li key={o} className="flex items-center gap-1 rounded hover:bg-muted">
-                  {removing === o ? (
-                    <div className="flex min-h-10 flex-1 items-center gap-2 px-2 text-sm">
-                      <span className="flex-1">להוריד את &quot;{o}&quot; מהרשימה?</span>
-                      <button type="button" disabled={busy} className="font-medium text-destructive" onClick={() => removeOption(o)}>כן</button>
-                      <button type="button" className="text-muted-foreground" onClick={() => setRemoving(null)}>לא</button>
-                    </div>
-                  ) : (
-                    <>
-                      <label className="flex min-h-10 flex-1 cursor-pointer items-center gap-2 px-2">
-                        <input type={field.multi ? "checkbox" : "radio"} name={`${id ?? label}-choice`} checked={picked.includes(o)} onChange={() => choose(o)} onClick={() => !field.multi && picked[0] === o && choose(o)} className="size-4" />
-                        <span className="text-sm">{o}</span>
-                        {stray && <span className="text-xs text-muted-foreground">(הוסרה מהרשימה)</span>}
-                      </label>
-                      {!stray && (
-                        <button type="button" aria-label={`הורדת האפשרות ${o} מהרשימה`} className="flex size-10 items-center justify-center rounded text-muted-foreground hover:text-destructive" onClick={() => setRemoving(o)}>
-                          <X className="size-4" aria-hidden />
-                        </button>
-                      )}
-                    </>
+                  <label className="flex min-h-10 flex-1 cursor-pointer items-center gap-2 px-2">
+                    <input type={field.multi ? "checkbox" : "radio"} name={`${id ?? label}-choice`} checked={picked.includes(o)} onChange={() => choose(o)} onClick={() => !field.multi && picked[0] === o && choose(o)} className="size-4" />
+                    <span className="text-sm">{o}</span>
+                    {stray && <span className="text-xs text-muted-foreground">(הוסרה מהרשימה)</span>}
+                  </label>
+                  {!stray && (
+                    <button type="button" disabled={busy} aria-label={`הורדת האפשרות ${o} מהרשימה`} className="flex size-10 items-center justify-center rounded text-muted-foreground hover:text-destructive" onClick={() => removeOption(o)}>
+                      <X className="size-4" aria-hidden />
+                    </button>
                   )}
                 </li>
               );
@@ -304,7 +294,9 @@ function ChoiceCell({
                 const lines = splitPasted(e.clipboardData.getData("text"));
                 if (lines.length < 2) return;
                 e.preventDefault();
-                void saveOptions([...options, ...lines.filter((l) => !options.includes(l))]);
+                const next = [...options, ...lines.filter((l) => !options.includes(l))];
+                if (next.length > MAX_OPTIONS) return setError(`עד ${MAX_OPTIONS} אפשרויות בשדה (הודבקו ${next.length})`);
+                void saveOptions(next);
               }}
               placeholder="אפשרות חדשה (או הדבקה מאקסל)" aria-label={`אפשרות חדשה ל${field.label}`} maxLength={120} className="h-10" />
             <button type="submit" disabled={busy || !draft.trim()} aria-label="הוספת האפשרות" className="flex size-10 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-50">

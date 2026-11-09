@@ -7,7 +7,7 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
 import { isOrgFieldKind } from "@/lib/fields/types";
-import { cleanCell, cleanOptions, splitPicks, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
 
@@ -178,6 +178,7 @@ export async function addField(typeId: string, input: FieldInput): Promise<Resul
   const label = cleanName(input.label);
   if (!label) return fail("צריך שם לשדה");
   if (!isListFieldKind(input.kind)) return fail("סוג שדה לא מוכר");
+  if (tooManyOptions(input.options)) return fail(`עד ${MAX_OPTIONS} אפשרויות בשדה`);
   const options = cleanOptions(input.options);
   if (input.kind === "select" && options.length === 0) return fail("שדה בחירה צריך לפחות אפשרות אחת");
   if (typeId === ORG_TYPE) {
@@ -241,6 +242,7 @@ export async function updateField(typeId: string, fieldId: string, patch: { labe
   if (fieldId.startsWith("org:")) return fail("את השם והח\"פ אי אפשר לשנות");
   const label = patch.label !== undefined ? cleanName(patch.label) : undefined;
   if (patch.label !== undefined && !label) return fail("צריך שם לשדה");
+  if (tooManyOptions(patch.options)) return fail(`עד ${MAX_OPTIONS} אפשרויות בשדה`);
 
   if (typeId === ORG_TYPE) {
     const def = (await listOrgFieldDefs()).find((d) => d.id === fieldId);

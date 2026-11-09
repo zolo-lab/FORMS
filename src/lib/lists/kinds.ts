@@ -37,6 +37,18 @@ export const MAX_OPTION_LENGTH = 120;
 export const MAX_CELL = 500;
 
 /** The options of a choice field: trimmed, without empties or repeats, in the order given. */
+/** Whether a list of options is over the cap once tidied – refused on the server rather than cut short in silence. */
+export function tooManyOptions(raw: unknown): boolean {
+  if (!Array.isArray(raw)) return false;
+  const seen = new Set<string>();
+  for (const o of raw) {
+    if (typeof o !== "string") continue;
+    const v = o.replace(/\s+/g, " ").trim().slice(0, MAX_OPTION_LENGTH);
+    if (v) seen.add(v);
+  }
+  return seen.size > MAX_OPTIONS;
+}
+
 export function cleanOptions(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();

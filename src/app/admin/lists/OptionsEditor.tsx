@@ -1,9 +1,9 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { splitPasted } from "@/lib/lists/kinds";
+import { MAX_OPTIONS, splitPasted } from "@/lib/lists/kinds";
 
 /**
  * The options of a choice field, edited in place: a line per option, Enter adds the next one, arrows reorder, ✕
@@ -11,6 +11,9 @@ import { splitPasted } from "@/lib/lists/kinds";
  */
 export function OptionsEditor({ value, onChange, label = "אפשרויות" }: { value: string[]; onChange: (next: string[]) => void; label?: string }) {
   const list = value.length ? value : [""];
+  const [notice, setNotice] = useState("");
+  // The same option typed twice is kept once on save; shown here so the list is not a surprise later.
+  const dupes = new Set(list.map((o) => o.trim()).filter((o, i, a) => o && a.indexOf(o) !== i));
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const set = (i: number, v: string) => onChange(list.map((o, j) => (j === i ? v : o)));
   const insertAfter = (i: number) => {
@@ -28,7 +31,9 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
     const here = list[i]?.trim() ? [list[i]!] : [];
     const seen = new Set([...before, ...here, ...after].map((o) => o.trim()));
     const fresh = lines.filter((l) => !seen.has(l) && (seen.add(l), true));
-    onChange([...before, ...here, ...fresh, ...after]);
+    const room = MAX_OPTIONS - (before.length + here.length + after.length);
+    setNotice(fresh.length > room ? `עד ${MAX_OPTIONS} אפשרויות בשדה – ${fresh.length - room} שורות לא נוספו` : lines.length > fresh.length ? `${lines.length - fresh.length} שורות כפולות דולגו` : "");
+    onChange([...before, ...here, ...fresh.slice(0, Math.max(0, room)), ...after]);
     requestAnimationFrame(() => refs.current[before.length + here.length + fresh.length - 1]?.focus());
     return true;
   };
@@ -68,6 +73,8 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
                 }
               }}
               aria-label={`אפשרות ${i + 1}`}
+              aria-invalid={dupes.has(o.trim()) || undefined}
+              title={dupes.has(o.trim()) ? "כפול – יישמר פעם אחת" : undefined}
               placeholder={i === 0 ? "למשל: פעיל" : ""}
               maxLength={120}
               className="h-10"
@@ -87,6 +94,7 @@ export function OptionsEditor({ value, onChange, label = "אפשרויות" }: {
       <Button type="button" variant="ghost" size="sm" onClick={() => insertAfter(list.length - 1)}>
         <Plus className="size-4" aria-hidden /> אפשרות
       </Button>
+      {notice && <p role="status" className="text-xs text-muted-foreground">{notice}</p>}
       <p className="text-xs text-muted-foreground">אפשר להדביק עמודה מאקסל או כמה שורות – כל שורה תהיה אפשרות. Enter מוסיף שורה; Backspace בשורה ריקה מוחק אותה.</p>
     </fieldset>
   );
