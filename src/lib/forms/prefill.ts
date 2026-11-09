@@ -143,8 +143,9 @@ export function withOrgFields(def: FormDefinition, org: PrefillSubject["org"], a
     const v = valueFor(key, f.type, { name: "", org });
     // The field is locked and skips its own check, so a value it would refuse (free text in an e-mail field, an
     // ID number that fails its check digit) is left out rather than stored as if it were valid.
-    if (v === undefined || !passes(f, v)) delete out[f.id];
-    else out[f.id] = v as Answers[string];
+    // Set even when empty (not deleted), so a value saved earlier – a draft, a stored answer – cannot show through
+    // when the answers are merged after this.
+    out[f.id] = (v === undefined || !passes(f, v) ? undefined : v) as Answers[string];
   }
   return out;
 }

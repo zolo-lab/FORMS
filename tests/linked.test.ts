@@ -155,6 +155,9 @@ describe("withOrgFields", () => {
     ]);
     const out = withOrgFields(def, { name: "x", fields: { mail: "a@b.c", tyk: "123" } }, { m: "typed@x.co" });
     expect(out.m).toBeUndefined();
+    // Explicitly empty, so merged over a saved draft it still wins.
+    expect("m" in out).toBe(true);
+    expect({ ...{ m: "bad@x" }, ...out }.m).toBeUndefined();
     expect(out.t).toBe("123");
     expect(withOrgFields(def, { name: "x", fields: { mail: "office@org.co.il" } }, {}).m).toBe("office@org.co.il");
   });
