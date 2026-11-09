@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { AlertTriangle, Check, Link2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
@@ -17,6 +16,7 @@ import {
   listSource,
   pickerFor,
   pickerOf,
+  sameKind,
   unbindField,
   type LinkedListField,
   type LinkRow,
@@ -24,6 +24,7 @@ import {
 } from "@/lib/forms/linked";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import { KIND_LABELS, isListFieldKind } from "@/lib/lists/kinds";
+import { FieldChooser, type ChooserItem } from "./FieldChooser";
 
 /** A list type forms can link to. The organizations are the built-in one. */
 export interface LinkableType {
@@ -33,22 +34,18 @@ export interface LinkableType {
 }
 
 /**
- * "שדות מקושרים": the form against one list. For every field of the list – the form field it fills (or gives its
- * options to), a form field with the same name to link in one click, or a warning that the form has no place for it
- * with a button that adds one. For a list other than the organizations, the filler picks the record in a dropdown
- * of the form (added here if missing). Every change goes straight into the form (and can be undone).
+ * The form's links to one list. For every field of the list – the form field it fills (or gives its options to), a
+ * form field with the same name to link in one click, or a warning that the form has no place for it with a button
+ * that adds one. For a list other than the organizations, the filler picks the record in a dropdown of the form
+ * (added here if missing). Every change goes straight into the form (and can be undone).
  */
-export function LinkedFieldsDialog({
-  open,
-  onClose,
+export function LinkedFieldsPanel({
   def,
   listFields,
   types,
   page,
   onChange,
 }: {
-  open: boolean;
-  onClose: () => void;
   def: FormDefinition;
   /** The organizations' list. */
   listFields: LinkedListField[];
@@ -77,8 +74,7 @@ export function LinkedFieldsDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="שדות מקושרים" className="w-[min(96vw,52rem)]" fullScreenOnMobile>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <Label htmlFor="link-source" className="font-medium">מאגר</Label>
@@ -139,7 +135,14 @@ export function LinkedFieldsDialog({
             const bound = r.state === "bound" ? r.formFieldIds : [];
             // org_name / org_number already show the name and number by their id: never re-linked to another field.
             // Nor a picker: it chooses the record for the other fields.
-            const candidates = fields.filter((f) => !bound.includes(f.id) && !linkedById(f.id) && !pickerOf(f) && fits(f, lf));
+            // Every field of the form, the fitting ones pickable; the rest greyed with why not.
+            const items: ChooserItem[] = fields
+              .filter((f) => !bound.includes(f.id))
+              .map((f) => ({
+                field: f,
+                blocked: linkedById(f.id) ? "מתמלא לפי המזהה" : pickerOf(f) ? "בוחר את הרשומה" : !fits(f, lf) ? "לא מחזיק ערך אחד" : undefined,
+                note: fits(f, lf) && !sameKind(f, lf) ? "הערך ייבדק מול השדה" : undefined,
+              }));
             return (
               <li key={lf.key} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-center">
                 <div className="min-w-0">
@@ -185,20 +188,8 @@ export function LinkedFieldsDialog({
                     </span>
                   )}
 
-                  {candidates.length > 0 && (
-                    <Select
-                      aria-label={`קישור ${lf.label} לשדה אחר בטופס`}
-                      value=""
-                      onChange={(e) => e.target.value && onChange(bindField(def, e.target.value, lf, source))}
-                      className="h-9 w-auto min-w-40 text-sm"
-                    >
-                      <option value="">{bound.length ? "+ עוד שדה…" : "קישור לשדה אחר…"}</option>
-                      {candidates.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.label || f.id} · {f.id}
-                        </option>
-                      ))}
-                    </Select>
+                  {items.length > 0 && (
+                    <FieldChooser items={items} label={`קישור ${lf.label} לשדה בטופס`} placeholder={bound.length ? "+ עוד שדה…" : "חיפוש שדה בטופס…"} onPick={(id) => onChange(bindField(def, id, lf, source))} />
                   )}
                 </div>
               </li>
@@ -206,10 +197,6 @@ export function LinkedFieldsDialog({
           })}
         </ul>
 
-        <div className="flex justify-end border-t pt-3">
-          <Button onClick={onClose}>סגירה</Button>
-        </div>
-      </div>
-    </Dialog>
+    </div>
   );
 }

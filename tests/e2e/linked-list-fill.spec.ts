@@ -68,15 +68,22 @@ test("a form linked to a list: pick a record, its fields fill and its options na
   const title = `טופס ספק e2e ${stamp}`;
   await newFormFromPdf(page, title);
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
-  await page.locator("summary", { hasText: "כלים" }).click();
-  await page.getByRole("button", { name: "שדות מקושרים" }).click();
-  const dialog = page.getByRole("dialog", { name: "שדות מקושרים" });
+  await page.getByRole("button", { name: "שדות מרשימה" }).click();
+  const dialog = page.getByRole("dialog", { name: "שדות מרשימה" });
+  await dialog.getByRole("button", { name: new RegExp(`^${typeName}`) }).click();
+  // The filler picks the record (the default): a picker is added with the fields.
+  await expect(dialog.getByText("הממלא יבחר בטופס")).toBeVisible();
+  await expect(dialog.getByText("יתווסף כ", { exact: false }).first()).toBeVisible();
+  await dialog.getByRole("button", { name: /^הוספת 3 שדות מקושרים/ }).click();
+  await expect(dialog).toBeHidden();
+  // The links tab shows them all linked, with the picker.
+  await page.getByRole("button", { name: "שדות מרשימה" }).click();
+  await dialog.getByRole("tab", { name: "קישורים בטופס" }).click();
   await dialog.getByLabel("מאגר").selectOption({ label: typeName });
-  await expect(dialog.getByText("אין בטופס שדה לבחירת הרשומה")).toBeVisible();
-  await dialog.getByRole("button", { name: /^הוספת כל החסרים לטופס/ }).click();
   await expect(dialog.getByText(`הממלא בוחר את הרשומה בשדה «${typeName}»`)).toBeVisible();
   await expect(dialog.getByText("לא נמצא בטופס")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "סגירה" }).click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "פרסום" }).click();
   await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
 

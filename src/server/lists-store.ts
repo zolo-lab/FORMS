@@ -186,15 +186,30 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
   return out;
 }
 
-/** The list types forms can link to, with their fields (the organizations are `orgListFields`). */
-export async function linkableTypes(): Promise<{ id: string; name: string; fields: LinkedListField[] }[]> {
-  const types = await db.select().from(listTypes).orderBy(asc(listTypes.order), asc(listTypes.name));
-  const out: { id: string; name: string; fields: LinkedListField[] }[] = [];
-  for (const t of types) {
-    const fields = (await fieldsOf(t.id)).map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi }));
-    out.push({ id: t.id, name: t.name, fields });
+/** A list as the builder adds from it: its fields and its records with their titles and values. */
+export interface BuilderListData {
+  id: string;
+  name: string;
+  fields: LinkedListField[];
+  records: { id: string; title: string; values: Record<string, string | string[]> }[];
+}
+
+/** Every list the builder can add from: the organizations first (as records), then the list types. */
+export async function builderLists(): Promise<{ org: BuilderListData; types: BuilderListData[] }> {
+  const toList = (sheet: Sheet, id: string, name: string): BuilderListData => ({
+    id,
+    name,
+    fields: sheet.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi })),
+    records: sheet.rows.map((r) => ({ id: r.id, title: listTitle(r.values, sheet.fields), values: r.values })),
+  });
+  const orgSheet = (await loadSheet(ORG_TYPE))!;
+  const org = toList(orgSheet, ORG_TYPE, "עמותות ועסקים");
+  const types: BuilderListData[] = [];
+  for (const t of await db.select().from(listTypes).orderBy(asc(listTypes.order), asc(listTypes.name))) {
+    const sheet = await loadSheet(t.id);
+    if (sheet) types.push(toList(sheet, t.id, t.name));
   }
-  return out;
+  return { org, types };
 }
 
 /** The organizations' list as forms link to it (name, number and the admin-defined fields). */

@@ -12,9 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Download, ExternalLink, History, Link2, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
-import { LinkedFieldsDialog } from "./LinkedFieldsDialog";
-import type { LinkedListField } from "@/lib/forms/linked";
-import type { LinkableType } from "./LinkedFieldsDialog";
+import { AddFromListDialog, type BuilderList } from "./AddFromListDialog";
+
+const EMPTY_ORG_LIST: BuilderList = { id: "org", name: "עמותות ועסקים", fields: [], records: [] };
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
@@ -66,9 +66,10 @@ export interface FormEditorProps {
   /** The organizations' own fields, offered in "מילוי אוטומטי" (filled from the request's organization). */
   orgFields?: { key: string; label: string }[];
   /** The organizations' list (name, number and their own fields): the "שדות מקושרים" dialog links form fields to it. */
-  orgList?: LinkedListField[];
-  /** The other list types the form can link to (the filler picks the record in the form). */
-  listTypes?: LinkableType[];
+  /** The organizations' list with the organizations as records: "שדות מרשימה" adds from it. */
+  orgList?: BuilderList;
+  /** The other list types, with their records. */
+  listTypes?: BuilderList[];
   /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
   flow?: {
     packageId: string;
@@ -97,7 +98,7 @@ export interface FormEditorProps {
 const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], listTypes = [], flow, linkOrgs = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = EMPTY_ORG_LIST, listTypes = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -435,6 +436,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           ]}
         />
         <div className="ms-auto flex flex-wrap items-center gap-1">
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => setLinkedOpen(true)} title="שדות שמתמלאים מרשימה: פרטי העמותה, ספק, סניף… – מרשומה קבועה או מרשומה שהממלא בוחר">
+            <Link2 className="size-4" aria-hidden />שדות מרשימה
+          </Button>
           <details className="relative">
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
             <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
@@ -444,9 +448,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               <a href={`/preview/form/${templateId}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm", className: "justify-start" })}>
                 <ExternalLink className="size-4" />צפייה בטופס (בחלון חדש)
               </a>
-              <Button variant="ghost" size="sm" className="justify-start" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setLinkedOpen(true); }} title="שדות שמתמלאים מרשימה – העמותה של הבקשה או רשומה שהממלא בוחר – ושדות בחירה שמציגים את האפשרויות שלה">
-                <Link2 className="size-4" />שדות מקושרים
-              </Button>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
                 <Sparkles className="size-4" />שמות מזהים לשדות
               </Button>
@@ -472,14 +473,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       </div>
 
       <VersionsDialog templateId={templateId} open={versionsOpen} onClose={() => setVersionsOpen(false)} />
-      <LinkedFieldsDialog
+      <AddFromListDialog
         open={linkedOpen}
         onClose={() => setLinkedOpen(false)}
         def={def}
-        listFields={orgList}
+        org={orgList}
         types={listTypes}
         page={selection?.kind === "page" ? selection.index : selection?.kind === "field" ? (findLocation(def, selection.id)?.page ?? 0) : 0}
-        onChange={(d) => commit(d)}
+        onChange={(d: FormDefinition) => commit(d)}
       />
       <CheckboxLinksDialog
         suggestions={links}
@@ -625,7 +626,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   stamps={pdf?.mapping.stamps}
                   groups={groups}
                   orgFields={orgFields}
-                  orgChoices={orgList.filter((f) => f.kind === "select")}
+                  orgChoices={orgList.fields.filter((f) => f.kind === "select")}
                   listTypes={listTypes}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}

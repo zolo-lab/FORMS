@@ -8,9 +8,9 @@ test("linked fields: the form against the organizations' list – missing fields
   await newFormFromPdf(page, `מקושר e2e ${Date.now()}`);
   await page.getByRole("tab", { name: "רספונסיבי" }).click();
 
-  await page.locator("summary", { hasText: "כלים" }).click();
-  await page.getByRole("button", { name: "שדות מקושרים" }).click();
-  const dialog = page.getByRole("dialog", { name: "שדות מקושרים" });
+  await page.getByRole("button", { name: "שדות מרשימה" }).click();
+  const dialog = page.getByRole("dialog", { name: "שדות מרשימה" });
+  await dialog.getByRole("tab", { name: "קישורים בטופס" }).click();
   await expect(dialog.getByLabel("מאגר")).toHaveValue("org");
 
   // A new form has none of the list's fields: each is flagged, with its internal name shown beside it.
@@ -30,6 +30,6 @@ test("linked fields: the form against the organizations' list – missing fields
   await dialog.getByRole("button", { name: /^קישור כל ההצעות/ }).click();
   await expect(dialog.getByRole("button", { name: /^ביטול הקישור של / })).toHaveCount(before);
 
-  await dialog.getByRole("button", { name: "סגירה" }).click();
+  await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });

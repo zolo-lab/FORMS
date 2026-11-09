@@ -91,12 +91,20 @@ const isChoice = (type: FieldType) => FIELD_TYPE_META[type].hasOptions;
 /** Form field types whose answer is one plain value, so an organization's value (a line of text) can stand in it. */
 const PLAIN_TYPES = new Set<FieldType>(["short_text", "long_text", "number", "currency", "percent", "email", "phone", "id_number", "date", "hidden", "radio", "dropdown", "checkboxes"]);
 
-/** May this form field show this list field? A choice list feeds any one-line field; a text one, no choice field. */
+/**
+ * May this form field be filled from this list field? Any field that holds one plain value can (the value is checked
+ * against the field's own rule when filled – see `passes` in validate / prefill – and left empty if it fails); a
+ * choice field only from a choice. Signatures, stamps, grids and the like never.
+ */
 export function fits(field: Pick<FormField, "type">, lf: LinkedListField): boolean {
   if (!PLAIN_TYPES.has(field.type)) return false;
   if (isChoice(field.type)) return lf.kind === "select";
-  // A typed field is locked once filled and skips its own check, so it only takes a value of the same kind
-  // (an e-mail field never shows free text that a request would then use as an address).
+  return true;
+}
+
+/** Whether the list field's values already pass this form field's check by kind – the natural match, offered first. */
+export function sameKind(field: Pick<FormField, "type">, lf: LinkedListField): boolean {
+  if (!fits(field, lf)) return false;
   const strict = STRICT[field.type];
   return strict ? strict.includes(lf.kind) : true;
 }
@@ -210,7 +218,7 @@ export function linkReport(def: FormDefinition, listFields: LinkedListField[], s
   return listFields.map((lf): LinkRow => {
     const bound = fields.filter((f) => bindingOf(f, source) === lf.key).map((f) => f.id);
     if (bound.length) return { field: lf, state: "bound", formFieldIds: bound };
-    const match = fields.find((f) => !linked.has(f.id) && !offered.has(f.id) && sameLabel(f.label, lf.label) && fits(f, lf));
+    const match = fields.find((f) => !linked.has(f.id) && !offered.has(f.id) && sameLabel(f.label, lf.label) && sameKind(f, lf));
     if (match) {
       offered.add(match.id);
       return { field: lf, state: "suggested", suggestion: match.id };
@@ -420,4 +428,63 @@ export function lookupsForView(lookups: Lookups, view: FormDefinition, full: For
     out[key] = records.filter((r) => r.value === answers[picker.id]);
   }
   return out ?? lookups;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Adding fields from a list in the builder, in one go.
+
+/** A record as the builder shows it: its title and every value (what `loadSheet` gives). */
+export interface BuilderRecord {
+  id: string;
+  title: string;
+  values: Record<string, string | string[]>;
+}
+
+/**
+ * Fields from a list added to the form in one go. With a fixed record (`record`), each field gets that record's value
+ * as its default – copied into the form, so the list may change later without touching it – locked when `readOnly`;
+ * a choice gets the record's options. Without a record, the fields are linked to the list (and, for a list other
+ * than the organizations, a picker is added for the filler to choose the record). Fields the form already has under
+ * the same name are reused (linked, or given the value) rather than added twice.
+ */
+export function addFromList(
+  def: FormDefinition,
+  source: LinkSource,
+  typeName: string,
+  listFields: LinkedListField[],
+  page: number,
+  opts: { record?: BuilderRecord | null; readOnly?: boolean } = {},
+): FormDefinition {
+  let next = def;
+  const record = opts.record ?? null;
+  const taken = new Set(allFields(next).filter((f) => isLinkKey(f.optionsSource) || isLinkKey(prefillOf(f))).map((f) => f.id));
+  for (const lf of listFields) {
+    const existing = allFields(next).find((f) => !taken.has(f.id) && !linkedById(f.id) && !pickerOf(f) && sameLabel(f.label, lf.label) && fits(f, lf));
+    let id: string;
+    if (existing) id = existing.id;
+    else {
+      const added = addLinkedField(next, lf, page, source);
+      next = added.def;
+      id = added.id;
+    }
+    taken.add(id);
+    if (record) {
+      // A fixed value, not a link.
+      next = unbindField(next, id);
+      const field = allFields(next).find((f) => f.id === id)!;
+      const v = record.values[lf.key];
+      const patch: Partial<FormField> = { readOnly: opts.readOnly !== false || undefined };
+      if (isChoice(field.type)) {
+        const mine = Array.isArray(v) ? v : v ? [v] : [];
+        patch.options = asOptions(mine.length ? lf.options.filter((o) => mine.includes(o)) : lf.options);
+        patch.readOnly = undefined;
+      } else {
+        patch.defaultValue = valueForField(field, v);
+      }
+      next = updateField(next, id, patch);
+    } else if (existing) next = bindField(next, id, lf, source);
+  }
+  const typeId = sourceTypeId(source);
+  if (!record && typeId && !pickerFor(next, typeId)) next = addPicker(next, typeId, typeName, page).def;
+  return next;
 }

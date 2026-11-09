@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addLinkedField, allowedOptions, bindField, bindingOf, fits, linkReport, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
+import { addLinkedField, allowedOptions, bindField, bindingOf, fits, linkReport, sameKind, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
 
@@ -69,11 +69,12 @@ describe("fits", () => {
     expect(fits({ type: "short_text" }, listFields[0]!)).toBe(true);
     expect(fits({ type: "dropdown" }, listFields[0]!)).toBe(false);
     expect(fits({ type: "dropdown" }, listFields[4]!)).toBe(true);
-    // A typed field takes only a value of its own kind: no free text into an e-mail or an ID number.
-    expect(fits({ type: "email" }, listFields[0]!)).toBe(false);
-    expect(fits({ type: "id_number" }, listFields[1]!)).toBe(true);
-    expect(fits({ type: "number" }, listFields[2]!)).toBe(true);
-    expect(fits({ type: "short_text" }, listFields[2]!)).toBe(true);
+    // Any plain-value field fits (the value is checked when filled); the same kind is the natural match.
+    expect(fits({ type: "email" }, listFields[0]!)).toBe(true);
+    expect(sameKind({ type: "email" }, listFields[0]!)).toBe(false);
+    expect(sameKind({ type: "id_number" }, listFields[1]!)).toBe(true);
+    expect(sameKind({ type: "number" }, listFields[2]!)).toBe(true);
+    expect(sameKind({ type: "short_text" }, listFields[2]!)).toBe(true);
   });
 });
 
@@ -314,5 +315,36 @@ describe("a picker of another role", async () => {
     const one = { [pickerKey(T)]: lookups[pickerKey(T)]!.slice(0, 1) };
     expect(withListPicks(view, {}, one, full).pay).toBeUndefined();
     expect(withListPicks(full, {}, one).pay).toBe(7);
+  });
+});
+
+describe("addFromList", async () => {
+  const { addFromList, listSource, bindingOf, pickerFor } = await import("@/lib/forms/linked");
+  const T = "55555555-5555-4555-8555-555555555555";
+  const lfs = [
+    { key: "name", label: "שם", kind: "short_text", options: [], multi: false },
+    { key: "pay", label: "שכר", kind: "number", options: [], multi: false },
+    { key: "items", label: "ירקות", kind: "select", options: ["עגבניה", "מלפפון", "גזר"], multi: true },
+  ];
+  it("without a record: fields added and linked, a picker for the filler, an existing same-named field reused", () => {
+    const def = addFromList(form([{ id: "x", type: "short_text", label: "שם" }]), listSource(T), "ספקים", lfs, 0);
+    const fields = def.pages[0]!.fields;
+    expect(pickerFor(def, T)).toBeTruthy();
+    expect(bindingOf(fields.find((f) => f.id === "x")!, listSource(T))).toBe("name");
+    expect(fields.filter((f) => f.label === "שם")).toHaveLength(1);
+    expect(fields.find((f) => f.label === "ירקות")!.optionsSource).toContain(T);
+  });
+  it("with a record: the values are copied in as locked defaults, a choice gets the record's options, no picker", () => {
+    const rec = { id: "r1", title: "גדע", values: { name: "גדע", pay: "120", items: ["גזר", "עגבניה"] } };
+    const def = addFromList(form([]), listSource(T), "ספקים", lfs, 0, { record: rec });
+    const by = (l: string) => def.pages[0]!.fields.find((f) => f.label === l)!;
+    expect(pickerFor(def, T)).toBeUndefined();
+    expect(by("שם")).toMatchObject({ defaultValue: "גדע", readOnly: true });
+    expect(by("שכר")).toMatchObject({ defaultValue: 120, readOnly: true });
+    expect(by("ירקות").options?.map((o) => o.value)).toEqual(["עגבניה", "גזר"]);
+    expect(by("ירקות").readOnly).toBeUndefined();
+    expect(bindingOf(by("שם"), listSource(T))).toBeUndefined();
+    const open = addFromList(form([]), listSource(T), "ספקים", lfs, 0, { record: rec, readOnly: false });
+    expect(open.pages[0]!.fields.find((f) => f.label === "שם")!.readOnly).toBeUndefined();
   });
 });

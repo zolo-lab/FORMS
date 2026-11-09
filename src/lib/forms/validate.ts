@@ -20,7 +20,7 @@ import { withDefaults } from "./defaults";
 import { isKnownBranch } from "./bank-branches";
 import { matchesCharset } from "./charset";
 import { autoRowsOn, isBlankRow } from "./rows";
-import { fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
+import { allFields, fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
 import {
   isValidBankAccount,
   isValidEmail,
@@ -335,6 +335,12 @@ export function validateAnswers(baseForm: FormDefinition, rawAnswers: Answers, o
   if (options.lookups) {
     answers = withListPicks(form, answers, options.lookups, options.fullForm);
     form = narrowListChoices(form, answers, options.lookups, options.fullForm);
+    // A record's value the locked field would refuse (free text in a phone field) is left out, not stored.
+    for (const f of allFields(form)) {
+      if (!isListFilled(f) || answers[f.id] === undefined) continue;
+      const alone: FormDefinition = { schemaVersion: 1, title: "", pages: [{ id: "p", title: "", fields: [{ ...f, required: false, readOnly: false, visibleIf: undefined, disabledIf: undefined, requiredIf: undefined, fields: undefined }] }] };
+      if (!validateAnswers(alone, { [f.id]: answers[f.id] }, { today }).ok) answers = { ...answers, [f.id]: undefined } as Answers;
+    }
   }
   answers = computeFormulas(form, withCopies(form, answers), today);
   const errors: FieldErrors = {};
