@@ -25,12 +25,11 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await add.getByLabel("שם השדה").fill("אזור");
   await add.getByLabel("סוג").selectOption("select");
   // A column pasted from Excel: every line an option.
-  const column = await page.evaluateHandle(() => {
+  await add.getByLabel("אפשרות 1", { exact: true }).evaluate((el) => {
     const d = new DataTransfer();
     d.setData("text/plain", "צפון\r\nדרום\r\n");
-    return d;
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: d, bubbles: true, cancelable: true }));
   });
-  await add.getByLabel("אפשרות 1", { exact: true }).dispatchEvent("paste", { clipboardData: column });
   await expect(add.getByLabel("אפשרות 2", { exact: true })).toHaveValue("דרום");
   await add.getByRole("button", { name: "הוספה" }).click();
   await expect(add).toBeHidden();
