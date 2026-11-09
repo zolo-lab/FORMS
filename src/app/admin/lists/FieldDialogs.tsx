@@ -13,7 +13,7 @@ import { OptionsEditor } from "./OptionsEditor";
 
 const KIND_HINTS: Partial<Record<ListFieldKind, string>> = {
   select: "רשימת אפשרויות קבועה (למשל: צפון / מרכז / דרום). אפשר לאפשר בחירה של כמה.",
-  ref: "כל רשימה כאן שייכת לרשימה מסוג אחר – למשל חנות שייכת לעיר. כך בטופס, אחרי שבוחרים עיר, יוצגו רק החנויות שלה.",
+  ref: "כל רשומה כאן שייכת לרשומה מסוג אחר – למשל חנות שייכת לעיר. כך בטופס, אחרי שבוחרים עיר, יוצגו רק החנויות שלה.",
 };
 
 export function AddFieldDialog({ open, onClose, typeId, types }: { open: boolean; onClose: () => void; typeId: string; types: TypeSummary[] }) {
@@ -49,7 +49,7 @@ export function AddFieldDialog({ open, onClose, typeId, types }: { open: boolean
           });
         }}
       >
-        <p className="text-sm text-muted-foreground">השדה יתווסף לכל הרשימות מהסוג הזה, וכל אחת תמלא בו ערך משלה.</p>
+        <p className="text-sm text-muted-foreground">השדה יתווסף כעמודה לכל הרשומות מהסוג הזה, וכל אחת תמלא בו ערך משלה.</p>
         <div className="space-y-1.5">
           <Label htmlFor="field-label">שם השדה</Label>
           <Input id="field-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="למשל: מייל להזמנות" autoFocus required maxLength={80} />
@@ -111,7 +111,7 @@ export function FieldDialog({ field, typeId, onClose }: { field: SheetField; typ
       {confirm !== null ? (
         <div className="space-y-3 text-sm">
           <p>
-            {confirm ? `${confirm} רשימות מילאו את השדה הזה, והערכים שלהן ימחקו.` : "אף רשימה לא מילאה את השדה הזה."} טפסים שמושכים ממנו יפסיקו להתמלא.
+            {confirm ? `${confirm} רשומות מילאו את השדה הזה, והערכים שלהן ימחקו.` : "אף רשומה לא מילאה את השדה הזה."} טפסים שמושכים ממנו יפסיקו להתמלא.
             אי אפשר לבטל את זה.
           </p>
           {error && <p role="alert" className="text-destructive">{error}</p>}

@@ -28,7 +28,6 @@ export function ListsScreen({ types, sheet }: { types: TypeSummary[]; sheet: She
 
 function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
   const { type, fields } = sheet;
-  const isOrg = type.id === "org";
   const [status, setStatus] = useState<Status>({ state: "idle" });
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const pending = useRef(0);
@@ -68,7 +67,7 @@ function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
     <div className="flex flex-col gap-4 md:flex-row md:items-start">
       <TypeNav types={types} current={type.id} />
       <section aria-labelledby="sheet-title" className="min-w-0 flex-1 space-y-3">
-        <SheetHeader type={type} status={status} onAddField={() => setAdding(true)} />
+        <SheetHeader type={type} status={status} onAddField={() => setAdding(true)} canAddRow={fields.length > 0} />
         {fields.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
             עוד אין שדות לסוג הזה.{" "}
@@ -78,7 +77,6 @@ function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
           <>
             <DesktopTable sheet={sheet} failed={failed} saver={saver} onEditField={setEditing} />
             <MobileCards sheet={sheet} failed={failed} saver={saver} />
-            <AddRow typeId={type.id} isOrg={isOrg} />
           </>
         )}
       </section>
@@ -111,7 +109,7 @@ function SaveChip({ status }: { status: Status }) {
   );
 }
 
-function SheetHeader({ type, status, onAddField }: { type: TypeSummary; status: Status; onAddField: () => void }) {
+function SheetHeader({ type, status, onAddField, canAddRow }: { type: TypeSummary; status: Status; onAddField: () => void; canAddRow: boolean }) {
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState<{ lists: number; pointedBy: string[] } | null>(null);
@@ -132,9 +130,13 @@ function SheetHeader({ type, status, onAddField }: { type: TypeSummary; status: 
         </>
       )}
       <SaveChip status={status} />
-      <Button variant="outline" className="ms-auto gap-1" onClick={onAddField}>
-        <Plus className="size-4" aria-hidden /> שדה
-      </Button>
+      {/* The two ways to grow the table, side by side and alike: a row (a record) and a column (a field). */}
+      <div className="ms-auto flex gap-2">
+        {canAddRow && <AddRow typeId={type.id} isOrg={type.id === "org"} />}
+        <Button variant="outline" className="gap-1" onClick={onAddField}>
+          <Plus className="size-4" aria-hidden /> שדה
+        </Button>
+      </div>
 
       <Dialog open={renaming} onClose={() => setRenaming(false)} title="שינוי שם הסוג">
         <form
@@ -163,7 +165,7 @@ function SheetHeader({ type, status, onAddField }: { type: TypeSummary; status: 
             {deleting.pointedBy.length > 0 ? (
               <p>אי אפשר למחוק: {deleting.pointedBy.join(", ")} משויכים לסוג הזה. קודם מוחקים שם את השדה המשייך.</p>
             ) : (
-              <p>{deleting.lists ? `${deleting.lists} רשימות ימחקו יחד איתו, עם כל הערכים שבהן.` : "אין בו רשימות."} אי אפשר לבטל את זה.</p>
+              <p>{deleting.lists ? `${deleting.lists} רשומות ימחקו יחד איתו, עם כל הערכים שבהן.` : "אין בו רשומות."} אי אפשר לבטל את זה.</p>
             )}
             {error && <p role="alert" className="text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
@@ -223,7 +225,7 @@ function DesktopTable({ sheet, failed, saver, onEditField }: { sheet: Sheet; fai
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={fields.length + 1} className="p-6 text-center text-muted-foreground">עוד אין רשימות. מוסיפים בכפתור למטה.</td>
+              <td colSpan={fields.length + 1} className="p-6 text-center text-muted-foreground">עוד אין רשומות. מוסיפים ב„+ רשומה” למעלה.</td>
             </tr>
           )}
           {rows.map((r) => {
@@ -253,7 +255,7 @@ function MobileCards({ sheet, failed, saver }: { sheet: Sheet; failed: Set<strin
   const { type, fields, rows } = sheet;
   return (
     <ul className="space-y-3 md:hidden">
-      {rows.length === 0 && <li className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">עוד אין רשימות.</li>}
+      {rows.length === 0 && <li className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">עוד אין רשומות.</li>}
       {rows.map((r) => {
         const title = listTitle(r.values, fields);
         return (
@@ -288,7 +290,7 @@ function DeleteRow({ typeId, row, title }: { typeId: string; row: SheetRow; titl
         <Trash2 className="size-4 text-muted-foreground" aria-hidden />
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} title={`מחיקת "${title}"`}>
-        <p className="text-sm">כל הערכים של הרשימה הזאת ימחקו. אי אפשר לבטל את זה.</p>
+        <p className="text-sm">כל הערכים של הרשומה הזאת ימחקו. אי אפשר לבטל את זה.</p>
         {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>ביטול</Button>
@@ -311,58 +313,57 @@ function DeleteRow({ typeId, row, title }: { typeId: string; row: SheetRow; titl
   );
 }
 
-/** A new list: empty for an ordinary type; an organization needs its name and number up front. */
+/** A new record: an empty row for an ordinary type; an organization needs its name and number up front. */
 function AddRow({ typeId, isOrg }: { typeId: string; isOrg: boolean }) {
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [reg, setReg] = useState("");
   const [error, setError] = useState("");
   const [busy, start] = useTransition();
-  if (!isOrg)
-    return (
-      <div className="space-y-1">
-        <Button
-          variant="outline"
-          className="gap-1"
-          disabled={busy}
-          onClick={() =>
-            start(async () => {
-              setError("");
-              const r = await addListAction(typeId);
-              if (!r.ok) setError(r.error);
-            })
-          }
-        >
-          <Plus className="size-4" aria-hidden /> רשימה חדשה
-        </Button>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      </div>
-    );
+  const close = () => {
+    setOpen(false);
+    setName("");
+    setReg("");
+    setError("");
+  };
+  const add = (org?: { name: string; registrationNumber: string }) =>
+    start(async () => {
+      setError("");
+      const r = await addListAction(typeId, org);
+      if (!r.ok) return setError(r.error);
+      close();
+    });
   return (
-    <form
-      className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        start(async () => {
-          setError("");
-          const r = await addListAction(typeId, { name, registrationNumber: reg });
-          if (!r.ok) return setError(r.error);
-          setName("");
-          setReg("");
-        });
-      }}
-    >
-      <div className="min-w-48 flex-1 space-y-1">
-        <Label htmlFor="new-org-name">שם העמותה או העסק</Label>
-        <Input id="new-org-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
-      </div>
-      <div className="w-40 space-y-1">
-        <Label htmlFor="new-org-reg">ח&quot;פ</Label>
-        <Input id="new-org-reg" value={reg} onChange={(e) => setReg(e.target.value)} required inputMode="numeric" dir="ltr" className="text-end" maxLength={12} />
-      </div>
-      <Button type="submit" className="gap-1" disabled={busy}>
-        <Plus className="size-4" aria-hidden /> הוספה
+    <>
+      <Button variant="outline" className="gap-1" disabled={busy} onClick={() => (isOrg ? setOpen(true) : add())}>
+        <Plus className="size-4" aria-hidden /> רשומה
       </Button>
-      {error && <p role="alert" className="basis-full text-sm text-destructive">{error}</p>}
-    </form>
+      {!isOrg && error && !open && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {isOrg && (
+        <Dialog open={open} onClose={close} title="עמותה או עסק חדש">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              add({ name, registrationNumber: reg });
+            }}
+          >
+            <div className="space-y-1">
+              <Label htmlFor="new-org-name">שם העמותה או העסק</Label>
+              <Input id="new-org-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoFocus />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="new-org-reg">ח&quot;פ</Label>
+              <Input id="new-org-reg" value={reg} onChange={(e) => setReg(e.target.value)} required inputMode="numeric" dir="ltr" className="text-end" maxLength={12} />
+            </div>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={close}>ביטול</Button>
+              <Button type="submit" disabled={busy}>הוספה</Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </>
   );
 }

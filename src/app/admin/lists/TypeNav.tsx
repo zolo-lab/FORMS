@@ -29,7 +29,7 @@ export function TypeNav({ types, current }: { types: TypeSummary[]; current: str
               )}
             >
               <span>{t.name}</span>
-              <span className="text-xs text-muted-foreground" aria-label={`${t.count} רשימות`}>{t.count}</span>
+              <span className="text-xs text-muted-foreground" aria-label={`${t.count} רשומות`}>{t.count}</span>
             </Link>
           </li>
         ))}

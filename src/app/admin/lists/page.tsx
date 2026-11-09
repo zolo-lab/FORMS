@@ -19,7 +19,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
       <PageHeader
         title="רשימות"
-        description="כל סוג רשימה הוא קבוצת שדות (ספק: שם, ח״פ, מייל…), וכל רשימה היא כרטיס אחד שממלאים בה ערכים. שדה שנוסף לסוג נוסף לכל הרשימות שלו. הטפסים יוכלו למשוך מכאן ערכים."
+        description="כל סוג רשימה הוא טבלה: השדות הם העמודות (שם, ח״פ, מייל…) וכל רשומה היא שורה. שדה שנוסף לסוג נוסף לכל הרשומות שלו. הטפסים יוכלו למשוך מכאן ערכים."
       />
       <ListsScreen types={types} sheet={sheet} />
     </main>
