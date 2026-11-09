@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addLinkedField, allowedOptions, bindField, bindingOf, linkReport, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
+import { addLinkedField, allowedOptions, bindField, bindingOf, fits, linkReport, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
 
@@ -60,6 +60,25 @@ describe("binding", () => {
     const { def: d2, id: id2 } = addLinkedField(def, listFields[2]!, 0);
     expect(id2).not.toBe("tyk");
     expect(d2.pages[0]!.fields.find((x) => x.id === id2)!.type).toBe("number");
+  });
+});
+
+describe("fits", () => {
+  it("offers only fields that hold one plain value – never a stamp, a grid or a signature", () => {
+    for (const type of ["stamp", "grid", "signature", "repeating_table", "consent", "rating"] as const) expect(fits({ type }, listFields[0]!)).toBe(false);
+    expect(fits({ type: "short_text" }, listFields[0]!)).toBe(true);
+    expect(fits({ type: "dropdown" }, listFields[0]!)).toBe(false);
+    expect(fits({ type: "dropdown" }, listFields[4]!)).toBe(true);
+  });
+});
+
+describe("unbindField", () => {
+  it("never renames: org_name stays linked by its id; others keep their id", () => {
+    const def = form([{ id: "org_name", type: "short_text", label: "שם" }, { id: "x", type: "short_text", label: "y", prefill: "org.fields.tyk" }]);
+    expect(unbindField(def, "org_name")).toBe(def);
+    const f = unbindField(def, "x").pages[0]!.fields[1]!;
+    expect(f.id).toBe("x");
+    expect(f.prefill).toBeUndefined();
   });
 });
 

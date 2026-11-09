@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
-import { addLinkedField, bindField, fieldTypeFor, fits, linkReport, unbindField, type LinkRow, type OrgListField } from "@/lib/forms/linked";
+import { addLinkedField, bindField, fieldTypeFor, fits, linkedById, linkReport, unbindField, type LinkRow, type OrgListField } from "@/lib/forms/linked";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import { KIND_LABELS, isListFieldKind } from "@/lib/lists/kinds";
 
@@ -87,9 +87,13 @@ export function LinkedFieldsDialog({
                       <Check className="size-4 text-success" aria-hidden />
                       <span className="truncate">{byId.get(id)?.label || id}</span>
                       <code dir="ltr" className="text-xs text-muted-foreground">{id}</code>
-                      <button type="button" aria-label={`ביטול הקישור של ${byId.get(id)?.label || id}`} className="flex size-8 items-center justify-center rounded-full hover:bg-muted" onClick={() => onChange(unbindField(def, id))}>
-                        <X className="size-4" aria-hidden />
-                      </button>
+                      {linkedById(id) ? (
+                        <span className="pe-1.5 text-xs text-muted-foreground" title="השדה מתמלא מהעמותה לפי המזהה שלו">לפי המזהה</span>
+                      ) : (
+                        <button type="button" aria-label={`ביטול הקישור של ${byId.get(id)?.label || id}`} className="flex size-8 items-center justify-center rounded-full hover:bg-muted" onClick={() => onChange(unbindField(def, id))}>
+                          <X className="size-4" aria-hidden />
+                        </button>
+                      )}
                     </span>
                   ))}
 

@@ -10,9 +10,9 @@
  */
 import { FIELD_TYPE_META, type FieldType } from "./field-types";
 import type { Lookups } from "./lookups";
-import { ORG_FIELD_IDS, ORG_FIELD_PREFIX, orgFieldKey, prefillOf, takesOrgField } from "./prefill";
+import { ORG_FIELD_IDS, ORG_FIELD_PREFIX, orgFieldKey, prefillOf } from "./prefill";
 import { allFields, type FieldOption, type FormDefinition, type FormField } from "./schema";
-import { renameFieldId, uniqueId, updateField } from "./builder";
+import { uniqueId, updateField } from "./builder";
 import { splitPicks } from "@/lib/lists/kinds";
 
 /** A field of the organizations' list, as the builder and the fill need it. */
@@ -43,12 +43,18 @@ export function bindingOf(f: Pick<FormField, "id" | "prefill" | "optionsSource">
 
 const isChoice = (type: FieldType) => FIELD_TYPE_META[type].hasOptions;
 
+/** Form field types whose answer is one plain value, so an organization's value (a line of text) can stand in it. */
+const PLAIN_TYPES = new Set<FieldType>(["short_text", "long_text", "number", "currency", "percent", "email", "phone", "id_number", "date", "hidden", "radio", "dropdown", "checkboxes"]);
+
 /** May this form field show this list field? A choice list feeds any one-line field; a text one, no choice field. */
 export function fits(field: Pick<FormField, "type">, lf: OrgListField): boolean {
-  if (!takesOrgField(field.type) || !FIELD_TYPE_META[field.type].hasAnswer) return false;
+  if (!PLAIN_TYPES.has(field.type)) return false;
   if (isChoice(field.type)) return lf.kind === "select";
   return true;
 }
+
+/** org_name / org_number are linked by their id alone: undoing the link would mean renaming them, so it is not offered. */
+export const linkedById = (fieldId: string) => !!ORG_FIELD_IDS[fieldId];
 
 const asOptions = (values: string[]): FieldOption[] => values.map((v) => ({ value: v, label: v }));
 
@@ -69,17 +75,17 @@ export function bindField(def: FormDefinition, fieldId: string, lf: OrgListField
   });
 }
 
-/** Undo a link. A choice keeps the options it had, as its own list. */
+/**
+ * Undo a link. A choice keeps the options it had, as its own list. The field keeps its id (answers, PDF boxes and
+ * steps are keyed by it); org_name / org_number, linked by that id, stay linked (see `linkedById`).
+ */
 export function unbindField(def: FormDefinition, fieldId: string): FormDefinition {
   const field = allFields(def).find((f) => f.id === fieldId);
-  if (!field) return def;
-  let next = updateField(def, fieldId, {
+  if (!field || linkedById(fieldId)) return def;
+  return updateField(def, fieldId, {
     prefill: field.prefill?.startsWith("org.") ? undefined : field.prefill,
     optionsSource: orgFieldKey(field.optionsSource) ? undefined : field.optionsSource,
   });
-  // org_name / org_number are linked by their id alone: renamed, they become ordinary fields.
-  if (ORG_FIELD_IDS[fieldId]) next = renameFieldId(next, fieldId, uniqueId(`${fieldId}_text`, new Set(allFields(next).map((f) => f.id)))).def;
-  return next;
 }
 
 /** The form field type a list field becomes when it is added to a form. */
@@ -93,7 +99,9 @@ export function fieldTypeFor(lf: OrgListField): FieldType {
 export function addLinkedField(def: FormDefinition, lf: OrgListField, page: number): { def: FormDefinition; id: string } {
   const next = structuredClone(def);
   const type = fieldTypeFor(lf);
-  const id = uniqueId(lf.key.replace(/^__/, "org_").replace(/-/g, "_"), new Set(allFields(next).map((f) => f.id)));
+  // Not org_name / org_number: those are linked by id and could never be unlinked.
+  const base = lf.key === ORG_NAME_KEY ? "org_title" : lf.key === ORG_REG_KEY ? "org_regnum" : lf.key.replace(/-/g, "_");
+  const id = uniqueId(base, new Set(allFields(next).map((f) => f.id)));
   const field: FormField = { id, type, label: lf.label };
   if (FIELD_TYPE_META[type].defaultSettings) field.settings = structuredClone(FIELD_TYPE_META[type].defaultSettings);
   const target = next.pages[Math.min(Math.max(0, page), next.pages.length - 1)]!;
