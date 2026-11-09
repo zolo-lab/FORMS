@@ -146,6 +146,16 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
 }
 
+/** The first filled text value of a record, or nothing. */
+function textTitle(values: Record<string, string | string[]>, fields: { key: string; kind: string }[]): string | undefined {
+  for (const f of fields) {
+    if (f.kind === "ref" || f.kind === "select" || f.kind === "yes_no") continue;
+    const v = values[f.key];
+    if (typeof v === "string" && v) return v;
+  }
+  return undefined;
+}
+
 /**
  * Lookups for the list types a set of forms reads from: under `list.<typeId>` the records (value = id, label =
  * title, `data` = the values of the fields the forms link to – only those, so a form never carries more of a record
@@ -171,7 +181,7 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
     const titles = new Map<string, Map<string, string>>();
     for (const f of fields) if (f.kind === "ref" && f.parentTypeId && used.has(f.key)) titles.set(f.key, new Map((await titlesOf(f.parentTypeId)).map((t) => [t.id, t.title])));
     const rows = await db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt));
-    out[pickerKey(typeId)] = rows.map((r): RecordOption => {
+    out[pickerKey(typeId)] = rows.map((r, i): RecordOption => {
       const data: Record<string, string | string[]> = {};
       for (const f of fields) {
         if (!used.has(f.key)) continue;
@@ -179,7 +189,8 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
         if (v === undefined || v === "") continue;
         data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
       }
-      return { value: r.id, label: listTitle(r.values, fields), data };
+      // The title shown to the filler comes from the text fields only – never from a choice the form did not ask for.
+      return { value: r.id, label: textTitle(r.values, fields) ?? `רשומה ${i + 1}`, data };
     });
     for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));
   }
