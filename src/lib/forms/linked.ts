@@ -318,6 +318,7 @@ export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lo
   const fields = allFields(def);
   const pickers = allFields(full).filter((f) => pickerOf(f));
   const inView = new Set(fields.map((f) => f.id));
+  const withPicker = new Set(pickers.map((p) => pickerOf(p)!));
   for (const picker of pickers) {
     const typeId = pickerOf(picker)!;
     const records = lookups[pickerKey(typeId)] as RecordOption[] | undefined;
@@ -327,10 +328,18 @@ export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lo
     if (inView.has(picker.id)) set(picker.id, chosen);
     const data = records.find((r) => r.value === chosen)?.data;
     for (const f of fields) {
+      if (!isListFilled(f)) continue;
       const p = parseKey(prefillOf(f));
       if (!p || !("key" in p) || p.source !== listSource(typeId)) continue;
       set(f.id, data ? valueForField(f, data[p.key]) : undefined);
     }
+  }
+  // A field linked to a list the form has no picker for can never be filled: whatever was sent for it is dropped,
+  // since the field is locked and would otherwise keep an unchecked value.
+  for (const f of fields) {
+    if (!isListFilled(f)) continue;
+    const p = parseKey(prefillOf(f));
+    if (p && "key" in p && !withPicker.has(sourceTypeId(p.source)!)) set(f.id, undefined);
   }
   return out ?? answers;
 }
@@ -356,7 +365,9 @@ export function narrowListChoices(def: FormDefinition, answers: Answers, lookups
     const record = chosen.get(typeId);
     const mine = record?.data?.[p.key];
     const allowed = new Set(Array.isArray(mine) ? mine : mine ? [mine] : []);
-    const rest: FormField = { ...f, ...nested, options: allowed.size ? all.filter((o) => allowed.has(o.value)) : all };
+    // Picks that are no longer among the options count for nothing: every option, as for an organization.
+    const narrowed = all.filter((o) => allowed.has(o.value));
+    const rest: FormField = { ...f, ...nested, options: narrowed.length ? narrowed : all };
     delete rest.optionsSource;
     return rest;
   };
@@ -364,7 +375,8 @@ export function narrowListChoices(def: FormDefinition, answers: Answers, lookups
 }
 
 /** Whether a form field is filled from a list picked in the form (and so locked, its value the record's). */
-export const isListFilled = (f: Pick<FormField, "id" | "prefill">) => {
+export const isListFilled = (f: Pick<FormField, "id" | "prefill" | "optionsSource">) => {
+  if (pickerOf(f)) return false;
   const p = parseKey(prefillOf(f));
   return !!p && "key" in p && p.source !== "org";
 };
@@ -388,4 +400,23 @@ export function linkedTypeIds(defs: FormDefinition[]): string[] {
     }
   }
   return [...ids];
+}
+
+/**
+ * The lookups as one step's filler may see them: for a list whose picker is not in this step (the record was picked
+ * earlier), only the picked record goes to the browser – not every record's values.
+ */
+export function lookupsForView(lookups: Lookups, view: FormDefinition, full: FormDefinition, answers: Answers): Lookups {
+  const inView = new Set(allFields(view).map((f) => f.id));
+  let out: Lookups | null = null;
+  for (const picker of allFields(full)) {
+    const typeId = pickerOf(picker);
+    if (!typeId || inView.has(picker.id)) continue;
+    const key = pickerKey(typeId);
+    const records = lookups[key];
+    if (!records) continue;
+    out ??= { ...lookups };
+    out[key] = records.filter((r) => r.value === answers[picker.id]);
+  }
+  return out ?? lookups;
 }

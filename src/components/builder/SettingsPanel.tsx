@@ -1,5 +1,5 @@
 "use client";
-import { keyFor, listSource, pickerKey, pickerOf } from "@/lib/forms/linked";
+import { fits, keyFor, listSource, pickerKey, pickerOf } from "@/lib/forms/linked";
 import { StepChecks, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { prefillGroups, prefillKeys } from "@/lib/forms/prefill";
@@ -470,11 +470,15 @@ export function FieldSettings({
                   {g.options.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
                 </optgroup>
               ))}
-              {listTypes.map((t) => (
-                <optgroup key={t.id} label={`מתוך ${t.name} (לפי הרשומה שנבחרה בטופס)`}>
-                  {t.fields.filter((f) => f.kind !== "select").map((f) => <option key={f.key} value={keyFor(listSource(t.id), f.key)}>{f.label}</option>)}
-                </optgroup>
-              ))}
+              {!pickerOf(field) &&
+                listTypes
+                  .map((t) => ({ ...t, fields: t.fields.filter((f) => f.kind !== "select" && fits(field, { ...f, multi: false })) }))
+                  .filter((t) => t.fields.length > 0)
+                  .map((t) => (
+                    <optgroup key={t.id} label={`מתוך ${t.name} (לפי הרשומה שנבחרה בטופס)`}>
+                      {t.fields.map((f) => <option key={f.key} value={keyFor(listSource(t.id), f.key)}>{f.label}</option>)}
+                    </optgroup>
+                  ))}
               {field.prefill && !keys.some((k) => k.key === field.prefill) && !listTypes.some((t) => t.fields.some((f) => keyFor(listSource(t.id), f.key) === field.prefill)) && <option value={field.prefill}>{field.prefill}</option>}
             </Select>
           </Row>

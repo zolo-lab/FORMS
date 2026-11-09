@@ -257,3 +257,43 @@ describe("lists picked in another step, and what a locked field must hold", asyn
     expect(bindField(full, pick, lf, listSource(T))).toBe(full);
   });
 });
+
+describe("what reaches the browser, and fields with no picker", async () => {
+  const { withListPicks, lookupsForView, narrowListChoices, listSource, pickerKey, keyFor, addPicker, lockListFields } = await import("@/lib/forms/linked");
+  const T = "33333333-3333-4333-8333-333333333333";
+  const lookups = {
+    [pickerKey(T)]: [
+      { value: "r1", label: "א", data: { pay: "1", items: ["ישן"] } },
+      { value: "r2", label: "ב", data: { pay: "2" } },
+    ],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }],
+  };
+  const { def: full, id: pick } = addPicker(form([
+    { id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "dropdown", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]), T, "ספקים", 0);
+  const view = form(full.pages[0]!.fields.filter((f) => f.id !== pick));
+
+  it("a step without the picker gets only the picked record", () => {
+    const l = lookupsForView(lookups, view, full, { [pick]: "r2" });
+    expect(l[pickerKey(T)]!.map((r) => r.value)).toEqual(["r2"]);
+    expect(lookupsForView(lookups, view, full, {})[pickerKey(T)]).toEqual([]);
+    expect(lookupsForView(lookups, full, full, {})).toBe(lookups);
+  });
+
+  it("a linked field whose list has no picker in the form is emptied, not kept from the client", () => {
+    const noPicker = lockListFields(form([{ id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") }]));
+    expect(withListPicks(noPicker, { pay: 99 }, lookups).pay).toBeUndefined();
+    expect(validateAnswers(noPicker, { pay: 99 }, { lookups }).cleaned.pay).toBeUndefined();
+  });
+
+  it("picks no longer among the options fall back to every option", () => {
+    expect(allOf(narrowListChoices(full, { [pick]: "r1" }, lookups), "items").options).toHaveLength(1);
+  });
+
+  it("a picker is never a target of a fill, even with a list prefill on it", () => {
+    const odd = { ...full, pages: [{ ...full.pages[0]!, fields: full.pages[0]!.fields.map((f) => (f.id === pick ? { ...f, prefill: keyFor(listSource(T), "pay") } : f)) }] };
+    expect(withListPicks(odd, { [pick]: "r2" }, lookups)[pick]).toBe("r2");
+    expect(allOf(lockListFields(odd), pick).readOnly).toBeUndefined();
+  });
+});
