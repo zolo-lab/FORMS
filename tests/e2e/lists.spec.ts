@@ -38,6 +38,17 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await page.getByLabel("אזור – סניף בדיקה").locator(visible).selectOption("דרום");
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
 
+  // The field's settings: which record gets which value, in one grid.
+  await page.getByRole("button", { name: "אזור", exact: true }).locator(visible).click();
+  const settings = page.getByRole("dialog", { name: 'השדה "אזור"' });
+  await expect(settings.getByLabel("אזור: דרום – סניף בדיקה")).toBeChecked();
+  await settings.getByLabel("אזור: צפון – סניף בדיקה").check();
+  await settings.getByRole("button", { name: "שמירה" }).click();
+  await expect(settings).toBeHidden();
+  await expect(page.getByLabel("אזור – סניף בדיקה").locator(visible)).toHaveValue("צפון");
+  await page.getByLabel("אזור – סניף בדיקה").locator(visible).selectOption("דרום");
+  await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
+
   // It stays after a reload.
   await page.reload();
   await expect(page.getByLabel("אזור – סניף בדיקה").locator(visible)).toHaveValue("דרום");

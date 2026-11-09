@@ -32,7 +32,9 @@ function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const pending = useRef(0);
   const failedRef = useRef<Set<string>>(new Set());
-  const [editing, setEditing] = useState<SheetField | null>(null);
+  // The field whose settings are open, by key: a field just added opens as soon as the refreshed sheet has it.
+  const [editing, setEditing] = useState<{ key: string; assign: boolean } | null>(null);
+  const editingField = editing && fields.find((f) => f.key === editing.key);
   const [adding, setAdding] = useState(false);
 
   /** One save path for every cell: the chip says "saved" only when nothing is in flight and no cell is left failed. */
@@ -75,13 +77,23 @@ function Screen({ types, sheet }: { types: TypeSummary[]; sheet: Sheet }) {
           </div>
         ) : (
           <>
-            <DesktopTable sheet={sheet} failed={failed} saver={saver} onEditField={setEditing} />
+            <DesktopTable sheet={sheet} failed={failed} saver={saver} onEditField={(f) => setEditing({ key: f.key, assign: false })} />
+            <MobileFieldList fields={fields} onEditField={(f) => setEditing({ key: f.key, assign: false })} />
             <MobileCards sheet={sheet} failed={failed} saver={saver} />
           </>
         )}
       </section>
-      <AddFieldDialog open={adding} onClose={() => setAdding(false)} typeId={type.id} types={types} />
-      {editing && <FieldDialog field={editing} typeId={type.id} onClose={() => setEditing(null)} />}
+      <AddFieldDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        typeId={type.id}
+        types={types}
+        // A choice field goes straight on to "which records get which values".
+        onCreated={(key, kind) => kind === "select" && sheet.rows.length > 0 && setEditing({ key, assign: true })}
+      />
+      {editingField && (
+        <FieldDialog key={editingField.key} field={editingField} typeId={type.id} rows={sheet.rows} fields={fields} assignFirst={editing.assign} onClose={() => setEditing(null)} />
+      )}
     </div>
   );
 }
@@ -247,6 +259,24 @@ function DesktopTable({ sheet, failed, saver, onEditField }: { sheet: Sheet; fai
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** On phones there is no column header to click: the fields' settings are a row of chips above the cards. */
+function MobileFieldList({ fields, onEditField }: { fields: SheetField[]; onEditField: (f: SheetField) => void }) {
+  return (
+    <div className="md:hidden">
+      <p className="mb-1 text-xs text-muted-foreground">הגדרות שדה:</p>
+      <ul className="flex gap-2 overflow-x-auto pb-1">
+        {fields.map((f) => (
+          <li key={f.id} className="shrink-0">
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => onEditField(f)}>
+              <Settings2 className="size-4" aria-hidden /> {f.label}
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

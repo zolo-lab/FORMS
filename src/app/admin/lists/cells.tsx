@@ -133,16 +133,24 @@ function TextCell({ id, field, value, label, failed, className, onCommit }: { id
 
 /** Several choices: a button showing what is picked; a panel of checkboxes, each tick saved at once. */
 function MultiCell({ id, options, value, label, className, onChange }: { id?: string; options: string[]; value: string[]; label: string; className: string; onChange: (v: string[]) => void }) {
-  const [open, setOpen] = useState(false);
+  // Where the panel opens: fixed to the screen under the button, so the table's scroll box cannot clip it.
+  const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const [picked, setPicked] = useState(value);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    const close = (e: Event) => {
+      // A scroll or a click inside the panel keeps it open; anything else closes it.
+      if (e.type === "resize" || !box.current?.contains(e.target as Node)) setOpen(null);
     };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
   }, [open]);
   const toggle = (o: string) => {
     const next = picked.includes(o) ? picked.filter((p) => p !== o) : options.filter((x) => x === o || picked.includes(x));
@@ -150,13 +158,21 @@ function MultiCell({ id, options, value, label, className, onChange }: { id?: st
     onChange(next);
   };
   return (
-    <div ref={box} className="relative">
-      <button id={id} type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen((v) => !v)} className={cn(className, "flex items-center justify-between gap-2 text-start text-sm")}>
+    <div ref={box}>
+      <button
+        id={id}
+        type="button"
+        aria-label={label}
+        aria-expanded={!!open}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setOpen((v) => (v ? null : { top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }));
+        }} className={cn(className, "flex items-center justify-between gap-2 text-start text-sm")}>
         <span className="truncate">{picked.length ? picked.join(", ") : "—"}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       </button>
       {open && (
-        <div role="group" aria-label={label} className="absolute start-0 top-full z-20 mt-1 max-h-64 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+        <div role="group" aria-label={label} style={{ top: open.top, right: open.right }} className="fixed z-50 max-h-64 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
           {options.map((o) => (
             <label key={o} className="flex min-h-10 cursor-pointer items-center gap-2 rounded px-2 hover:bg-muted">
               <input type="checkbox" checked={picked.includes(o)} onChange={() => toggle(o)} className="size-4" />
