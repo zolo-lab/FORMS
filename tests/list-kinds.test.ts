@@ -63,3 +63,11 @@ describe("splitPicks", () => {
     expect(splitPicks("ישן", ["א"])).toEqual(["ישן"]);
   });
 });
+
+describe("listTitle without a text value", () => {
+  it("falls back to the first choice, then to ללא שם", () => {
+    const fields = [{ key: "n", kind: "short_text" as const }, { key: "c", kind: "select" as const }];
+    expect(listTitle({ c: ["א", "ב"] }, fields)).toBe("א, ב");
+    expect(listTitle({}, fields)).toBe("ללא שם");
+  });
+});

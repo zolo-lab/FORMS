@@ -106,6 +106,12 @@ export function listTitle(values: Record<string, CellValue>, fields: { key: stri
     const v = values[f.key];
     if (typeof v === "string" && v) return v;
   }
+  // No text field filled: the first choice tells the records apart at least ("עגבניה, מלפפון").
+  for (const f of fields) {
+    const v = values[f.key];
+    if (f.kind === "select" && Array.isArray(v) && v.length) return v.join(", ");
+    if (f.kind === "select" && typeof v === "string" && v) return v;
+  }
   return "ללא שם";
 }
 
