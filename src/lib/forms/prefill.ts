@@ -2,6 +2,7 @@
 import type { Answers } from "./conditions";
 import { renameFieldId, updateField } from "./builder";
 import { allFields, type FormDefinition, type FormField } from "./schema";
+import { validateAnswers } from "./validate";
 
 export interface PrefillSubject {
   name: string;
@@ -140,10 +141,18 @@ export function withOrgFields(def: FormDefinition, org: PrefillSubject["org"], a
     const key = prefillOf(f);
     if (!key?.startsWith("org.")) continue;
     const v = valueFor(key, f.type, { name: "", org });
-    if (v === undefined) delete out[f.id];
+    // The field is locked and skips its own check, so a value it would refuse (free text in an e-mail field, an
+    // ID number that fails its check digit) is left out rather than stored as if it were valid.
+    if (v === undefined || !passes(f, v)) delete out[f.id];
     else out[f.id] = v as Answers[string];
   }
   return out;
+}
+
+/** Whether a value passes the field's own check, as if typed into it (not required, not locked). */
+function passes(f: FormField, v: unknown): boolean {
+  const alone: FormDefinition = { schemaVersion: 1, title: "", pages: [{ id: "p", title: "", fields: [{ ...f, required: false, readOnly: false, visibleIf: undefined, disabledIf: undefined, requiredIf: undefined, fields: undefined }] }] };
+  return validateAnswers(alone, { [f.id]: v as Answers[string] }).ok;
 }
 
 /** The organization's fields shown read-only (the system fills them; see `withOrgFields`). */

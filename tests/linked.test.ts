@@ -145,3 +145,17 @@ describe("orgChoiceLookups", () => {
     expect(l["org.fields.zone@o2"]!.map((o) => o.value)).toEqual(["צפון", "דרום"]);
   });
 });
+
+describe("withOrgFields", () => {
+  it("leaves out an organization value the locked field would refuse", async () => {
+    const { withOrgFields } = await import("@/lib/forms/prefill");
+    const def = form([
+      { id: "m", type: "email", label: "מייל", prefill: "org.fields.mail" },
+      { id: "t", type: "short_text", label: "תיק", prefill: "org.fields.tyk" },
+    ]);
+    const out = withOrgFields(def, { name: "x", fields: { mail: "a@b.c", tyk: "123" } }, { m: "typed@x.co" });
+    expect(out.m).toBeUndefined();
+    expect(out.t).toBe("123");
+    expect(withOrgFields(def, { name: "x", fields: { mail: "office@org.co.il" } }, {}).m).toBe("office@org.co.il");
+  });
+});
