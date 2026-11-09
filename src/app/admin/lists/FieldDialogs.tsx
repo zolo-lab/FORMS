@@ -111,7 +111,7 @@ export function FieldDialog({ field, typeId, onClose }: { field: SheetField; typ
       {confirm !== null ? (
         <div className="space-y-3 text-sm">
           <p>
-            {confirm ? `${confirm} רשומות מילאו את השדה הזה, והערכים שלהן ימחקו.` : "אף רשומה לא מילאה את השדה הזה."} טפסים שמושכים ממנו יפסיקו להתמלא.
+            {confirm === 1 ? "רשומה אחת מילאה את השדה הזה, והערך שלה יימחק." : confirm ? `${confirm} רשומות מילאו את השדה הזה, והערכים שלהן ימחקו.` : "אף רשומה לא מילאה את השדה הזה."} טפסים שמושכים ממנו יפסיקו להתמלא.
             אי אפשר לבטל את זה.
           </p>
           {error && <p role="alert" className="text-destructive">{error}</p>}

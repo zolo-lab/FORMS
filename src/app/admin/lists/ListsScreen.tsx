@@ -165,7 +165,7 @@ function SheetHeader({ type, status, onAddField, canAddRow }: { type: TypeSummar
             {deleting.pointedBy.length > 0 ? (
               <p>אי אפשר למחוק: {deleting.pointedBy.join(", ")} משויכים לסוג הזה. קודם מוחקים שם את השדה המשייך.</p>
             ) : (
-              <p>{deleting.lists ? `${deleting.lists} רשומות ימחקו יחד איתו, עם כל הערכים שבהן.` : "אין בו רשומות."} אי אפשר לבטל את זה.</p>
+              <p>{deleting.lists === 1 ? "רשומה אחת תימחק יחד איתו, עם כל הערכים שבה." : deleting.lists ? `${deleting.lists} רשומות ימחקו יחד איתו, עם כל הערכים שבהן.` : "אין בו רשומות."} אי אפשר לבטל את זה.</p>
             )}
             {error && <p role="alert" className="text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">

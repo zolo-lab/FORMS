@@ -44,7 +44,7 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
 
   await page.getByRole("button", { name: "מחיקת הסוג" }).click();
   const del = page.getByRole("dialog", { name: `מחיקת "${type}"` });
-  await expect(del.getByText("1 רשומות ימחקו")).toBeVisible();
+  await expect(del.getByText("רשומה אחת תימחק")).toBeVisible();
   await del.getByRole("button", { name: "מחיקה" }).click();
   await expect(page.getByRole("heading", { name: "עמותות ועסקים", level: 2 })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(type) })).toHaveCount(0);
