@@ -7,7 +7,10 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
 import { isOrgFieldKind } from "@/lib/fields/types";
-import type { OrgListField } from "@/lib/forms/linked";
+import { keyFor, linkedTypeIds, listSource, parseKey, pickerKey, type LinkedListField, type OrgListField, type RecordOption } from "@/lib/forms/linked";
+import type { Lookups } from "@/lib/forms/lookups";
+import { prefillOf } from "@/lib/forms/prefill";
+import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
@@ -141,6 +144,55 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
     db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
   ]);
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
+}
+
+/**
+ * Lookups for the list types a set of forms reads from: under `list.<typeId>` the records (value = id, label =
+ * title, `data` = the values of the fields the forms link to – only those, so a form never carries more of a record
+ * than it shows); under `list.<typeId>.<key>` every option of a choice field. A "belongs to" value is sent as the
+ * parent record's title. Merged over the lookups the caller already has.
+ */
+export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {}): Promise<Lookups> {
+  const out: Lookups = { ...into };
+  for (const typeId of linkedTypeIds(defs)) {
+    if (!/^[0-9a-f-]{36}$/i.test(typeId)) continue;
+    const source = listSource(typeId);
+    const fields = await fieldsOf(typeId);
+    if (!fields.length) continue;
+    const used = new Set<string>();
+    for (const d of defs) for (const f of allFields(d)) {
+      for (const k of [f.optionsSource, prefillOf(f)]) {
+        const p = parseKey(k);
+        if (p && "key" in p && p.source === source) used.add(p.key);
+      }
+    }
+    const titles = new Map<string, Map<string, string>>();
+    for (const f of fields) if (f.kind === "ref" && f.parentTypeId && used.has(f.key)) titles.set(f.key, new Map((await titlesOf(f.parentTypeId)).map((t) => [t.id, t.title])));
+    const rows = await db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt));
+    out[pickerKey(typeId)] = rows.map((r): RecordOption => {
+      const data: Record<string, string | string[]> = {};
+      for (const f of fields) {
+        if (!used.has(f.key)) continue;
+        const v = r.values[f.key];
+        if (v === undefined || v === "") continue;
+        data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
+      }
+      return { value: r.id, label: listTitle(r.values, fields), data };
+    });
+    for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));
+  }
+  return out;
+}
+
+/** The list types forms can link to, with their fields (the organizations are `orgListFields`). */
+export async function linkableTypes(): Promise<{ id: string; name: string; fields: LinkedListField[] }[]> {
+  const types = await db.select().from(listTypes).orderBy(asc(listTypes.order), asc(listTypes.name));
+  const out: { id: string; name: string; fields: LinkedListField[] }[] = [];
+  for (const t of types) {
+    const fields = (await fieldsOf(t.id)).map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi }));
+    out.push({ id: t.id, name: t.name, fields });
+  }
+  return out;
 }
 
 /** The organizations' list as forms link to it (name, number and the admin-defined fields). */

@@ -13,7 +13,8 @@ import Link from "next/link";
 import { ChevronDown, Download, ExternalLink, History, Link2, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
 import { LinkedFieldsDialog } from "./LinkedFieldsDialog";
-import type { OrgListField } from "@/lib/forms/linked";
+import type { LinkedListField } from "@/lib/forms/linked";
+import type { LinkableType } from "./LinkedFieldsDialog";
 import { FormRenderer } from "@/components/forms/FormRenderer";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
@@ -65,7 +66,9 @@ export interface FormEditorProps {
   /** The organizations' own fields, offered in "מילוי אוטומטי" (filled from the request's organization). */
   orgFields?: { key: string; label: string }[];
   /** The organizations' list (name, number and their own fields): the "שדות מקושרים" dialog links form fields to it. */
-  orgList?: OrgListField[];
+  orgList?: LinkedListField[];
+  /** The other list types the form can link to (the filler picks the record in the form). */
+  listTypes?: LinkableType[];
   /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
   flow?: {
     packageId: string;
@@ -94,7 +97,7 @@ export interface FormEditorProps {
 const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], flow, linkOrgs = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], listTypes = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -441,7 +444,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               <a href={`/preview/form/${templateId}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm", className: "justify-start" })}>
                 <ExternalLink className="size-4" />צפייה בטופס (בחלון חדש)
               </a>
-              <Button variant="ghost" size="sm" className="justify-start" onClick={() => setLinkedOpen(true)} title="שדות שמתמלאים מהעמותה של הבקשה, ושדות בחירה שמציגים את האפשרויות שלה">
+              <Button variant="ghost" size="sm" className="justify-start" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setLinkedOpen(true); }} title="שדות שמתמלאים מרשימה – העמותה של הבקשה או רשומה שהממלא בוחר – ושדות בחירה שמציגים את האפשרויות שלה">
                 <Link2 className="size-4" />שדות מקושרים
               </Button>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
@@ -474,6 +477,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
         onClose={() => setLinkedOpen(false)}
         def={def}
         listFields={orgList}
+        types={listTypes}
         page={selection?.kind === "page" ? selection.index : selection?.kind === "field" ? (findLocation(def, selection.id)?.page ?? 0) : 0}
         onChange={(d) => commit(d)}
       />
@@ -622,6 +626,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   groups={groups}
                   orgFields={orgFields}
                   orgChoices={orgList.filter((f) => f.kind === "select")}
+                  listTypes={listTypes}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onDefChange={(d) => commit(d)}

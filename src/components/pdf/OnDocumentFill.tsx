@@ -18,6 +18,7 @@ import { pdfBoxToScreen } from "@/lib/pdf/coords";
 import { evaluateCondition } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
 import { withCopies } from "@/lib/forms/copy";
+import { withListPicks } from "@/lib/forms/linked";
 import { withDefaults } from "@/lib/forms/defaults";
 import { offDocumentFields, cellRef, inputAttrs, isLockedOnDocument, readCheck, readText, setStampValue, simpleStamps, stampField, stampValue, writeCheck, writeText } from "@/lib/pdf/on-document";
 import { cn } from "@/lib/utils";
@@ -227,8 +228,8 @@ function PdfPages({ pdf, ...rest }: { pdf: OnDocPdf } & Omit<Props, "pdfs" | "ro
 export function OnDocumentFill({ pdfs, definition, answers: rawAnswers, onChange, role, errors, onSubmit, onErrors, filled, actions, lookups, onUpload }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   // Default values show on the document; setField keeps them in the answers it passes up.
-  const answers = useMemo(() => withCopies(definition, withDefaults(definition, rawAnswers, today)), [definition, rawAnswers, today]);
-  const result = useMemo(() => validateAnswers(definition, answers, { role }), [definition, answers, role]);
+  const answers = useMemo(() => withCopies(definition, withListPicks(definition, withDefaults(definition, rawAnswers, today), lookups ?? {})), [definition, rawAnswers, today, lookups]);
+  const result = useMemo(() => validateAnswers(definition, answers, { role, lookups }), [definition, answers, role, lookups]);
   const remaining = Object.keys(result.errors).length;
   // The first thing still in the way, by its label: a value that is wrong says why, not just "missing".
   const first = useMemo(() => {

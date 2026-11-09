@@ -6,6 +6,7 @@ import { answersForClient, pipeDefinition } from "@/lib/forms/client-answers";
 import { withCopies } from "@/lib/forms/copy";
 import { withOrgFields, withPrefill } from "@/lib/forms/prefill";
 import { lookupsFor } from "@/server/people-store";
+import { listLookupsFor } from "@/server/lists-store";
 import { loadByToken, markOpened, otpPassed } from "@/server/signing";
 import { OtpGate } from "./otp-gate";
 import { getPackage } from "@/server/packages-store";
@@ -91,7 +92,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           formOnly={await stepIsFormOnly(ctx.request.packageTemplateId, ctx.step, ctx.request.organizationId, ctx.request.projectId)}
           returnTargets={ctx.returnTargets}
           pdfDocs={ctx.pdfDocs.map((d) => ({ title: d.title, url: `/api/s/${token}/pdf/${d.fileId}`, mapping: d.mapping }))}
-          lookups={await lookupsFor([ctx.definition])}
+          lookups={await listLookupsFor([ctx.definition], await lookupsFor([ctx.definition]))}
         />
       </OrgTheme>
     </main>

@@ -1,7 +1,7 @@
 /** Server side of the public signing page /s/[token]: resolve the link, autosave, submit. */
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
-import { withOrgOptions } from "@/lib/forms/linked";
-import { orgListFields } from "@/server/lists-store";
+import { lockListFields, withOrgOptions } from "@/lib/forms/linked";
+import { listLookupsFor, orgListFields } from "@/server/lists-store";
 import { duplicateErrors } from "./unique";
 import { kickDelivery } from "./notifications";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
@@ -85,7 +85,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .map((s) => ({ id: s.id, label: runStepLabel(s) }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
-  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: withOrgOptions(lockOrgFields(view.definition), org?.fieldValues, await orgListFields()), fullDefinition: merged, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
+  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: lockListFields(withOrgOptions(lockOrgFields(view.definition), org?.fieldValues, await orgListFields())), fullDefinition: merged, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
 }
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
@@ -149,7 +149,7 @@ export async function submit(token: string, input: Answers, cookieHeader: string
   // The organization's fields carry the request's organization, whatever the browser sent.
   const mine = withOrgFields(ctx.definition, { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber, fields: ctx.org.fieldValues }, ownAnswers(ctx.definition, input));
   // Conditions may depend on earlier steps' answers, so validate against everything known.
-  const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role });
+  const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role, lookups: await listLookupsFor([ctx.definition]) });
   if (!result.ok) return { ok: false, errors: result.errors };
   const cleaned = ownAnswers(ctx.definition, result.cleaned);
   // Formulas of other roles that depend on what was just filled: refresh them (the later submission wins when answers are collected).

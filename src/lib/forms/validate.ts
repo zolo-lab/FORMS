@@ -11,6 +11,8 @@ import { validateGrid } from "./grid";
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
 import { withCopies } from "./copy";
+import { narrowListChoices, withListPicks } from "./linked";
+import type { Lookups } from "./lookups";
 import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
@@ -33,6 +35,11 @@ export interface ValidateOptions {
   role?: FillerRole;
   /** Today's date as yyyy-mm-dd (injectable for tests). */
   today?: string;
+  /**
+   * The lookups the form was shown with. With them, fields linked to a list picked in the form are filled from the
+   * picked record (whatever the client sent) and linked choices accept only that record's options.
+   */
+  lookups?: Lookups;
 }
 
 /** A signature is a PNG data URL of reasonable size; anything else is rejected before it is stored. */
@@ -310,11 +317,17 @@ export interface ValidationResult {
   cleaned: Answers;
 }
 
-export function validateAnswers(form: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
+export function validateAnswers(baseForm: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   // Formula fields are always recomputed here, whatever the client sent.
   // Defaults first (formulas may use them); read-only defaults always win over what the client sent.
-  const answers = computeFormulas(form, withCopies(form, withDefaults(form, rawAnswers, today)), today);
+  let form = baseForm;
+  let answers = withDefaults(form, rawAnswers, today);
+  if (options.lookups) {
+    answers = withListPicks(form, answers, options.lookups);
+    form = narrowListChoices(form, answers, options.lookups);
+  }
+  answers = computeFormulas(form, withCopies(form, answers), today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.

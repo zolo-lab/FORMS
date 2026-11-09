@@ -11,7 +11,7 @@ test("linked fields: the form against the organizations' list – missing fields
   await page.locator("summary", { hasText: "כלים" }).click();
   await page.getByRole("button", { name: "שדות מקושרים" }).click();
   const dialog = page.getByRole("dialog", { name: "שדות מקושרים" });
-  await expect(dialog.getByText("מאגר: עמותות ועסקים")).toBeVisible();
+  await expect(dialog.getByLabel("מאגר")).toHaveValue("org");
 
   // A new form has none of the list's fields: each is flagged, with its internal name shown beside it.
   await expect(dialog.getByText("לא נמצא בטופס").first()).toBeVisible();

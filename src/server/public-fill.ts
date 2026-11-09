@@ -15,8 +15,8 @@ import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { allowedOrgs, linkOrg, linkProject, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
-import { withOrgOptions } from "@/lib/forms/linked";
-import { orgListFields } from "@/server/lists-store";
+import { lockListFields, withOrgOptions } from "@/lib/forms/linked";
+import { listLookupsFor, orgListFields } from "@/server/lists-store";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { getFile } from "./storage";
@@ -65,7 +65,8 @@ export async function publicForm(formId: string, orgSlug?: string | null, projec
   const role = publicRole(route.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
   // Choices linked to the organizations' list show this organization's options only (and are checked against them).
-  const definition = withOrgOptions(lockOrgFields(viewFor(role)), org.fieldValues, await orgListFields());
+  // Fields filled from a list picked in the form are locked too: the record's value, not the filler's.
+  const definition = lockListFields(withOrgOptions(lockOrgFields(viewFor(role)), org.fieldValues, await orgListFields()));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
   const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, {});
   return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, project, initialAnswers };
@@ -93,7 +94,8 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
   // The organization comes from the link, never from what was sent.
   const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, rawInput);
   // Check before anything is created, so a form with mistakes leaves nothing behind.
-  const check = validateAnswers(view.definition, input, { role: view.role });
+  // The lookups the form was shown with: a list picked in it fills its fields from the record, here as there.
+  const check = validateAnswers(view.definition, input, { role: view.role, lookups: await listLookupsFor([view.definition]) });
   if (!check.ok) return { ok: false, errors: check.errors };
 
   const subject = subjectFromAnswers(view.definition, check.cleaned);

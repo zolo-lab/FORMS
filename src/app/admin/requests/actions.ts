@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { Answers } from "@/lib/forms/conditions";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { withOrgOptions } from "@/lib/forms/linked";
-import { orgListFields } from "@/server/lists-store";
+import { listLookupsFor, orgListFields } from "@/server/lists-store";
 import { renderDefault } from "@/lib/notifications/templates";
 import { normalizeIsraeliPhone } from "@/lib/whatsapp";
 import { ROLE_LABELS } from "@/lib/workflow/labels";
@@ -79,7 +79,7 @@ export async function createRequestAction(input: CreateInput): Promise<CreateRes
   let cleaned: Answers = {};
   if (pkg) {
     // A choice linked to the organizations' list accepts only the chosen organization's options.
-    const v = validateAnswers(withOrgOptions(pkg.requesterDefinition, org?.fieldValues, await orgListFields()), input.requesterAnswers);
+    const v = validateAnswers(withOrgOptions(pkg.requesterDefinition, org?.fieldValues, await orgListFields()), input.requesterAnswers, { lookups: await listLookupsFor([pkg.requesterDefinition]) });
     if (!v.ok) Object.assign(errors, v.errors);
     cleaned = v.cleaned;
   }

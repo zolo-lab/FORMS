@@ -162,3 +162,56 @@ describe("withOrgFields", () => {
     expect(withOrgFields(def, { name: "x", fields: { mail: "office@org.co.il" } }, {}).m).toBe("office@org.co.il");
   });
 });
+
+describe("lists picked in the form", async () => {
+  const { withListPicks, narrowListChoices, listSource, pickerKey, keyFor, addPicker, lockListFields, linkedTypeIds } = await import("@/lib/forms/linked");
+  const T = "11111111-1111-4111-8111-111111111111";
+  const sup = (id: string, name: string, pay: string, items: string[]) => ({ value: id, label: name, data: { name, pay, items } });
+  const lookups = {
+    [pickerKey(T)]: [sup("r1", "גדע", "120", ["עגבניה"]), sup("r2", "שלום", "90", ["עגבניה", "מלפפון"])],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }, { value: "מלפפון", label: "מלפפון" }, { value: "גזר", label: "גזר" }],
+  };
+  const base = form([
+    { id: "name", type: "short_text", label: "שם הספק", prefill: keyFor(listSource(T), "name") },
+    { id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "checkboxes", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]);
+  const { def, id: pick } = addPicker(base, T, "ספקים", 0);
+
+  it("fills the linked fields from the picked record, and empties them when none is picked", () => {
+    const a = withListPicks(def, { [pick]: "r2" }, lookups);
+    expect(a).toMatchObject({ name: "שלום", pay: "90" });
+    const none = withListPicks(def, { [pick]: "nope", name: "stale" }, lookups);
+    expect(none[pick]).toBeUndefined();
+    expect(none.name).toBeUndefined();
+  });
+
+  it("a list of one record is picked by itself", () => {
+    const one = { ...lookups, [pickerKey(T)]: lookups[pickerKey(T)]!.slice(0, 1) };
+    expect(withListPicks(def, {}, one)).toMatchObject({ [pick]: "r1", name: "גדע" });
+  });
+
+  it("narrows a linked choice to the record's options, and validates against them", () => {
+    const a = { [pick]: "r1" };
+    const narrowed = narrowListChoices(def, a, lookups);
+    const items = allOf(narrowed, "items");
+    expect(items.options?.map((o) => o.value)).toEqual(["עגבניה"]);
+    expect(validateAnswers(def, { ...a, items: ["מלפפון"] }, { lookups }).ok).toBe(false);
+    expect(validateAnswers(def, { ...a, items: ["עגבניה"] }, { lookups }).ok).toBe(true);
+    // Without a record: every option.
+    expect(allOf(narrowListChoices(def, {}, lookups), "items").options).toHaveLength(3);
+  });
+
+  it("the server fills the linked fields itself, whatever the client sent, and locks them for the filler", () => {
+    const r = validateAnswers(def, { [pick]: "r1", name: "forged", pay: "1" }, { lookups });
+    expect(r.ok).toBe(true);
+    expect(r.cleaned).toMatchObject({ name: "גדע", pay: 120 });
+    expect(allOf(lockListFields(def), "name").readOnly).toBe(true);
+    expect(allOf(lockListFields(def), pick).readOnly).toBeUndefined();
+    expect(linkedTypeIds([def])).toEqual([T]);
+  });
+});
+
+function allOf(def: FormDefinition, id: string): FormField {
+  return def.pages.flatMap((p) => p.fields).find((f) => f.id === id)!;
+}
