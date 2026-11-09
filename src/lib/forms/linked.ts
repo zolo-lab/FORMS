@@ -54,7 +54,7 @@ export function fits(field: Pick<FormField, "type">, lf: OrgListField): boolean 
 }
 
 /** org_name / org_number are linked by their id alone: undoing the link would mean renaming them, so it is not offered. */
-export const linkedById = (fieldId: string) => !!ORG_FIELD_IDS[fieldId];
+export const linkedById = (fieldId: string) => Object.hasOwn(ORG_FIELD_IDS, fieldId);
 
 const asOptions = (values: string[]): FieldOption[] => values.map((v) => ({ value: v, label: v }));
 
@@ -102,7 +102,8 @@ export function addLinkedField(def: FormDefinition, lf: OrgListField, page: numb
   const type = fieldTypeFor(lf);
   // Not org_name / org_number: those are linked by id and could never be unlinked.
   const base = lf.key === ORG_NAME_KEY ? "org_title" : lf.key === ORG_REG_KEY ? "org_regnum" : lf.key.replace(/-/g, "_");
-  const id = uniqueId(base, new Set(allFields(next).map((f) => f.id)));
+  // The reserved ids are never handed out, even when an organization field's own key is one of them.
+  const id = uniqueId(base, new Set([...allFields(next).map((f) => f.id), ...Object.keys(ORG_FIELD_IDS)]));
   const field: FormField = { id, type, label: lf.label };
   if (FIELD_TYPE_META[type].defaultSettings) field.settings = structuredClone(FIELD_TYPE_META[type].defaultSettings);
   const target = next.pages[Math.min(Math.max(0, page), next.pages.length - 1)]!;

@@ -84,6 +84,18 @@ describe("unbindField", () => {
   });
 });
 
+describe("reserved ids", () => {
+  it("an organization field whose key is org_name or constructor still gets a linkable id of its own", () => {
+    for (const key of ["org_name", "org-number", "constructor"]) {
+      const lf = { key, label: "x", kind: "short_text", options: [], multi: false };
+      const { def, id } = addLinkedField(form([]), lf, 0);
+      expect(["org_name", "org_number"]).not.toContain(id);
+      expect(bindingOf(def.pages[0]!.fields[0]!)).toBe(key);
+    }
+    expect(bindingOf({ id: "constructor", type: "short_text", label: "x" } as FormField)).toBeUndefined();
+  });
+});
+
 describe("linkReport", () => {
   it("finds what is bound, what matches by name, and what the form lacks", () => {
     const def = form([

@@ -83,7 +83,7 @@ export function prefillGroups(orgFields: { key: string; label: string }[] = [], 
 export const ORG_FIELD_IDS: Record<string, "org.name" | "org.registrationNumber"> = { org_name: "org.name", org_number: "org.registrationNumber" };
 
 /** The prefill of a field: its own setting, or the organization's for the fixed ids (org_name, org_number). */
-export const prefillOf = (f: { id: string; prefill?: string }): string | undefined => f.prefill ?? ORG_FIELD_IDS[f.id];
+export const prefillOf = (f: { id: string; prefill?: string }): string | undefined => f.prefill ?? (Object.hasOwn(ORG_FIELD_IDS, f.id) ? ORG_FIELD_IDS[f.id] : undefined);
 
 /** Filled by the system from the request's organization: shown read-only, and the server sets the value. */
 export const isOrgField = (f: { id: string; prefill?: string }) => !!prefillOf(f)?.startsWith("org.");
