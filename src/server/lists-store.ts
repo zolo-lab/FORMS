@@ -210,6 +210,8 @@ export async function updateField(typeId: string, fieldId: string, patch: { labe
   if (typeId === ORG_TYPE) {
     const label = patch.label !== undefined ? cleanName(patch.label) : undefined;
     if (patch.label !== undefined && !label) return fail("צריך שם לשדה");
+    // Deleted meanwhile (by another admin): say so rather than close the dialog as if it took.
+    if (!(await listOrgFieldDefs()).some((d) => d.id === fieldId)) return fail("השדה לא נמצא – אולי נמחק בינתיים");
     const r = await updateOrgFieldDef(fieldId, { label });
     return r.ok ? { ok: true } : fail("השדה לא עודכן");
   }
