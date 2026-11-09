@@ -66,6 +66,7 @@ export function PublicFill({ formId, org, project = null, definition, role, pdf,
           errors={errors}
           onErrors={setErrors}
           onSubmit={send}
+          lookups={lookups}
         />
       ) : (
         <FormRenderer definition={definition} answers={answers} onChange={setAnswers} errors={errors} role={role} onSubmit={send} lookups={lookups} />

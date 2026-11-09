@@ -180,7 +180,7 @@ describe("lists picked in the form", async () => {
 
   it("fills the linked fields from the picked record, and empties them when none is picked", () => {
     const a = withListPicks(def, { [pick]: "r2" }, lookups);
-    expect(a).toMatchObject({ name: "שלום", pay: "90" });
+    expect(a).toMatchObject({ name: "שלום", pay: 90 });
     const none = withListPicks(def, { [pick]: "nope", name: "stale" }, lookups);
     expect(none[pick]).toBeUndefined();
     expect(none.name).toBeUndefined();
@@ -215,3 +215,45 @@ describe("lists picked in the form", async () => {
 function allOf(def: FormDefinition, id: string): FormField {
   return def.pages.flatMap((p) => p.fields).find((f) => f.id === id)!;
 }
+
+describe("lists picked in another step, and what a locked field must hold", async () => {
+  const { withListPicks, narrowListChoices, listSource, pickerKey, keyFor, addPicker, bindField, lockListFields } = await import("@/lib/forms/linked");
+  const T = "22222222-2222-4222-8222-222222222222";
+  const lookups = {
+    [pickerKey(T)]: [
+      { value: "r1", label: "גדע", data: { pay: "1,200", items: ["עגבניה"] } },
+      { value: "r2", label: "שלום", data: { items: ["מלפפון"] } },
+    ],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }, { value: "מלפפון", label: "מלפפון" }],
+  };
+  const { def: full, id: pick } = addPicker(form([
+    { id: "pay", type: "currency", label: "שכר", required: true, prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "dropdown", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]), T, "ספקים", 0);
+  // The signer's view: no picker (it was the requester's).
+  const view = lockListFields(form(full.pages[0]!.fields.filter((f) => f.id !== pick)));
+
+  it("fills and narrows from a picker that is only in the whole form, numbers as numbers", () => {
+    const a = withListPicks(view, { [pick]: "r1", pay: "forged" }, lookups, full);
+    expect(a.pay).toBe(1200);
+    expect(allOf(narrowListChoices(view, a, lookups, full), "items").options?.map((o) => o.value)).toEqual(["עגבניה"]);
+    const r = validateAnswers(view, { [pick]: "r1", pay: "forged", items: "מלפפון" }, { lookups, fullForm: full });
+    expect(r.ok).toBe(false);
+    expect(r.errors.items).toBeTruthy();
+  });
+
+  it("a required field whose record has no value is refused, locked or not", () => {
+    const r = validateAnswers(view, { [pick]: "r2", items: "מלפפון" }, { lookups, fullForm: full });
+    expect(r.ok).toBe(false);
+    expect(r.errors.pay).toMatch(/ברשומה/);
+  });
+
+  it("a picker whose records are not in the lookups keeps the answers as they are", () => {
+    expect(withListPicks(full, { [pick]: "r1", pay: 5 }, {})).toEqual({ [pick]: "r1", pay: 5 });
+  });
+
+  it("a picker is never linked to a list field itself", () => {
+    const lf = { key: "items", label: "ירקות", kind: "select", options: ["עגבניה"], multi: true };
+    expect(bindField(full, pick, lf, listSource(T))).toBe(full);
+  });
+});

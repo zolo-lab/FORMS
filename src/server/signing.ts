@@ -149,7 +149,8 @@ export async function submit(token: string, input: Answers, cookieHeader: string
   // The organization's fields carry the request's organization, whatever the browser sent.
   const mine = withOrgFields(ctx.definition, { name: ctx.org.name, registrationNumber: ctx.org.registrationNumber, fields: ctx.org.fieldValues }, ownAnswers(ctx.definition, input));
   // Conditions may depend on earlier steps' answers, so validate against everything known.
-  const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role, lookups: await listLookupsFor([ctx.definition]) });
+  // A record picked in an earlier step fills this step's linked fields too: the pickers are looked for in the whole form.
+  const result = validateAnswers(ctx.definition, { ...ctx.answers, ...mine }, { role: ctx.role, lookups: await listLookupsFor([ctx.fullDefinition]), fullForm: ctx.fullDefinition });
   if (!result.ok) return { ok: false, errors: result.errors };
   const cleaned = ownAnswers(ctx.definition, result.cleaned);
   // Formulas of other roles that depend on what was just filled: refresh them (the later submission wins when answers are collected).

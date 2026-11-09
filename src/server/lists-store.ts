@@ -157,6 +157,8 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
   for (const typeId of linkedTypeIds(defs)) {
     if (!/^[0-9a-f-]{36}$/i.test(typeId)) continue;
     const source = listSource(typeId);
+    // Always present, even for a type that is gone: a picker whose records are unknown would keep what the client sent.
+    out[pickerKey(typeId)] = [];
     const fields = await fieldsOf(typeId);
     if (!fields.length) continue;
     const used = new Set<string>();

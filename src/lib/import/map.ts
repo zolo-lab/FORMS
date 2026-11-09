@@ -3,6 +3,8 @@ import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { allFields } from "@/lib/forms/schema";
 import { FIELD_TYPE_META } from "@/lib/forms/field-types";
 import { validateAnswers } from "@/lib/forms/validate";
+import type { Lookups } from "@/lib/forms/lookups";
+import type { Answers } from "@/lib/forms/conditions";
 import { isValidEmail, isValidIsraeliId, isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/validators/israeli";
 
 export interface Target {
@@ -144,7 +146,7 @@ export function buildRecords(rows: string[][], mapping: Record<string, number | 
 }
 
 /** Everything wrong with one record, in Hebrew; empty when it can be created. */
-export function validateRecord(rec: ImportRecord, def: FormDefinition, opts: { send: boolean }): string[] {
+export function validateRecord(rec: ImportRecord, def: FormDefinition, opts: { send: boolean; lookups?: Lookups }): { errors: string[]; answers: Answers } {
   const errs: string[] = [];
   const s = rec.subject;
   if (!s.name.trim()) errs.push("חסר שם");
@@ -153,9 +155,10 @@ export function validateRecord(rec: ImportRecord, def: FormDefinition, opts: { s
   if (s.idNumber && !isValidIsraeliId(s.idNumber)) errs.push('ת"ז לא תקינה');
   if (opts.send && !s.email && !(s.phone && normalizeIsraeliPhone(s.phone))) errs.push("חסר מייל או טלפון לשליחה");
   const labels = new Map(allFields(def).map((f) => [f.id, f.label]));
-  const v = validateAnswers(def, rec.answers);
+  // With lookups, fields linked to a list are filled from the record (not from the file) and choices checked against it.
+  const v = validateAnswers(def, rec.answers, { lookups: opts.lookups });
   if (!v.ok) for (const [k, m] of Object.entries(v.errors)) errs.push(`${labels.get(k.split(".")[0]!) ?? k}: ${m}`);
-  return errs;
+  return { errors: errs, answers: v.cleaned };
 }
 
 /** Duplicate ת"ז / email inside the file itself (one error per duplicated row). */

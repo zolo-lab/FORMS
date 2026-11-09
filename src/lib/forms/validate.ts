@@ -11,7 +11,7 @@ import { validateGrid } from "./grid";
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
 import { withCopies } from "./copy";
-import { narrowListChoices, withListPicks } from "./linked";
+import { isListFilled, narrowListChoices, withListPicks } from "./linked";
 import type { Lookups } from "./lookups";
 import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
@@ -40,6 +40,8 @@ export interface ValidateOptions {
    * picked record (whatever the client sent) and linked choices accept only that record's options.
    */
   lookups?: Lookups;
+  /** The whole form when `form` is one role's view of it: a record picked in another step still counts here. */
+  fullForm?: FormDefinition;
 }
 
 /** A signature is a PNG data URL of reasonable size; anything else is rejected before it is stored. */
@@ -51,6 +53,7 @@ export const REQUIRED_MESSAGE = "שדה חובה";
 
 const MSG = {
   required: REQUIRED_MESSAGE,
+  listValue: "חסר ברשומה שנבחרה – צריך למלא אותו ברשימה",
   number: "יש להזין מספר",
   min: (n: number) => `ערך מינימלי: ${n}`,
   max: (n: number) => `ערך מקסימלי: ${n}`,
@@ -276,6 +279,12 @@ function validateFieldList(
 
     // Keep values of visible fields regardless of role (other signers' data is preserved).
     if (value !== undefined) cleaned[field.id] = value;
+    // A field filled from a list is locked, but a required one still needs its record to hold a value.
+    if (mine && field.readOnly && isListFilled(field) && isBlank(value)) {
+      const required = field.required || (field.requiredIf ? evaluateCondition(field.requiredIf, scopeAnswers) : false);
+      if (required) errors[key] = MSG.listValue;
+      continue;
+    }
     if (!mine || field.readOnly) continue;
 
     const required = field.required || (field.requiredIf ? evaluateCondition(field.requiredIf, scopeAnswers) : false);
@@ -324,8 +333,8 @@ export function validateAnswers(baseForm: FormDefinition, rawAnswers: Answers, o
   let form = baseForm;
   let answers = withDefaults(form, rawAnswers, today);
   if (options.lookups) {
-    answers = withListPicks(form, answers, options.lookups);
-    form = narrowListChoices(form, answers, options.lookups);
+    answers = withListPicks(form, answers, options.lookups, options.fullForm);
+    form = narrowListChoices(form, answers, options.lookups, options.fullForm);
   }
   answers = computeFormulas(form, withCopies(form, answers), today);
   const errors: FieldErrors = {};

@@ -121,7 +121,8 @@ const asOptions = (values: string[]): FieldOption[] => values.map((v) => ({ valu
 export function bindField(def: FormDefinition, fieldId: string, lf: LinkedListField, source: LinkSource = "org"): FormDefinition {
   const field = allFields(def).find((f) => f.id === fieldId);
   // org_name / org_number are bound by their id to the name and number; a second link could never be undone.
-  if (!field || linkedById(fieldId)) return def;
+  // A picker chooses the record for the other fields: linking it to a field would leave them with no record.
+  if (!field || linkedById(fieldId) || pickerOf(field)) return def;
   if (isChoice(field.type)) {
     return updateField(def, fieldId, {
       optionsSource: keyFor(source, lf.key),
@@ -285,11 +286,28 @@ export interface RecordOption extends FieldOption {
 /** A value of a record as a text field shows it: several picks on one line. */
 const asLine = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v.join(", ") : v);
 
+const NUMERIC: ReadonlySet<FieldType> = new Set(["number", "currency", "percent"]);
+
+/** A record's value as the form field stores it: a number for a numeric field, a line of text otherwise. */
+function valueForField(f: FormField, v: string | string[] | undefined): unknown {
+  const line = asLine(v);
+  if (line === undefined || line === "") return undefined;
+  if (NUMERIC.has(f.type)) {
+    const n = Number(line.replace(/[,\s₪%]/g, ""));
+    return Number.isFinite(n) ? n : line;
+  }
+  return line;
+}
+
 /**
  * Answers with every list-linked field filled from the record its picker holds – or emptied when none is picked.
- * A picker with exactly one record to offer is set to it, so a list of one needs no choosing.
+ * A picker with exactly one record to offer is set to it, so a list of one needs no choosing. A picker whose records
+ * the lookups do not carry is left alone (the caller has no data to fill from).
+ *
+ * `full` is where the pickers are looked for: the whole form when `def` is one role's view of it, so a record picked
+ * in an earlier step still fills this step's fields.
  */
-export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lookups): Answers {
+export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lookups, full: FormDefinition = def): Answers {
   let out: Answers | null = null;
   const set = (id: string, v: unknown) => {
     if (answers[id] === v || (v === undefined && answers[id] === undefined)) return;
@@ -298,18 +316,20 @@ export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lo
     else out[id] = v as Answers[string];
   };
   const fields = allFields(def);
-  const pickers = fields.filter((f) => pickerOf(f));
+  const pickers = allFields(full).filter((f) => pickerOf(f));
+  const inView = new Set(fields.map((f) => f.id));
   for (const picker of pickers) {
     const typeId = pickerOf(picker)!;
-    const records = (lookups[pickerKey(typeId)] ?? []) as RecordOption[];
+    const records = lookups[pickerKey(typeId)] as RecordOption[] | undefined;
+    if (!records) continue;
     let chosen = answers[picker.id];
     if (typeof chosen !== "string" || !records.some((r) => r.value === chosen)) chosen = records.length === 1 ? records[0]!.value : undefined;
-    set(picker.id, chosen);
+    if (inView.has(picker.id)) set(picker.id, chosen);
     const data = records.find((r) => r.value === chosen)?.data;
     for (const f of fields) {
       const p = parseKey(prefillOf(f));
       if (!p || !("key" in p) || p.source !== listSource(typeId)) continue;
-      set(f.id, data ? asLine(data[p.key]) : undefined);
+      set(f.id, data ? valueForField(f, data[p.key]) : undefined);
     }
   }
   return out ?? answers;
@@ -319,10 +339,10 @@ export function withListPicks(def: FormDefinition, answers: Answers, lookups: Lo
  * The form with each choice linked to a picked record narrowed to that record's options (fixed, so the renderer
  * shows them and `validateAnswers` accepts only them). Without a record: every option the list field has.
  */
-export function narrowListChoices(def: FormDefinition, answers: Answers, lookups: Lookups): FormDefinition {
+export function narrowListChoices(def: FormDefinition, answers: Answers, lookups: Lookups, full: FormDefinition = def): FormDefinition {
   const fields = allFields(def);
   const chosen = new Map<string, RecordOption | undefined>();
-  for (const f of fields) {
+  for (const f of allFields(full)) {
     const typeId = pickerOf(f);
     if (typeId) chosen.set(typeId, ((lookups[pickerKey(typeId)] ?? []) as RecordOption[]).find((r) => r.value === answers[f.id]));
   }
@@ -343,12 +363,17 @@ export function narrowListChoices(def: FormDefinition, answers: Answers, lookups
   return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.map(fix) })) };
 }
 
+/** Whether a form field is filled from a list picked in the form (and so locked, its value the record's). */
+export const isListFilled = (f: Pick<FormField, "id" | "prefill">) => {
+  const p = parseKey(prefillOf(f));
+  return !!p && "key" in p && p.source !== "org";
+};
+
 /** The form with list-linked text fields locked: their value is the record's, not the filler's to change. */
 export function lockListFields(def: FormDefinition): FormDefinition {
   const fix = (f: FormField): FormField => {
     const nested = f.fields ? { fields: f.fields.map(fix) } : {};
-    const p = parseKey(f.prefill);
-    return p && "key" in p && p.source !== "org" ? { ...f, ...nested, readOnly: true } : { ...f, ...nested };
+    return isListFilled(f) ? { ...f, ...nested, readOnly: true } : { ...f, ...nested };
   };
   return { ...def, pages: def.pages.map((p) => ({ ...p, fields: p.fields.map(fix) })) };
 }

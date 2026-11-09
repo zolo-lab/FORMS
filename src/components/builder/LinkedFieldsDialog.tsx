@@ -16,6 +16,7 @@ import {
   linkReport,
   listSource,
   pickerFor,
+  pickerOf,
   unbindField,
   type LinkedListField,
   type LinkRow,
@@ -137,7 +138,8 @@ export function LinkedFieldsDialog({
             const lf = r.field;
             const bound = r.state === "bound" ? r.formFieldIds : [];
             // org_name / org_number already show the name and number by their id: never re-linked to another field.
-            const candidates = fields.filter((f) => !bound.includes(f.id) && !linkedById(f.id) && fits(f, lf));
+            // Nor a picker: it chooses the record for the other fields.
+            const candidates = fields.filter((f) => !bound.includes(f.id) && !linkedById(f.id) && !pickerOf(f) && fits(f, lf));
             return (
               <li key={lf.key} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-center">
                 <div className="min-w-0">
