@@ -47,22 +47,23 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await panel.getByRole("button", { name: "הוספת האפשרות" }).click();
   await expect(region).toHaveText("מרכז");
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
-  await region.click();
-  await panel.getByRole("radio", { name: "דרום" }).click();
-  await expect(region).toHaveText("דרום");
+  // A record offers a set of options: ticking another keeps the first.
+  if (!(await panel.isVisible())) await region.click();
+  await panel.getByRole("checkbox", { name: "דרום" }).check();
+  await expect(region).toHaveText("דרום, מרכז");
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
 
-  // The field's settings: which record gets which value, in one grid.
+  // The field's settings: which options each record offers, in one grid.
   await page.getByRole("button", { name: "אזור", exact: true }).locator(visible).click();
   const settings = page.getByRole("dialog", { name: 'השדה "אזור"' });
+  // The option added from the cell reaches the grid with the refreshed sheet.
+  await expect(settings.getByRole("columnheader", { name: /מרכז/ })).toBeVisible();
   await expect(settings.getByLabel("אזור: דרום – סניף בדיקה")).toBeChecked();
-  await settings.getByLabel("אזור: צפון – סניף בדיקה").check();
+  await expect(settings.getByLabel("אזור: מרכז – סניף בדיקה")).toBeChecked();
+  await settings.getByLabel("אזור: מרכז – סניף בדיקה").uncheck();
   await settings.getByRole("button", { name: "שמירה" }).click();
   await expect(settings).toBeHidden();
-  await expect(region).toHaveText("צפון");
-  await region.click();
-  await panel.getByRole("radio", { name: "דרום" }).click();
-  await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
+  await expect(region).toHaveText("דרום");
 
   // A text field turned into a choice keeps its values, and they become its options.
   await page.getByRole("button", { name: "שדה", exact: true }).click();

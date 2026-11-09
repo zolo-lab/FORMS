@@ -1,7 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +37,6 @@ export function AddFieldDialog({
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<ListFieldKind>("short_text");
   const [options, setOptions] = useState<string[]>([""]);
-  const [multi, setMulti] = useState(false);
   const [parent, setParent] = useState("");
   const [error, setError] = useState("");
   const [busy, start] = useTransition();
@@ -46,7 +44,6 @@ export function AddFieldDialog({
     setLabel("");
     setKind("short_text");
     setOptions([""]);
-    setMulti(false);
     setParent("");
     setError("");
     onClose();
@@ -58,7 +55,7 @@ export function AddFieldDialog({
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
-            const r = await addFieldAction(typeId, { label, kind, options, multi, parentTypeId: parent || null });
+            const r = await addFieldAction(typeId, { label, kind, options, parentTypeId: parent || null });
             if (!r.ok) return setError(r.error);
             const made = kind;
             close();
@@ -82,7 +79,6 @@ export function AddFieldDialog({
             ))}
           </Select>
           {KIND_HINTS[kind] && <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>}
-          {isOrg && kind === "select" && multi && <p className="text-xs text-muted-foreground">בבחירה של כמה אפשרויות, הטופס יקבל אותן בשורה אחת מופרדות בפסיקים.</p>}
           {!isOrg && parents.length === 0 && (
             <p className="text-xs text-muted-foreground">
               &quot;שייך ל…&quot; מקשר כל רשומה כאן לרשומה מסוג רשימה אחר (למשל חנות → עיר). כשיהיה עוד סוג רשימה, הוא יופיע כאן.
@@ -92,10 +88,7 @@ export function AddFieldDialog({
         {kind === "select" && (
           <>
             <OptionsEditor value={options} onChange={setOptions} />
-            <p className="text-xs text-muted-foreground">בשלב הבא בוחרים לאילו רשומות שייכת כל אפשרות.</p>
-                        <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-            </label>
+            <p className="text-xs text-muted-foreground">בשלב הבא מסמנים לכל רשומה אילו מהאפשרויות יוצגו אצלה בטופס. בטופס עצמו בוחרים אם השדה הוא בחירה אחת או כמה.</p>
           </>
         )}
         {kind === "ref" && (
@@ -136,8 +129,10 @@ export function FieldDialog({
   onClose: () => void;
 }) {
   const [label, setLabel] = useState(field.label);
-  const [options, setOptions] = useState<string[]>(field.options.length ? field.options : [""]);
-  const [multi, setMulti] = useState(field.multi);
+  // The field's options as last saved, until edited here – so a save that lands after the dialog opened (an option
+  // added from a cell a moment ago) still shows up.
+  const [edited, setOptions] = useState<string[] | null>(null);
+  const options = edited ?? (field.options.length ? field.options : [""]);
   const [dev, setDev] = useState(false);
   const [confirm, setConfirm] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -166,7 +161,7 @@ export function FieldDialog({
       const edit = changed[row.id];
       if (!edit) continue;
       const next = edit.filter((p) => choices.includes(p));
-      const r = await setCellAction(typeId, row.id, field.key, multi || field.multi ? next : (next[0] ?? ""));
+      const r = await setCellAction(typeId, row.id, field.key, next);
       if (!r.ok) failed.push(listTitle(row.values, fields));
     }
     return failed;
@@ -174,24 +169,13 @@ export function FieldDialog({
   const save = () =>
     start(async () => {
       setError("");
-      // One pick each: a record left with several is pointed out, never cut down unseen.
-      if (select && !multi) {
-        const many = rows.filter((r) => (picks[r.id] ?? []).length > 1).map((r) => listTitle(r.values, fields));
-        if (many.length) return setError(`בחרו ערך אחד בלבד אצל: ${many.join(", ")}`);
-      }
-      // Going from several to one, the records are fixed first, so the field never holds a list it no longer allows.
-      const cellsFirst = select && field.kind === "select" && field.multi && !multi;
-      if (cellsFirst) {
-        const failed = await saveCells();
-        if (failed.length) return setError(`לא נשמר אצל: ${failed.join(", ")}`);
-      }
       if (!field.fixed) {
         // A field just turned into a choice with no options typed takes the values its records hold (read on the server).
         const derive = select && kind !== field.kind && !options.some((o) => o.trim());
-        const r = await updateFieldAction(typeId, field.id, { label, ...(kind !== field.kind ? { kind } : {}), ...(select ? { multi, ...(derive ? {} : { options }) } : {}) });
+        const r = await updateFieldAction(typeId, field.id, { label, ...(kind !== field.kind ? { kind } : {}), ...(select && !derive ? { options } : {}) });
         if (!r.ok) return setError(r.error);
       }
-      if (select && !cellsFirst) {
+      if (select) {
         const failed = await saveCells();
         if (failed.length) return setError(`לא נשמר אצל: ${failed.join(", ")}`);
       }
@@ -259,13 +243,10 @@ export function FieldDialog({
           {select && !assignFirst && (
             <>
               <OptionsEditor value={options} onChange={setOptions} />
-                            <label className="flex min-h-11 items-center gap-2 text-sm">
-                <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-              </label>
             </>
           )}
           {select && rows.length > 0 && choices.length > 0 && (
-            <AssignGrid rows={rows} fields={fields} choices={choices} multi={multi} picks={picks} onChange={(p) => setChanged({ ...changed, ...Object.fromEntries(Object.entries(p).filter(([id, v]) => JSON.stringify(v) !== JSON.stringify(picks[id]))) })} label={label} />
+            <AssignGrid rows={rows} fields={fields} choices={choices} picks={picks} onChange={(p) => setChanged({ ...changed, ...Object.fromEntries(Object.entries(p).filter(([id, v]) => JSON.stringify(v) !== JSON.stringify(picks[id]))) })} label={label} />
           )}
           <div className="text-sm">
             <button type="button" className="text-muted-foreground underline" aria-expanded={dev} onClick={() => setDev((v) => !v)}>
@@ -303,12 +284,11 @@ export function FieldDialog({
   );
 }
 
-/** Which records get which options: a record per line, an option per column – ticks for "several", one dot otherwise. */
+/** Which options each record shows: a record per line, an option per column, a tick where it is offered. */
 function AssignGrid({
   rows,
   fields,
   choices,
-  multi,
   picks,
   onChange,
   label,
@@ -316,26 +296,24 @@ function AssignGrid({
   rows: SheetRow[];
   fields: SheetField[];
   choices: string[];
-  multi: boolean;
   picks: Record<string, string[]>;
   onChange: (p: Record<string, string[]>) => void;
   label: string;
 }) {
   const toggle = (rowId: string, o: string) => {
     const cur = picks[rowId] ?? [];
-    const next = multi ? (cur.includes(o) ? cur.filter((x) => x !== o) : choices.filter((x) => x === o || cur.includes(x))) : cur[0] === o ? [] : [o];
+    const next = cur.includes(o) ? cur.filter((x) => x !== o) : choices.filter((x) => x === o || cur.includes(x));
     onChange({ ...picks, [rowId]: next });
   };
   const all = (o: string, on: boolean) =>
     onChange(Object.fromEntries(rows.map((r) => {
       const cur = picks[r.id] ?? [];
-      if (!multi) return [r.id, on ? [o] : cur.filter((x) => x !== o)];
       return [r.id, on ? choices.filter((x) => x === o || cur.includes(x)) : cur.filter((x) => x !== o)];
     })));
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium">לאילו רשומות שייך כל ערך?</legend>
-      <p className="text-xs text-muted-foreground">{multi ? "אפשר לסמן כמה ערכים לכל רשומה." : "ערך אחד לכל רשומה. לחיצה נוספת מבטלת."} אפשר לשנות גם אחר כך, כאן או בטבלה.</p>
+      <legend className="text-sm font-medium">אילו אפשרויות יוצגו לכל רשומה?</legend>
+      <p className="text-xs text-muted-foreground">מסמנים לכל רשומה את האפשרויות שהטופס שלה יציג. אפשר לשנות גם אחר כך, כאן או בטבלה.</p>
       <div className="max-h-80 overflow-auto rounded-md border">
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-0 bg-muted">
@@ -364,13 +342,10 @@ function AssignGrid({
                     <td key={o} className="p-0 text-center">
                       <label className="flex min-h-11 cursor-pointer items-center justify-center">
                         <input
-                          type={multi ? "checkbox" : "radio"}
-                          name={multi ? undefined : `assign-${r.id}`}
+                          type="checkbox"
                           className="size-5"
                           checked={(picks[r.id] ?? []).includes(o)}
                           onChange={() => toggle(r.id, o)}
-                          // A second click on the picked one clears it (a radio fires no change for that).
-                          onClick={() => !multi && (picks[r.id] ?? [])[0] === o && toggle(r.id, o)}
                           aria-label={`${label}: ${o} – ${title}`}
                         />
                       </label>

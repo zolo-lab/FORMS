@@ -1,5 +1,7 @@
 /** Server side of the public signing page /s/[token]: resolve the link, autosave, submit. */
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
+import { withOrgOptions } from "@/lib/forms/linked";
+import { orgListFields } from "@/server/lists-store";
 import { duplicateErrors } from "./unique";
 import { kickDelivery } from "./notifications";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
@@ -83,7 +85,7 @@ export async function loadByToken(token: string, now = new Date()): Promise<Sign
     .map((s) => ({ id: s.id, label: runStepLabel(s) }));
 
   await db.update(stepTokens).set({ lastUsedAt: now }).where(eq(stepTokens.id, tok.id));
-  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: lockOrgFields(view.definition), fullDefinition: merged, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
+  return { state: "ok", tokenId: tok.id, step, request, org: org!, role, definition: withOrgOptions(lockOrgFields(view.definition), org?.fieldValues, await orgListFields()), fullDefinition: merged, filled: view.filled, answers, returnTargets, pdfDocs, thankYou: docs.map((d) => d.definition.settings?.thankYou).find((t) => !!t) };
 }
 
 /** Marks the step as opened (active → in_progress) the first time the link is visited. */
