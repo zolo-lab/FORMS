@@ -69,6 +69,11 @@ describe("fits", () => {
     expect(fits({ type: "short_text" }, listFields[0]!)).toBe(true);
     expect(fits({ type: "dropdown" }, listFields[0]!)).toBe(false);
     expect(fits({ type: "dropdown" }, listFields[4]!)).toBe(true);
+    // A typed field takes only a value of its own kind: no free text into an e-mail or an ID number.
+    expect(fits({ type: "email" }, listFields[0]!)).toBe(false);
+    expect(fits({ type: "id_number" }, listFields[1]!)).toBe(true);
+    expect(fits({ type: "number" }, listFields[2]!)).toBe(true);
+    expect(fits({ type: "short_text" }, listFields[2]!)).toBe(true);
   });
 });
 

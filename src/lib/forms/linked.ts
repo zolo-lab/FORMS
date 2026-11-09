@@ -50,8 +50,22 @@ const PLAIN_TYPES = new Set<FieldType>(["short_text", "long_text", "number", "cu
 export function fits(field: Pick<FormField, "type">, lf: OrgListField): boolean {
   if (!PLAIN_TYPES.has(field.type)) return false;
   if (isChoice(field.type)) return lf.kind === "select";
-  return true;
+  // A typed field is locked once filled and skips its own check, so it only takes a value of the same kind
+  // (an e-mail field never shows free text that a request would then use as an address).
+  const strict = STRICT[field.type];
+  return strict ? strict.includes(lf.kind) : true;
 }
+
+/** Typed form fields and the list kinds whose values already pass their check. Text fields take any kind. */
+const STRICT: Partial<Record<FieldType, string[]>> = {
+  email: ["email"],
+  phone: ["phone"],
+  id_number: ["id_number"],
+  date: ["date"],
+  number: ["number", "currency", "percent"],
+  currency: ["number", "currency"],
+  percent: ["number", "percent"],
+};
 
 /** org_name / org_number are linked by their id alone: undoing the link would mean renaming them, so it is not offered. */
 export const linkedById = (fieldId: string) => Object.hasOwn(ORG_FIELD_IDS, fieldId);
