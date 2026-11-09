@@ -248,7 +248,8 @@ function ChoiceCell({
         onClick={() => setOpen((v) => (v ? null : place()))}
         className={cn(className, "flex items-center justify-between gap-2 text-start text-sm")}
       >
-        <span className="truncate">{picked.length ? picked.join(", ") : "—"}</span>
+        {/* A record with no option picked is a gap: a form linked to this field would show every option. */}
+        {picked.length ? <span className="truncate">{picked.join(", ")}</span> : <span className="truncate text-destructive">לא נבחר</span>}
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       </button>
       {open && (

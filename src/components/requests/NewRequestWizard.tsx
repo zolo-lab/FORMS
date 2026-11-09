@@ -10,6 +10,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Answers } from "@/lib/forms/conditions";
 import type { Lookups } from "@/lib/forms/lookups";
+import { lookupsForOrg } from "@/lib/forms/linked";
 import type { FieldErrors } from "@/lib/forms/validate";
 import { runStepLabel } from "@/lib/workflow/labels";
 import type { WorkflowStep } from "@/lib/workflow/types";
@@ -176,7 +177,7 @@ export function NewRequestWizard({ packages, orgs, lookups, contacts = [], chain
           {hasRequesterFields ? (
             <FormRenderer
               definition={pkg.requesterDefinition}
-              lookups={lookups}
+              lookups={lookups && lookupsForOrg(lookups, organizationId)}
               answers={answers}
               onChange={setAnswers}
               errors={errors}

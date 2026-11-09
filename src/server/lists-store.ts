@@ -7,6 +7,7 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
 import { isOrgFieldKind } from "@/lib/fields/types";
+import type { OrgListField } from "@/lib/forms/linked";
 import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
@@ -139,6 +140,11 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
     db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
   ]);
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
+}
+
+/** The organizations' list as forms link to it (name, number and the admin-defined fields). */
+export async function orgListFields(): Promise<OrgListField[]> {
+  return (await fieldsOf(ORG_TYPE)).map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi }));
 }
 
 export async function loadSheet(typeId: string): Promise<Sheet | null> {
