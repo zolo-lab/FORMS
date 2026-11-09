@@ -265,6 +265,14 @@ export async function updateField(typeId: string, fieldId: string, patch: { labe
     if (!options.length) return fail("שדה בחירה צריך לפחות אפשרות אחת");
     set.options = options;
     if (patch.multi !== undefined) set.multi = patch.multi;
+    // From several picks to one: refused while a record still holds more than one, so none is dropped unseen.
+    if (f.kind === "select" && f.multi && patch.multi === false) {
+      const [{ n } = { n: 0 }] = await db
+        .select({ n: count() })
+        .from(listRecords)
+        .where(and(eq(listRecords.listTypeId, typeId), sql`jsonb_typeof(${listRecords.values} -> ${f.key}) = 'array' and jsonb_array_length(${listRecords.values} -> ${f.key}) > 1`));
+      if (Number(n)) return fail(`ב־${n} רשומות נבחרו כמה ערכים. בחרו ערך אחד בכל אחת ונסו שוב.`);
+    }
   } else if (set.kind) {
     set.options = [];
     set.multi = false;
@@ -274,7 +282,7 @@ export async function updateField(typeId: string, fieldId: string, patch: { labe
     await db
       .update(listRecords)
       .set({
-        values: sql`${listRecords.values} || jsonb_build_object(${f.key}::text, (select string_agg(x, ', ') from jsonb_array_elements_text(${listRecords.values} -> ${f.key}) as x))`,
+        values: sql`${listRecords.values} || jsonb_build_object(${f.key}::text, coalesce((select string_agg(x, ', ' order by i) from jsonb_array_elements_text(${listRecords.values} -> ${f.key}) with ordinality as t(x, i)), ''))`,
       })
       .where(and(eq(listRecords.listTypeId, typeId), sql`jsonb_typeof(${listRecords.values} -> ${f.key}) = 'array'`));
   }

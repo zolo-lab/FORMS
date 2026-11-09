@@ -158,6 +158,8 @@ export async function createOrgFieldDef(input: { label: string; key?: string; ty
   } else key = suggestKey(label, taken);
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(organizationFieldDefs);
   const choice = input.type === "select";
+  // A choice nobody could pick from is refused.
+  if (choice && !input.options?.some((o) => o.trim())) return { ok: false, reason: "type" };
   await db.insert(organizationFieldDefs).values({ key, label, type: choice ? "select" : dictionaryType(input.type, true), options: choice ? (input.options ?? []) : [], order: Number(n) });
   return { ok: true, key };
 }

@@ -162,26 +162,40 @@ export function FieldDialog({
   const [changed, setChanged] = useState<Record<string, string[]>>({});
   const picks: Record<string, string[]> = Object.fromEntries(rows.map((r) => [r.id, changed[r.id] ?? asArray(r.values[field.key])]));
   const choices = options.map((o) => o.trim()).filter(Boolean);
+  const saveCells = async () => {
+    // Only the records whose choice changed, each kept to the options that are left.
+    const failed: string[] = [];
+    for (const row of rows) {
+      const edit = changed[row.id];
+      if (!edit) continue;
+      const next = edit.filter((p) => choices.includes(p));
+      const r = await setCellAction(typeId, row.id, field.key, multi || field.multi ? next : (next[0] ?? ""));
+      if (!r.ok) failed.push(listTitle(row.values, fields));
+    }
+    return failed;
+  };
   const save = () =>
     start(async () => {
       setError("");
+      // One pick each: a record left with several is pointed out, never cut down unseen.
+      if (select && !multi) {
+        const many = rows.filter((r) => (picks[r.id] ?? []).length > 1).map((r) => listTitle(r.values, fields));
+        if (many.length) return setError(`בחרו ערך אחד בלבד אצל: ${many.join(", ")}`);
+      }
+      // Going from several to one, the records are fixed first, so the field never holds a list it no longer allows.
+      const cellsFirst = select && field.kind === "select" && field.multi && !multi;
+      if (cellsFirst) {
+        const failed = await saveCells();
+        if (failed.length) return setError(`לא נשמר אצל: ${failed.join(", ")}`);
+      }
       if (!field.fixed) {
         // A field just turned into a choice with no options typed takes the values its records hold (read on the server).
         const derive = select && kind !== field.kind && !options.some((o) => o.trim());
         const r = await updateFieldAction(typeId, field.id, { label, ...(kind !== field.kind ? { kind } : {}), ...(select ? { multi, ...(derive ? {} : { options }) } : {}) });
         if (!r.ok) return setError(r.error);
       }
-      if (select) {
-        // Only the records whose choice changed, each kept to the options that are left.
-        const failed: string[] = [];
-        for (const row of rows) {
-          const edit = changed[row.id];
-          if (!edit) continue;
-          const next = edit.filter((p) => choices.includes(p));
-          if (JSON.stringify(next) === JSON.stringify(asArray(row.values[field.key]))) continue;
-          const r = await setCellAction(typeId, row.id, field.key, multi ? next : (next[0] ?? ""));
-          if (!r.ok) failed.push(listTitle(row.values, fields));
-        }
+      if (select && !cellsFirst) {
+        const failed = await saveCells();
         if (failed.length) return setError(`לא נשמר אצל: ${failed.join(", ")}`);
       }
       onClose();
