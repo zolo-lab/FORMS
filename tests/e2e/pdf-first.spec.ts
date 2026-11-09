@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, newFormFromPdf } from "./helpers";
+import { login, newFormFromPdf, openEditView } from "./helpers";
 
 // Every form starts from a PDF: duplicate keeps it, tabs lead with the document.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -12,14 +12,14 @@ test("PDF-first: tab order and duplicate keeps the document", async ({ page }) =
   await newFormFromPdf(page, title);
   await expect(page.getByText(/source\.pdf/)).toBeVisible({ timeout: 30_000 });
   const tabs = await page.getByRole("tab").allTextContents();
-  expect(tabs[0]).toContain("PDF");
-  expect(tabs[1]).toContain("רספונסיבי");
+  expect(tabs[0]).toBe("עריכה");
+  expect(await page.getByRole("tablist", { name: "תצוגת העריכה" }).getByRole("tab").allTextContents()).toEqual(["PDF", "רספונסיבי"]);
   await expect(page.getByRole("button", { name: "הסרת ה-PDF מהטופס" })).toHaveCount(0);
 
   await page.goto("/admin/forms");
   const row = page.locator("li, tr, div").filter({ hasText: title }).filter({ has: page.getByRole("button", { name: "שכפול" }) }).last();
   await row.getByRole("button", { name: "שכפול" }).click();
   await page.waitForURL(/\/admin\/forms\/[0-9a-f-]{36}/, { timeout: 30_000 });
-  await page.getByRole("tab", { name: "PDF", exact: true }).click();
+  await openEditView(page, "PDF");
   await expect(page.getByText(/source\.pdf/)).toBeVisible({ timeout: 30_000 });
 });

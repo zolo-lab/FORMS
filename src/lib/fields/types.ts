@@ -37,6 +37,9 @@ export const DICTIONARY_TYPE_LABELS: Record<DictionaryType, string> = {
 
 export const isOrgFieldType = (type: string) => (ORG_FIELD_TYPES as readonly string[]).includes(type);
 
+/** An organization field can also be a choice of one option (on the lists screen); its value is still one line. */
+export const isOrgFieldKind = (type: string) => type === "select" || isOrgFieldType(type);
+
 export function dictionaryType(raw: unknown, forOrg = false): DictionaryType {
   const list: readonly string[] = forOrg ? ORG_FIELD_TYPES : DICTIONARY_TYPES;
   return typeof raw === "string" && list.includes(raw) ? (raw as DictionaryType) : "short_text";

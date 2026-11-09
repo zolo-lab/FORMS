@@ -16,6 +16,8 @@ export function resolveOptions(
   field: { options?: FieldOption[]; optionsSource?: string },
   lookups: Lookups = STATIC_LOOKUPS,
 ): FieldOption[] {
-  if (field.optionsSource) return lookups[field.optionsSource] ?? [];
+  // A choice linked to the organizations' list carries a copy of all its options: shown where no organization is
+  // known (the builder's preview); with an organization the server narrows them (see linked.ts).
+  if (field.optionsSource) return lookups[field.optionsSource] ?? (field.optionsSource.startsWith("org.fields.") ? field.options : undefined) ?? [];
   return field.options ?? [];
 }

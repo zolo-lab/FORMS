@@ -15,6 +15,8 @@ import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { allowedOrgs, linkOrg, linkProject, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
+import { withOrgOptions } from "@/lib/forms/linked";
+import { orgListFields } from "@/server/lists-store";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { getFile } from "./storage";
@@ -62,7 +64,8 @@ export async function publicForm(formId: string, orgSlug?: string | null, projec
   const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
   const role = publicRole(route.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
-  const definition = lockOrgFields(viewFor(role));
+  // Choices linked to the organizations' list show this organization's options only (and are checked against them).
+  const definition = withOrgOptions(lockOrgFields(viewFor(role)), org.fieldValues, await orgListFields());
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
   const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, {});
   return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, project, initialAnswers };

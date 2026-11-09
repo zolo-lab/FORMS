@@ -1,5 +1,5 @@
 {
-  "id": "c814ddce-dee9-4612-8b75-f875f7c3bab0",
+  "id": "731f4b48-c6fd-4f74-a07d-1d904c184cdc",
   "prevId": "67f7bb0f-33dc-4d54-8afb-cc2e8830aa20",
   "version": "7",
   "dialect": "postgresql",
@@ -849,74 +849,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.field_dictionary": {
-      "name": "field_dictionary",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'short_text'"
-        },
-        "order": {
-          "name": "order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "field_dictionary_key_unique": {
-          "name": "field_dictionary_key_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.form_template_versions": {
       "name": "form_template_versions",
       "schema": "",
@@ -1354,6 +1286,13 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1407,6 +1346,141 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.list_type_fields": {
+      "name": "list_type_fields",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "list_type_id": {
+          "name": "list_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'short_text'"
+        },
+        "options": {
+          "name": "options",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "multi": {
+          "name": "multi",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "parent_type_id": {
+          "name": "parent_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "list_type_fields_key_idx": {
+          "name": "list_type_fields_key_idx",
+          "columns": [
+            {
+              "expression": "list_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "list_type_fields_list_type_id_list_types_id_fk": {
+          "name": "list_type_fields_list_type_id_list_types_id_fk",
+          "tableFrom": "list_type_fields",
+          "tableTo": "list_types",
+          "columnsFrom": [
+            "list_type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "list_type_fields_parent_type_id_list_types_id_fk": {
+          "name": "list_type_fields_parent_type_id_list_types_id_fk",
+          "tableFrom": "list_type_fields",
+          "tableTo": "list_types",
+          "columnsFrom": [
+            "parent_type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.list_types": {
       "name": "list_types",
       "schema": "",
@@ -1424,18 +1498,12 @@
           "primaryKey": false,
           "notNull": true
         },
-        "fields": {
-          "name": "fields",
-          "type": "jsonb",
+        "order": {
+          "name": "order",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "display_key": {
-          "name": "display_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -2442,13 +2510,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
-        },
-        "expiry_rules": {
-          "name": "expiry_rules",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
         },
         "completion_recipients": {
           "name": "completion_recipients",

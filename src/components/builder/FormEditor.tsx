@@ -13,10 +13,12 @@ import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, s
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Download, ExternalLink, History, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
+import { ChevronDown, Download, History, Link2, Pencil, Redo2, Settings2, Undo2, Sparkles } from "lucide-react";
 import { VersionsDialog } from "./VersionsDialog";
+import { LinkedFieldsDialog } from "./LinkedFieldsDialog";
+import type { OrgListField } from "@/lib/forms/linked";
 import { FormRenderer } from "@/components/forms/FormRenderer";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FormLinks } from "@/components/forms/FormLinks";
 import { Badge } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -47,6 +49,8 @@ import type { Processing } from "@/lib/processing/types";
 import type { Recipient } from "@/lib/requests/recipients";
 
 type TabId = "edit" | "preview" | "pdf" | "steps" | "process" | "expiry" | "json";
+/** The tabs above: "עריכה" stands for both the PDF and the responsive form (switched just below it). */
+type TopTab = Exclude<TabId, "edit" | "pdf"> | "build";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
 type SaveState = "saved" | "saving" | "dirty" | "error";
 
@@ -65,6 +69,8 @@ export interface FormEditorProps {
   groups?: { id: string; name: string }[];
   /** The organizations' own fields, offered in "מילוי אוטומטי" (filled from the request's organization). */
   orgFields?: { key: string; label: string }[];
+  /** The organizations' list (name, number and their own fields): the "שדות מקושרים" dialog links form fields to it. */
+  orgList?: OrgListField[];
   /** The form's steps ("שלבי הטופס"), edited in their own tab; each field belongs to one of them. */
   flow?: {
     packageId: string;
@@ -101,7 +107,7 @@ const dateFieldsOf = (def: FormDefinition, steps: { role: string }[] = [], moves
 const EXPIRY_FOLLOW_ERROR = "השלבים נשמרו, אבל כללי התוקף לא עודכנו לפיהם – שמרו אותם בלשונית כללי תוקף";
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
-export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], flow, linkOrgs = [] }: FormEditorProps) {
+export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], flow, linkOrgs = [] }: FormEditorProps) {
   // Form pages used to be titled "שלב N", which reads like a step of the form: they are "עמוד N".
   const [def, setDef] = useState(() => ({ ...initial, pages: initial.pages.map((p) => (/^שלב \d+$/.test(p.title?.trim() ?? "") ? { ...p, title: p.title!.trim().replace(/^שלב/, "עמוד") } : p)) }));
   // The steps being edited (kept here so switching tabs never loses them) and the ones last saved.
@@ -192,10 +198,25 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [past, setPast] = useState<HistoryEntry[]>([]);
   const [future, setFuture] = useState<HistoryEntry[]>([]);
   const [selection, setSelection] = useState<Selection | null>({ kind: "page", index: 0 });
-  const [tab, setTab] = useState<TabId>(initialTab);
+  const [tab, setTabState] = useState<TabId>(initialTab);
+  // "עריכה" holds two views of the same fields, the PDF and the responsive form; it reopens on the one used last.
+  const building = tab === "pdf" || tab === "edit";
+  const [lastBuild, setLastBuild] = useState<"pdf" | "edit">(initialTab === "edit" ? "edit" : "pdf");
+  const setTab = (t: TabId) => { if (t === "pdf" || t === "edit") setLastBuild(t); setTabState(t); };
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  // The "כלים" menu closes on a click anywhere outside it.
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (e: PointerEvent) => {
+      const menu = toolsRef.current;
+      if (menu?.open && !menu.contains(e.target as Node)) menu.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+  const [linkedOpen, setLinkedOpen] = useState(false);
   const [save, setSave] = useState<SaveState>("saved");
-  const [version, setVersion] = useState(initialVersion);
   const [published, setPublished] = useState(initiallyPublished);
   const [pdf, setPdfState] = useState<PdfState | null>(() => initialPdf && { ...initialPdf, mapping: { ...initialPdf.mapping, stamps: pruneStamps(initial, initialPdf.mapping.stamps) } });
   // The latest boxes, for handlers that run before React re-renders (kept in step with every write below).
@@ -301,7 +322,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       setSave("saving");
       const r = await saveDraftAction(templateId, def, { pdfFileId: pdf?.file.id ?? null, pdfMapping: pdf?.mapping ?? null });
       if ("error" in r) { setSave("error"); return; }
-      setVersion(r.version);
       setPublished(false);
       setSave("saved");
       const then = afterSave.current;
@@ -461,7 +481,6 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     const r = await publishAction(templateId);
     if (!r.ok) { setSave("error"); setIssues(r.issues); return; }
     setIssues([]);
-    setVersion(r.version);
     setPublished(true);
     setSave("saved");
   }
@@ -473,43 +492,63 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     <div className="flex h-[calc(100dvh-3rem)] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b bg-card px-4 py-2">
         <Link href="/admin/forms" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground">← טפסים</Link>
-        {/* The editable title is an input, so the page has no heading of its own without this. */}
-        <h1 className="sr-only">{`עריכת טופס: ${def.title || "ללא שם"}`}</h1>
-        <Input
-          aria-label="שם הטופס"
-          value={def.title}
-          onChange={(e) => commit({ ...def, title: e.target.value })}
-          className="h-9 max-w-xs font-semibold"
-        />
-        <Badge tone={published ? "success" : "warning"}>{published ? `גרסה ${version} פורסמה` : `טיוטה (גרסה ${version})`}</Badge>
+        {/* The name is the page's heading; the pencil next to it turns it into a field to edit (Enter or leaving ends). */}
+        {editingTitle ? (
+          <Input
+            aria-label="שם הטופס"
+            autoFocus
+            value={def.title}
+            onChange={(e) => commit({ ...def, title: e.target.value })}
+            onBlur={() => setEditingTitle(false)}
+            onKeyDown={(e) => {
+              // Enter that confirms an input-method composition is not "done".
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingTitle(false); }
+            }}
+            className="h-9 max-w-xs font-semibold"
+          />
+        ) : (
+          <div className="flex min-w-0 items-center gap-1">
+            <h1 className="truncate text-base font-semibold">{def.title || "ללא שם"}</h1>
+            <Button variant="ghost" size="icon" className="size-11 shrink-0 sm:size-8" aria-label="עריכת שם הטופס" title="עריכת שם הטופס" onClick={() => setEditingTitle(true)}>
+              <Pencil className="size-4" aria-hidden />
+            </Button>
+          </div>
+        )}
+        {!published && <Badge tone="warning">טיוטה</Badge>}
         <span role="status" className="text-xs text-muted-foreground">{SAVE_LABEL[save]}</span>
         {published && <FormLinks formId={templateId} title={initial.title} orgs={linkOrgs} />}
-        <Tabs<TabId>
-          // Five tabs are wider than a phone: the strip scrolls sideways instead of overflowing the header,
-          // which on a 390px screen pushed the builder's layout out from under the pointer.
+        <Tabs<TopTab>
+          // The strip scrolls sideways on a phone instead of overflowing the header, which on a 390px screen pushed
+          // the builder's layout out from under the pointer.
           className="-mb-2 max-w-full self-end overflow-x-auto overflow-y-hidden border-b-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:mb-0 [&>button]:shrink-0"
-          value={tab}
-          onChange={(t) => { setTab(t); if (t === "json") { setJsonText(exportJson); setJsonError(null); } }}
+          value={building ? "build" : (tab as TopTab)}
+          onChange={(t) => {
+            if (t === "build") { setTab(lastBuild); return; }
+            setTab(t);
+            if (t === "json") { setJsonText(exportJson); setJsonError(null); }
+          }}
           tabs={[
-            { id: "pdf", label: "PDF" },
-            { id: "edit", label: "רספונסיבי" },
-            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבי הטופס •" : "שלבי הטופס" }] : []),
+            { id: "build", label: "עריכה" },
+            ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבים •" : "שלבים" }] : []),
             ...(flow?.expiry ? [{ id: "expiry" as const, label: expDirty ? "כללי תוקף •" : "כללי תוקף" }] : []),
-            ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד טופס •" : "עיבוד טופס" }] : []),
+            ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד •" : "עיבוד" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
           ]}
         />
         <div className="ms-auto flex flex-wrap items-center gap-1">
-          <details className="relative">
+          <details
+            ref={toolsRef}
+            className="relative"
+            // Choosing an item closes the menu (a click outside it closes it too, see the effect above).
+            onClick={(e) => { if ((e.target as HTMLElement).closest("button, a")) toolsRef.current?.removeAttribute("open"); }}
+          >
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">כלים<ChevronDown className="size-4" aria-hidden /></summary>
             <div className="absolute end-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border bg-card p-1 shadow-md">
-              <Button variant="ghost" size="sm" className="justify-start" onClick={() => { setTab("edit"); setSelection(null); }}>
-                <Settings2 className="size-4" />הגדרות הטופס
+              <Button variant="ghost" size="sm" className="justify-start" onClick={() => setLinkedOpen(true)} title="שדות שמתמלאים מהעמותה של הבקשה, ושדות בחירה שמציגים את האפשרויות שלה">
+                <Link2 className="size-4" />שדות מקושרים
               </Button>
-              <a href={`/preview/form/${templateId}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm", className: "justify-start" })}>
-                <ExternalLink className="size-4" />צפייה בטופס (בחלון חדש)
-              </a>
               <Button variant="ghost" size="sm" className="justify-start" onClick={autoIds} title="שם באנגלית לכל שדה לפי התווית, לשדות שעדיין אין להם">
                 <Sparkles className="size-4" />שמות מזהים לשדות
               </Button>
@@ -535,6 +574,14 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
       </div>
 
       <VersionsDialog templateId={templateId} open={versionsOpen} onClose={() => setVersionsOpen(false)} />
+      <LinkedFieldsDialog
+        open={linkedOpen}
+        onClose={() => setLinkedOpen(false)}
+        def={def}
+        listFields={orgList}
+        page={selection?.kind === "page" ? selection.index : selection?.kind === "field" ? (findLocation(def, selection.id)?.page ?? 0) : 0}
+        onChange={(d) => commit(d)}
+      />
       <CheckboxLinksDialog
         suggestions={links}
         onClose={() => setLinks(null)}
@@ -571,6 +618,17 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           </span>
           <Button size="sm" onClick={savePick}>שמירה</Button>
           <Button variant="ghost" size="sm" onClick={() => setPicking(null)}>ביטול</Button>
+        </div>
+      )}
+      {building && (
+        <div className="flex items-center gap-3 border-b bg-card px-4">
+          <Tabs<"pdf" | "edit">
+            aria-label="תצוגת העריכה"
+            className="border-b-0 [&>button]:min-h-11"
+            value={tab as "pdf" | "edit"}
+            onChange={setTab}
+            tabs={[{ id: "pdf", label: "PDF" }, { id: "edit", label: "רספונסיבי" }]}
+          />
         </div>
       )}
       {!picking && views && (tab === "edit" || tab === "pdf") && (
@@ -671,6 +729,22 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
               />
             </div>
             <aside className="order-3 rounded-lg border bg-card p-3 lg:order-none lg:overflow-auto" aria-label="הגדרות">
+              {selection && (
+                // A field or a page is shown; the form's own settings are one click away.
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-2 min-h-11 justify-start sm:min-h-9"
+                  onClick={(e) => {
+                    // The button goes away with the switch: keyboard focus moves to the first setting, not to nowhere.
+                    const panel = e.currentTarget.closest("aside");
+                    setSelection(null);
+                    requestAnimationFrame(() => panel?.querySelector<HTMLElement>("input, textarea, select")?.focus());
+                  }}
+                >
+                  <Settings2 className="size-4" aria-hidden />הגדרות הטופס
+                </Button>
+              )}
               {selectedField ? (
                 <FieldSettings
                   key={selectedField.id}
@@ -679,6 +753,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   stamps={pdf?.mapping.stamps}
                   groups={groups}
                   orgFields={orgFields}
+                  orgChoices={orgList.filter((f) => f.kind === "select")}
                   steps={views}
                   onPatch={(patch) => commit(updateField(def, selectedField.id, patch))}
                   onDefChange={(d) => commit(d)}

@@ -181,11 +181,13 @@ function LinkToBox({ def, field, stamps, onPatch }: { def: FormDefinition; field
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [], orgFields = [],
+  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [], orgFields = [], orgChoices = [],
 }: {
   def: FormDefinition;
   /** The organizations' own fields: choosing one fills the field from the request's organization, read-only. */
   orgFields?: { key: string; label: string }[];
+  /** The organizations' choice fields: a choice here can take its options from one (each organization sees its own). */
+  orgChoices?: { key: string; label: string; options: string[] }[];
   /** The form's places on the PDF, to find the box a field belongs to ("קשר לתיבה שמעל"). */
   stamps?: PdfStamp[];
   field: FormField;
@@ -291,8 +293,17 @@ export function FieldSettings({
       {meta.hasOptions && (
         <Section title="אפשרויות">
           <Row label="מקור הרשימה">
-            <Select value={field.optionsSource ?? ""} onChange={(e) => onPatch({ optionsSource: e.target.value || undefined })}>
+            <Select
+              value={field.optionsSource ?? ""}
+              onChange={(e) => {
+                const v = e.target.value || undefined;
+                const fromOrg = orgChoices.find((c) => `org.fields.${c.key}` === v);
+                // Taken from the organizations' list: a copy of all its options, for the preview and the PDF.
+                onPatch(fromOrg ? { optionsSource: v, options: fromOrg.options.map((o) => ({ value: o, label: o })) } : { optionsSource: v });
+              }}
+            >
               <option value="">רשימה ידנית</option>
+              {orgChoices.map((c) => <option key={c.key} value={`org.fields.${c.key}`}>מהעמותה: {c.label}</option>)}
               <option value="banks">בנקים</option>
               <option value="cities">יישובים (יתחבר בשלב 3)</option>
               <option value="costCenters:1">מרכזי רווח – רמה 1 (יתחבר בשלב 3)</option>
@@ -301,6 +312,9 @@ export function FieldSettings({
               {field.type === "dropdown" && groups.map((g) => <option key={g.id} value={`${GROUP_SOURCE_PREFIX}${g.id}`}>קבוצה: {g.name}</option>)}
               {groupIdOfSource(field.optionsSource) && !groups.some((g) => `${GROUP_SOURCE_PREFIX}${g.id}` === field.optionsSource) && <option value={field.optionsSource}>קבוצה (נמחקה)</option>}
             </Select>
+            {field.optionsSource?.startsWith("org.fields.") && (
+              <p className="text-xs text-muted-foreground">כל עמותה תראה רק את האפשרויות שסומנו לה במסך הרשימות (אם לא סומן כלום – את כולן).</p>
+            )}
             {groupIdOfSource(field.optionsSource) && (
               <p className="text-xs text-muted-foreground">הרשימה מציגה את חברי הקבוצה. בשלבי הטופס אפשר לבחור לשלב &quot;המייל שמולא בשדה של שלב קודם&quot; ואת השדה הזה, והנבחר יקבל את השלב.</p>
             )}
