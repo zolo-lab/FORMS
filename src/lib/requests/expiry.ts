@@ -195,9 +195,9 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
   const rule = normalizeExpiryRule(raw);
   if (!rule) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
   if (rule.kind === "cases") {
-    const name = (id: string) => (id === TODAY_FIELD ? "היום" : `"${fieldLabel?.(id) ?? id}"`);
+    const name = (id: string) => (id === TODAY_FIELD ? "התאריך הנוכחי" : `"${fieldLabel?.(id) ?? id}"`);
     const cond = (c: ExpiryCondition) => c.type === "day"
-      ? `${c.fieldId === TODAY_FIELD ? "התאריך של היום" : `היום בחודש של ${name(c.fieldId)}`} ${c.op === "lte" ? `עד ${c.day}` : `אחרי ה-${c.day}`}${c.fieldId === TODAY_FIELD ? " בחודש" : ""}`
+      ? `${c.fieldId === TODAY_FIELD ? "התאריך הנוכחי" : `היום בחודש של ${name(c.fieldId)}`} ${c.op === "lte" ? `עד ${c.day}` : `אחרי ה-${c.day}`}${c.fieldId === TODAY_FIELD ? " בחודש" : ""}`
       : c.op === "past" ? `${name(c.fieldId)} כבר עבר` : c.op === "within" ? `${name(c.fieldId)} בתוך ${c.days} ימים` : `${name(c.fieldId)} בעוד יותר מ-${c.days} ימים`;
     return [...rule.cases.map((c) => `אם ${cond(c.when)}: ${describeExpiryRule(c.then, fieldLabel)}`), `אחרת: ${describeExpiryRule(rule.otherwise, fieldLabel)}`].join("; ");
   }

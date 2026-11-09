@@ -270,6 +270,6 @@ describe("a condition on today's date", () => {
     expect(expiryFor(rule, {}, { sent, today: new Date("2026-11-25T08:00:00Z") })).toEqual(endOfDayIsrael(2026, 12, 20));
     expect(expiryRuleFields(rule)).toEqual([]);
     expect(comparesToday(rule)).toBe(true);
-    expect(describeExpiryRule(rule)).toBe("אם התאריך של היום עד 20 בחודש: ה-20 באותו חודש של השליחה; אחרת: ה-20 בחודש שאחרי השליחה");
+    expect(describeExpiryRule(rule)).toBe("אם התאריך הנוכחי עד 20 בחודש: ה-20 באותו חודש של השליחה; אחרת: ה-20 בחודש שאחרי השליחה");
   });
 });

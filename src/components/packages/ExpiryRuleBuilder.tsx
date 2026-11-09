@@ -3,12 +3,11 @@
 import { useState } from "react";
 import { ArrowLeft, CalendarClock, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_EXPIRY_DAYS, TODAY_FIELD, describeExpiryRule, expiryFor, expiryRuleFields, holds,
+  DEFAULT_EXPIRY_DAYS, TODAY_FIELD, comparesToday, expiryFor, expiryRuleFields, holds,
   type ExpiryBase, type ExpiryCalc, type ExpiryCase, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
 } from "@/lib/requests/expiry";
 
@@ -19,19 +18,22 @@ type BaseKind = "sent" | "stepStart";
 
 const BASE_LABEL: Record<BaseKind, string> = { sent: "שליחת הבקשה", stepStart: "תחילת השלב" };
 const SNAP_LABEL: Record<ExpirySnap["mode"], string> = {
-  same: "באותו חודש",
-  next: "בחודש שאחריו",
-  sameOrNext: "באותו חודש, ואם כבר עבר – בחודש שאחריו",
+  same: "בחודש של",
+  next: "בחודש שאחרי",
+  sameOrNext: "הקרוב אחרי",
 };
 type CondKey = "day-lte" | "day-gt" | "today-past" | "today-within" | "today-beyond";
-const COND_LABEL: Record<CondKey, string> = {
-  "day-lte": "חל עד היום ה־… בחודש",
-  "day-gt": "חל אחרי היום ה־… בחודש",
-  "today-past": "כבר עבר",
-  "today-within": "בעוד … ימים או פחות",
-  "today-beyond": "בעוד יותר מ־… ימים",
+/** The operator, and the words after its number. */
+const COND: Record<CondKey, { label: string; suffix?: string }> = {
+  "day-lte": { label: "חל עד ה־", suffix: "בחודש" },
+  "day-gt": { label: "חל אחרי ה־", suffix: "בחודש" },
+  "today-past": { label: "כבר עבר" },
+  "today-within": { label: "יחול בתוך", suffix: "ימים" },
+  "today-beyond": { label: "יחול בעוד יותר מ־", suffix: "ימים" },
 };
 const condKey = (c: ExpiryCondition): CondKey => `${c.type}-${c.op}` as CondKey;
+type Kind = "days" | "months" | "fixed" | "none";
+const KIND_LABEL: Record<Kind, string> = { days: "לפי ימים", months: "לפי חודשים", fixed: "ביום קבוע בחודש", none: "ללא תוקף" };
 const MAX_CASES = 10;
 const fmt = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric" });
 const ymd = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
@@ -40,89 +42,94 @@ const noonOf = (day: string) => new Date(`${day}T10:00:00Z`);
 const num = (v: string, min: number, max: number) => Math.min(max, Math.max(min, Math.round(Number(v)) || 0));
 
 /**
- * One rule as a sentence: "הקישור נסגר [7] [ימים] אחרי [תחילת השלב]", and optionally "ואז ביום [20] [באותו חודש]".
- * `amount + unit` stand for addDays or addMonths (an older rule with both shows its days and keeps its months).
+ * When the link closes, as one sentence after `lead` ("סגירת הקישור:" / "אז" / "אחרת"):
+ * [לפי ימים] [7] ימים אחרי [תאריך] · [לפי חודשים] [1] חודשים אחרי [תאריך] · [ביום קבוע בחודש] ה־[7] [בחודש שאחרי]
+ * [תאריך] · [ללא תוקף] (only where `allowNone`). An older rule that both adds time and moves to a fixed day shows as
+ * a fixed day, with what it adds first noted.
  */
-function RuleSentence({ id, value, onChange, dateFields, bases }: { id: string; value: ExpiryCalc; onChange: (v: ExpiryCalc) => void; dateFields: DateFieldOption[]; bases: BaseKind[] }) {
-  // The unit lives in the rule: months are kept as `addMonths` even at 0, so the choice survives (and follows the
-  // rule when its case moves); saving drops the 0.
-  const unit: "days" | "months" = value.addMonths !== undefined && !value.addDays ? "months" : "days";
-  const set = (patch: Partial<ExpiryCalc>) => {
-    const next: ExpiryCalc = { ...value, ...patch };
-    if (!next.addDays) delete next.addDays;
-    if (next.addMonths === undefined || (!next.addMonths && next.addDays)) delete next.addMonths;
-    if (!next.snap) delete next.snap;
-    onChange(next);
+function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNone }: {
+  id: string; lead: string; value: ExpiryOutcome; onChange: (v: ExpiryOutcome) => void; dateFields: DateFieldOption[]; bases: BaseKind[]; allowNone?: boolean;
+}) {
+  const calc = value.kind === "calc" ? value : null;
+  const kind: Kind = !calc ? "none" : calc.snap ? "fixed" : calc.addMonths !== undefined && !calc.addDays ? "months" : "days";
+  const base: ExpiryBase = calc?.base ?? ({ from: bases[0]! } as ExpiryBase);
+  const setKind = (k: Kind) => {
+    if (k === kind) return;
+    if (k === "none") onChange({ kind: "none" });
+    else if (k === "days") onChange({ kind: "calc", base, addDays: calc?.addDays || 7 });
+    else if (k === "months") onChange({ kind: "calc", base, addMonths: calc?.addMonths || 1 });
+    else onChange({ kind: "calc", base, snap: { day: 7, mode: "next" } });
   };
-  const amount = unit === "months" ? (value.addMonths ?? 0) : (value.addDays ?? 0);
-  const fieldId = value.base.from === "field" ? value.base.fieldId : null;
-  const baseValue = fieldId !== null ? `field:${fieldId}` : value.base.from;
-  const missing = fieldId !== null && !usableOf(dateFields).some((f) => f.id === fieldId);
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
-        <span className="font-medium">הקישור נסגר</span>
-        <Input id={`${id}-amount`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={amount}
-          onChange={(e) => { const n = num(e.target.value, 0, unit === "months" ? 120 : 3650); set(unit === "months" ? { addMonths: n } : { addDays: n }); }} />
-        <Select id={`${id}-unit`} aria-label="יחידה" className="w-auto" value={unit}
-          onChange={(e) => set(e.target.value === "months" ? { addMonths: amount, addDays: undefined } : { addDays: amount, addMonths: undefined })}>
-          <option value="days">ימים</option>
-          <option value="months">חודשים</option>
-        </Select>
-        <span className="font-medium">אחרי</span>
-        <Select id={`${id}-base`} aria-label="אחרי מה" className="w-auto min-w-0 max-w-full flex-1" value={baseValue} onChange={(e) => {
-          const v = e.target.value;
-          set({ base: v.startsWith("field:") ? { from: "field", fieldId: v.slice(6) } : { from: v as BaseKind } });
-        }}>
-          {bases.map((b) => <option key={b} value={b}>{BASE_LABEL[b]}</option>)}
-          {dateFields.length > 0 && (
-            <optgroup label="תאריך מהטופס">
-              {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
-            </optgroup>
-          )}
-          {fieldId !== null && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שלא זמין כאן</option>}
-        </Select>
-      </div>
-      {unit === "days" && !!value.addMonths && <p className="text-xs text-muted-foreground">ועוד {value.addMonths} חודשים (מכלל קודם).</p>}
-      {missing && (
-        <p role="alert" className="text-sm text-destructive">התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו אחר – בלי תאריך תקין נספרים {value.fallbackDays ?? DEFAULT_EXPIRY_DAYS} ימים.</p>
+  const fieldId = base.from === "field" ? base.fieldId : null;
+  const baseValue = fieldId !== null ? `field:${fieldId}` : base.from;
+  const missing = !!calc && fieldId !== null && !usableOf(dateFields).some((f) => f.id === fieldId);
+  const baseSelect = calc && (
+    <Select id={`${id}-base`} aria-label="מאיזה תאריך" className="w-auto max-w-full" value={baseValue} onChange={(e) => {
+      const v = e.target.value;
+      onChange({ ...calc, base: v.startsWith("field:") ? { from: "field", fieldId: v.slice(6) } : { from: v as BaseKind } });
+    }}>
+      {bases.map((b) => <option key={b} value={b}>{BASE_LABEL[b]}</option>)}
+      {dateFields.length > 0 && (
+        <optgroup label="תאריך מהטופס">
+          {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
+        </optgroup>
       )}
-
-      <div className="space-y-2">
-        <label className="flex min-h-10 items-center gap-2 text-sm">
-          <Checkbox checked={!!value.snap} onChange={(e) => set({ snap: e.target.checked ? { day: value.snap?.day ?? 20, mode: value.snap?.mode ?? "same" } : undefined })} />
-          לסגור תמיד ביום קבוע בחודש (למשל ב-7 לחודש)
-        </label>
-        {value.snap && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 ps-7 text-sm">
-            <Label htmlFor={`${id}-day`}>ליום</Label>
-            <Input id={`${id}-day`} type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.snap.day} onChange={(e) => set({ snap: { ...value.snap!, day: num(e.target.value, 1, 31) } })} />
-            <Select id={`${id}-snap`} aria-label="באיזה חודש" className="w-auto min-w-0 max-w-full flex-1" value={value.snap.mode} onChange={(e) => set({ snap: { ...value.snap!, mode: e.target.value as ExpirySnap["mode"] } })}>
+      {fieldId !== null && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שלא זמין כאן</option>}
+    </Select>
+  );
+  const extra = calc?.snap && (calc.addDays || calc.addMonths)
+    ? [calc.addDays ? `${calc.addDays} ימים` : "", calc.addMonths ? `${calc.addMonths} חודשים` : ""].filter(Boolean).join(" ו-")
+    : "";
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
+        <span className="font-semibold">{lead}</span>
+        <Select id={`${id}-kind`} aria-label="איך נקבעת סגירת הקישור" className="w-auto" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+          {(Object.keys(KIND_LABEL) as Kind[]).filter((k) => k !== "none" || allowNone).map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+        </Select>
+        {calc && kind === "days" && (
+          <>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <Input id={`${id}-n`} aria-label="מספר ימים" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={calc.addDays ?? 0} onChange={(e) => onChange({ ...calc, addDays: num(e.target.value, 0, 3650) })} />
+              ימים אחרי
+            </span>
+            {baseSelect}
+          </>
+        )}
+        {calc && kind === "months" && (
+          <>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <Input id={`${id}-n`} aria-label="מספר חודשים" type="number" min={0} max={120} inputMode="numeric" className="w-20" value={calc.addMonths ?? 0} onChange={(e) => onChange({ ...calc, addMonths: num(e.target.value, 0, 120) })} />
+              חודשים אחרי
+            </span>
+            {baseSelect}
+          </>
+        )}
+        {calc?.snap && (
+          <>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              ה־
+              <Input id={`${id}-n`} aria-label="היום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={calc.snap.day} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, day: num(e.target.value, 1, 31) } })} />
+            </span>
+            <Select id={`${id}-month`} aria-label="באיזה חודש" className="w-auto min-w-0 max-w-full" value={calc.snap.mode} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, mode: e.target.value as ExpirySnap["mode"] } })}>
               {(Object.keys(SNAP_LABEL) as ExpirySnap["mode"][]).map((k) => <option key={k} value={k}>{SNAP_LABEL[k]}</option>)}
             </Select>
-            {value.snap.day === 31 && <span className="basis-full text-xs text-muted-foreground">31 = היום האחרון בחודש.</span>}
-          </div>
+            {baseSelect}
+          </>
         )}
       </div>
+      {extra && <p className="text-xs text-muted-foreground">אחרי שמוסיפים {extra} לתאריך (מכלל קודם). שינוי הסוג מבטל את התוספת.</p>}
+      {calc?.snap?.day === 31 && <p className="text-xs text-muted-foreground">31 = היום האחרון בחודש.</p>}
+      {missing && (
+        <p role="alert" className="text-sm text-destructive">התאריך שנבחר לא זמין כאן (נמחק, או שממלאים אותו מאוחר יותר). בחרו אחר – בלי תאריך תקין נספרים {calc!.fallbackDays ?? DEFAULT_EXPIRY_DAYS} ימים.</p>
+      )}
     </div>
   );
 }
 
-/** What a condition (or "otherwise") leads to: a rule, or no expiry. */
-function OutcomeEditor({ id, value, onChange, dateFields, bases, fresh }: { id: string; value: ExpiryOutcome; onChange: (v: ExpiryOutcome) => void; dateFields: DateFieldOption[]; bases: BaseKind[]; fresh: () => ExpiryCalc }) {
-  return (
-    <div className="space-y-3">
-      <Select id={`${id}-kind`} aria-label="התוצאה" className="w-auto" value={value.kind} onChange={(e) => onChange(e.target.value === "none" ? { kind: "none" } : fresh())}>
-        <option value="calc">הקישור נסגר לפי כלל</option>
-        <option value="none">הקישור לא פג</option>
-      </Select>
-      {value.kind === "calc" && <RuleSentence id={id} value={value} onChange={onChange} dateFields={dateFields} bases={bases} />}
-    </div>
-  );
-}
-
-/** "אם [date field] [is …]": the day of its month against a number, or the date against today. */
-function ConditionEditor({ id, value, onChange, dateFields }: { id: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[] }) {
+/** "אם [the current date | a date of the form] [חל עד ה־ 20 בחודש | כבר עבר | יחול בתוך 7 ימים …]". */
+function ConditionSentence({ id, value, onChange, dateFields }: { id: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[] }) {
+  const key = condKey(value);
   const setKey = (k: CondKey) => {
     const [type, op] = k.split("-") as [ExpiryCondition["type"], string];
     onChange(type === "day"
@@ -130,29 +137,28 @@ function ConditionEditor({ id, value, onChange, dateFields }: { id: string; valu
       : op === "past" ? { type: "today", fieldId: value.fieldId, op: "past" } : { type: "today", fieldId: value.fieldId, op: op as "within" | "beyond", days: value.type === "today" ? (value.days ?? 7) : 7 });
   };
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold">אם</span>
-        <Select id={`${id}-field`} aria-label="איזה תאריך בודקים" className="w-auto min-w-0 max-w-full" value={value.fieldId} onChange={(e) => {
-          const fieldId = e.target.value;
-          // The current date is checked only by its day of the month.
-          onChange(fieldId === TODAY_FIELD && value.type !== "day" ? { type: "day", fieldId, op: "lte", day: 20 } : { ...value, fieldId });
-        }}>
-          <option value={TODAY_FIELD}>התאריך של היום (משתנה כל יום)</option>
-          {value.fieldId !== TODAY_FIELD && !dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שלא זמין כאן" : "בחרו תאריך…"}</option>}
-          {dateFields.map((f) => <option key={f.id} value={f.id} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
-        </Select>
-        <Select id={`${id}-op`} aria-label="התנאי" className="w-auto min-w-0 max-w-full" value={condKey(value)} onChange={(e) => setKey(e.target.value as CondKey)}>
-          {(Object.keys(COND_LABEL) as CondKey[]).filter((k) => value.fieldId !== TODAY_FIELD || k.startsWith("day-")).map((k) => <option key={k} value={k}>{COND_LABEL[k].replace("…", "N")}</option>)}
-        </Select>
-        {value.type === "day" && (
-          <Input id={`${id}-n`} aria-label="היום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.day} onChange={(e) => onChange({ ...value, day: num(e.target.value, 1, 31) })} />
-        )}
-        {value.type === "today" && value.op !== "past" && (
-          <Input id={`${id}-n`} aria-label="מספר ימים" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={value.days ?? 0} onChange={(e) => onChange({ ...value, days: num(e.target.value, 0, 3650) })} />
-        )}
-      </div>
-      {(value.type === "today" || value.fieldId === TODAY_FIELD) && <p className="text-xs text-muted-foreground">נבדק מול התאריך של כל יום מחדש – כשהמצב משתנה, התוקף מתעדכן.</p>}
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="font-semibold">אם</span>
+      <Select id={`${id}-field`} aria-label="איזה תאריך בודקים" className="w-auto min-w-0 max-w-full" value={value.fieldId} onChange={(e) => {
+        const fieldId = e.target.value;
+        // The current date is checked only by its day of the month.
+        onChange(fieldId === TODAY_FIELD && value.type !== "day" ? { type: "day", fieldId, op: "lte", day: 20 } : { ...value, fieldId });
+      }}>
+        <option value={TODAY_FIELD}>התאריך הנוכחי</option>
+        {value.fieldId !== TODAY_FIELD && !dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שלא זמין כאן" : "בחרו תאריך…"}</option>}
+        {dateFields.map((f) => <option key={f.id} value={f.id} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
+      </Select>
+      <Select id={`${id}-op`} aria-label="התנאי" className="w-auto min-w-0 max-w-full" value={key} onChange={(e) => setKey(e.target.value as CondKey)}>
+        {(Object.keys(COND) as CondKey[]).filter((k) => value.fieldId !== TODAY_FIELD || k.startsWith("day-")).map((k) => <option key={k} value={k}>{COND[k].label}</option>)}
+      </Select>
+      {COND[key].suffix && (
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          {value.type === "day"
+            ? <Input id={`${id}-n`} aria-label="יום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.day} onChange={(e) => onChange({ ...value, day: num(e.target.value, 1, 31) })} />
+            : <Input id={`${id}-n`} aria-label="מספר ימים" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={value.type === "today" ? (value.days ?? 0) : 0} onChange={(e) => onChange({ ...value, days: num(e.target.value, 0, 3650) } as ExpiryCondition)} />}
+          {COND[key].suffix}
+        </span>
+      )}
     </div>
   );
 }
@@ -177,9 +183,8 @@ function Trail({ calc, answers, start, fieldName }: { calc: ExpiryCalc; answers:
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       {chip(fromLabel, noonOf(fromDay))}
-      {arrow}
-      {chip(`+ ${unit}`, added, !calc.snap)}
-      {calc.snap && <>{arrow}{chip(`ליום ${calc.snap.day} ${SNAP_LABEL[calc.snap.mode].split(",")[0]}`, final, true)}</>}
+      {(!calc.snap || !!calc.addDays || !!calc.addMonths) && <>{arrow}{chip(`+ ${unit}`, added, !calc.snap)}</>}
+      {calc.snap && <>{arrow}{chip(`ה־${calc.snap.day} ${calc.snap.mode === "next" ? "בחודש שאחרי" : calc.snap.mode === "same" ? "באותו חודש" : "הקרוב"}`, final, true)}</>}
     </div>
   );
 }
@@ -225,11 +230,11 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const chosen = cases.findIndex((c) => holds(c.when, answers, start));
   const outcome = chosen >= 0 ? cases[chosen]!.then : otherwise;
 
-  const options: { id: Mode; title: string; hint: string; disabled?: string }[] = [
+  const options: { id: Mode; title: string; hint: string }[] = [
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
-    { id: "simple", title: "תנאי פשוט", hint: "תאריך אחד לכולם – למשל 7 ימים מתחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    { id: "complex", title: "תנאי מורכב", hint: "תאריך שונה לפי מקרה – אם… אז…, אחרת… (לפי תאריך מהטופס או לפי התאריך של היום)" },
+    { id: "simple", title: "תנאי פשוט", hint: "כלל אחד – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
+    { id: "complex", title: "תנאי מורכב", hint: "כלל שונה לפי מקרה: אם… אז…, אחרת…" },
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
@@ -248,14 +253,14 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
             </span>
           ))}
         </div>
-        {cases.length > 0 && <p className="text-sm text-muted-foreground">חל: <strong className="text-foreground">{chosen >= 0 ? `מקרה ${chosen + 1}` : "בכל מקרה אחר"}</strong></p>}
+        {cases.length > 0 && <p className="text-sm text-muted-foreground">חל: <strong className="text-foreground">{chosen >= 0 ? `"אם" מספר ${chosen + 1}` : "אחרת"}</strong></p>}
         {outcome?.kind === "calc" ? <Trail calc={outcome} answers={answers} start={start} fieldName={fieldName} /> : <p className="text-sm font-medium">הקישור לא נסגר.</p>}
       </div>
     </details>
   );
 
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="min-w-0 space-y-2">
       <legend className="mb-1.5 text-sm font-medium">תוקף הקישור</legend>
       <div role="radiogroup" aria-label="תוקף הקישור" className="space-y-2">
         {options.map((o) => {
@@ -266,7 +271,6 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 type="button"
                 role="radio"
                 aria-checked={on}
-                disabled={!!o.disabled && !on}
                 onClick={() => pick(o.id)}
                 className="flex min-h-12 w-full items-start gap-3 p-3 text-start disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -275,13 +279,13 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-medium">{o.title}</span>
-                  <span className="block text-xs text-muted-foreground">{on && value && o.id !== "none" ? describeExpiryRule(value, fieldName) : (o.disabled ?? o.hint)}</span>
+                  {!(on && (o.id === "simple" || o.id === "complex")) && <span className="block text-xs text-muted-foreground">{o.hint}</span>}
                 </span>
               </button>
 
               {on && o.id === "simple" && otherwise?.kind === "calc" && (
                 <div className="space-y-3 border-t p-3">
-                  <RuleSentence id={`${id}-simple`} value={otherwise} onChange={onChange} dateFields={dateFields} bases={bases} />
+                  <OutcomeSentence id={`${id}-simple`} lead="סגירת הקישור:" value={otherwise} onChange={onChange} dateFields={dateFields} bases={bases} />
                   {example}
                 </div>
               )}
@@ -289,23 +293,21 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
               {on && o.id === "complex" && otherwise && (
                 <div className="space-y-3 border-t p-3">
                   {cases.map((c, k) => (
-                    <section key={k} aria-label={`מקרה ${k + 1}`} className="space-y-3 rounded-lg border bg-card p-3">
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          <ConditionEditor id={`${id}-c${k}`} value={c.when} onChange={(when) => setCases(cases.map((x, j) => (j === k ? { ...x, when } : x)))} dateFields={dateFields} />
-                        </div>
-                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => setCases(cases.filter((_, j) => j !== k))} aria-label={`מחיקת מקרה ${k + 1}`}><Trash2 className="size-4" aria-hidden /></Button>
+                    <section key={k} aria-label={`מקרה ${k + 1}`} className="flex items-start gap-2 rounded-lg border bg-card p-3">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <ConditionSentence id={`${id}-c${k}`} value={c.when} onChange={(when) => setCases(cases.map((x, j) => (j === k ? { ...x, when } : x)))} dateFields={dateFields} />
+                        <OutcomeSentence id={`${id}-t${k}`} lead="אז" value={c.then} onChange={(then) => setCases(cases.map((x, j) => (j === k ? { ...x, then } : x)))} dateFields={dateFields} bases={bases} allowNone />
                       </div>
-                      <OutcomeEditor id={`${id}-t${k}`} value={c.then} onChange={(then) => setCases(cases.map((x, j) => (j === k ? { ...x, then } : x)))} dateFields={dateFields} bases={bases} fresh={fresh} />
+                      <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={cases.length === 1} onClick={() => setCases(cases.filter((_, j) => j !== k))} aria-label={`מחיקת מקרה ${k + 1}`}><Trash2 className="size-4" aria-hidden /></Button>
                     </section>
                   ))}
-                  <Button type="button" variant="ghost" size="sm" className="text-primary" disabled={cases.length >= MAX_CASES} onClick={() => setCases([...cases, newCase()])}>
-                    <Plus className="size-4" aria-hidden />עוד מקרה
-                  </Button>
-                  <section aria-label="בכל מקרה אחר" className="space-y-3 rounded-lg border bg-card p-3">
-                    <p className="text-sm font-semibold">בכל מקרה אחר</p>
-                    <OutcomeEditor id={`${id}-else`} value={otherwise} onChange={(other) => setCases(cases, other)} dateFields={dateFields} bases={bases} fresh={fresh} />
+                  <section aria-label="אחרת" className="rounded-lg border bg-card p-3">
+                    <OutcomeSentence id={`${id}-else`} lead="אחרת" value={otherwise} onChange={(other) => setCases(cases, other)} dateFields={dateFields} bases={bases} allowNone />
                   </section>
+                  <Button type="button" variant="ghost" size="sm" className="text-primary" disabled={cases.length >= MAX_CASES} onClick={() => setCases([...cases, newCase()])}>
+                    <Plus className="size-4" aria-hidden />עוד &quot;אם&quot;
+                  </Button>
+                  {value && comparesToday(value) && <p className="text-xs text-muted-foreground">תנאי על התאריך הנוכחי נבדק מחדש כל יום, והתוקף מתעדכן לפיו.</p>}
                   {example}
                 </div>
               )}
