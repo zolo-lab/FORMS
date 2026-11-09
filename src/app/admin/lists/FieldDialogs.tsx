@@ -6,6 +6,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ORG_FIELD_TYPES } from "@/lib/fields/types";
+
+/** An organization holds one line per field: the single-line kinds, or one option of a choice. */
+const ORG_KINDS: readonly ListFieldKind[] = [...ORG_FIELD_TYPES, "select"];
 import { KIND_LABELS, LIST_FIELD_KINDS, listTitle, type ListFieldKind } from "@/lib/lists/kinds";
 import type { SheetField, SheetRow, TypeSummary } from "@/server/lists-store";
 import { addFieldAction, deleteFieldAction, fieldUsageAction, setCellAction, updateFieldAction } from "./actions";
@@ -30,7 +33,7 @@ export function AddFieldDialog({
   types: TypeSummary[];
 }) {
   const isOrg = typeId === "org";
-  const kinds: readonly ListFieldKind[] = isOrg ? ORG_FIELD_TYPES : LIST_FIELD_KINDS;
+  const kinds: readonly ListFieldKind[] = isOrg ? ORG_KINDS : LIST_FIELD_KINDS;
   const parents = types.filter((t) => !t.builtin && t.id !== typeId);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<ListFieldKind>("short_text");
@@ -79,7 +82,7 @@ export function AddFieldDialog({
             ))}
           </Select>
           {KIND_HINTS[kind] && <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>}
-          {isOrg && <p className="text-xs text-muted-foreground">לעמותות אפשר כרגע להוסיף שדות של שורה אחת.</p>}
+          {isOrg && <p className="text-xs text-muted-foreground">לעמותה יש ערך אחד בכל שדה (גם בבחירה מרשימה – אפשרות אחת).</p>}
           {!isOrg && parents.length === 0 && (
             <p className="text-xs text-muted-foreground">
               &quot;שייך ל…&quot; מקשר כל רשומה כאן לרשומה מסוג רשימה אחר (למשל חנות → עיר). כשיהיה עוד סוג רשימה, הוא יופיע כאן.
@@ -90,9 +93,11 @@ export function AddFieldDialog({
           <>
             <OptionsEditor value={options} onChange={setOptions} />
             <p className="text-xs text-muted-foreground">בשלב הבא בוחרים לאילו רשומות שייכת כל אפשרות.</p>
-            <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-            </label>
+            {!isOrg && (
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
+              </label>
+            )}
           </>
         )}
         {kind === "ref" && (
@@ -139,7 +144,19 @@ export function FieldDialog({
   const [confirm, setConfirm] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, start] = useTransition();
-  const select = field.kind === "select";
+  const isOrg = typeId === "org";
+  const [kind, setKind] = useState<ListFieldKind>(field.kind);
+  const select = kind === "select";
+  const kinds = (isOrg ? ORG_KINDS : LIST_FIELD_KINDS).filter((k) => k !== "ref");
+  const changeKind = (k: ListFieldKind) => {
+    setKind(k);
+    // A field turned into a choice starts with the values its records already hold.
+    if (k === "select" && field.kind !== "select" && !options.some((o) => o.trim())) {
+      const found = [...new Set(rows.flatMap((r) => [r.values[field.key]].flat()).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.trim()))];
+      setOptions(found.length ? found : [""]);
+    }
+    if (isOrg) setMulti(false);
+  };
   const asArray = (v: unknown) => (Array.isArray(v) ? (v as string[]) : typeof v === "string" && v ? [v] : []);
   // Only what was changed here; every other record shows its current value, even if it arrives after the dialog opened.
   const [changed, setChanged] = useState<Record<string, string[]>>({});
@@ -149,7 +166,9 @@ export function FieldDialog({
     start(async () => {
       setError("");
       if (!field.fixed) {
-        const r = await updateFieldAction(typeId, field.id, { label, ...(select ? { options, multi } : {}) });
+        // A field just turned into a choice with no options typed takes the values its records hold (read on the server).
+        const derive = select && kind !== field.kind && !options.some((o) => o.trim());
+        const r = await updateFieldAction(typeId, field.id, { label, ...(kind !== field.kind ? { kind } : {}), ...(select ? { multi, ...(derive ? {} : { options }) } : {}) });
         if (!r.ok) return setError(r.error);
       }
       if (select) {
@@ -210,16 +229,30 @@ export function FieldDialog({
               <Input id="edit-label" value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={80} />
             </div>
           )}
-          <p className="text-sm">
-            <span className="text-muted-foreground">סוג: </span>
-            {KIND_LABELS[field.kind]}
-          </p>
+          {field.fixed || field.kind === "ref" ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">סוג: </span>
+              {KIND_LABELS[field.kind]}
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-kind">סוג</Label>
+              <Select id="edit-kind" value={kind} onChange={(e) => changeKind(e.target.value as ListFieldKind)}>
+                {kinds.map((k) => (
+                  <option key={k} value={k}>{KIND_LABELS[k]}</option>
+                ))}
+              </Select>
+              {kind !== field.kind && <p className="text-xs text-muted-foreground">הערכים שכבר מולאו נשארים כמו שהם.</p>}
+            </div>
+          )}
           {select && !assignFirst && (
             <>
               <OptionsEditor value={options} onChange={setOptions} />
-              <label className="flex min-h-11 items-center gap-2 text-sm">
-                <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
-              </label>
+              {!isOrg && (
+                <label className="flex min-h-11 items-center gap-2 text-sm">
+                  <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} /> אפשר לבחור כמה אפשרויות
+                </label>
+              )}
             </>
           )}
           {select && rows.length > 0 && choices.length > 0 && (

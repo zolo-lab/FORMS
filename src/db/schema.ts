@@ -104,6 +104,8 @@ export const organizationFieldDefs = pgTable("organization_field_defs", {
   label: text("label").notNull(),
   /** The field type a form field gets when it is added from this definition (single-line types only). */
   type: text("type").notNull().default("short_text"),
+  /** For a choice field (`type` "select"): the options an organization picks one of. */
+  options: jsonb("options").$type<string[]>().notNull().default([]),
   order: integer("order").notNull().default(0),
   ...timestamps,
 });

@@ -6,7 +6,7 @@
 import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
-import { isOrgFieldType } from "@/lib/fields/types";
+import { isOrgFieldKind } from "@/lib/fields/types";
 import { cleanCell, cleanOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
@@ -124,7 +124,7 @@ async function fieldsOf(typeId: string): Promise<SheetField[]> {
     return [
       { id: "org:name", key: NAME, label: "שם", kind: "short_text", options: [], multi: false, parentTypeId: null, fixed: true },
       { id: "org:reg", key: REG, label: 'ח"פ', kind: "id_number", options: [], multi: false, parentTypeId: null, fixed: true },
-      ...defs.map((d) => ({ id: d.id, key: d.key, label: d.label, kind: (isListFieldKind(d.type) ? d.type : "short_text") as ListFieldKind, options: [], multi: false, parentTypeId: null })),
+      ...defs.map((d) => ({ id: d.id, key: d.key, label: d.label, kind: (isListFieldKind(d.type) ? d.type : "short_text") as ListFieldKind, options: d.options ?? [], multi: false, parentTypeId: null })),
     ];
   }
   const rows = await db.select().from(listTypeFields).where(eq(listTypeFields.listTypeId, typeId)).orderBy(asc(listTypeFields.order), asc(listTypeFields.createdAt));
@@ -172,13 +172,14 @@ export async function addField(typeId: string, input: FieldInput): Promise<Resul
   const label = cleanName(input.label);
   if (!label) return fail("צריך שם לשדה");
   if (!isListFieldKind(input.kind)) return fail("סוג שדה לא מוכר");
-  if (typeId === ORG_TYPE) {
-    if (!isOrgFieldType(input.kind)) return fail("לעמותות אפשר להוסיף כרגע רק שדות של שורה אחת");
-    const r = await createOrgFieldDef({ label, type: input.kind });
-    return r.ok ? { ok: true, key: r.key } : fail(r.reason === "exists" ? "כבר יש שדה בשם הזה" : "השדה לא נוסף");
-  }
   const options = cleanOptions(input.options);
   if (input.kind === "select" && options.length === 0) return fail("שדה בחירה צריך לפחות אפשרות אחת");
+  if (typeId === ORG_TYPE) {
+    // An organization's value is one line: a text kind, or one option of a choice.
+    if (!isOrgFieldKind(input.kind)) return fail("לעמותות אפשר להוסיף שדה של שורה אחת או בחירה מרשימה");
+    const r = await createOrgFieldDef({ label, type: input.kind, options: input.kind === "select" ? options : [] });
+    return r.ok ? { ok: true, key: r.key } : fail(r.reason === "exists" ? "כבר יש שדה בשם הזה" : "השדה לא נוסף");
+  }
   let parentTypeId: string | null = null;
   if (input.kind === "ref") {
     parentTypeId = input.parentTypeId ?? null;
@@ -205,30 +206,78 @@ export async function addField(typeId: string, input: FieldInput): Promise<Resul
 }
 
 /** The name, the options (for a choice) or one/several of a field. The internal name and the kind stay. */
-export async function updateField(typeId: string, fieldId: string, patch: { label?: string; options?: unknown; multi?: boolean }): Promise<Result> {
-  if (fieldId.startsWith("org:")) return fail("את השם והח\"פ אי אפשר לשנות");
+/** The kinds a field can be turned into: anything but "belongs to", which is chosen with its type when the field is made. */
+const switchable = (k: string) => isListFieldKind(k) && k !== "ref";
+
+/** The distinct values the records already hold in a field: the options of a field turned into a choice. */
+async function valuesIn(typeId: string, key: string): Promise<string[]> {
+  const out = new Set<string>();
   if (typeId === ORG_TYPE) {
-    const label = patch.label !== undefined ? cleanName(patch.label) : undefined;
-    if (patch.label !== undefined && !label) return fail("צריך שם לשדה");
+    for (const o of await listOrgs()) {
+      const v = (o.fieldValues as Record<string, string> | null)?.[key];
+      if (v?.trim()) out.add(v.trim());
+    }
+  } else {
+    const rows = await db.select({ values: listRecords.values }).from(listRecords).where(eq(listRecords.listTypeId, typeId));
+    for (const r of rows) {
+      const v = r.values[key];
+      for (const x of Array.isArray(v) ? v : [v]) if (typeof x === "string" && x.trim()) out.add(x.trim());
+    }
+  }
+  return cleanOptions([...out]);
+}
+
+/**
+ * A field's name, its kind, and – for a choice – its options and whether several may be picked. Changing the kind
+ * keeps every value as it is; a field turned into a choice starts with the values already in it as its options.
+ */
+export async function updateField(typeId: string, fieldId: string, patch: { label?: string; kind?: string; options?: unknown; multi?: boolean }): Promise<Result> {
+  if (fieldId.startsWith("org:")) return fail("את השם והח\"פ אי אפשר לשנות");
+  const label = patch.label !== undefined ? cleanName(patch.label) : undefined;
+  if (patch.label !== undefined && !label) return fail("צריך שם לשדה");
+
+  if (typeId === ORG_TYPE) {
+    const def = (await listOrgFieldDefs()).find((d) => d.id === fieldId);
     // Deleted meanwhile (by another admin): say so rather than close the dialog as if it took.
-    if (!(await listOrgFieldDefs()).some((d) => d.id === fieldId)) return fail("השדה לא נמצא – אולי נמחק בינתיים");
-    const r = await updateOrgFieldDef(fieldId, { label });
+    if (!def) return fail("השדה לא נמצא – אולי נמחק בינתיים");
+    const kind = patch.kind ?? def.type;
+    if (!isOrgFieldKind(kind)) return fail("לעמותות אפשר שדה של שורה אחת או בחירה מרשימה");
+    let options: string[] | undefined;
+    if (kind === "select") {
+      options = patch.options !== undefined ? cleanOptions(patch.options) : def.type === "select" ? def.options : await valuesIn(typeId, def.key);
+      if (!options.length) return fail("שדה בחירה צריך לפחות אפשרות אחת");
+    }
+    const r = await updateOrgFieldDef(fieldId, { label, type: patch.kind, options });
     return r.ok ? { ok: true } : fail("השדה לא עודכן");
   }
+
   const [f] = await db.select().from(listTypeFields).where(and(eq(listTypeFields.id, fieldId), eq(listTypeFields.listTypeId, typeId)));
   if (!f) return fail("השדה לא נמצא");
   const set: Partial<typeof listTypeFields.$inferInsert> = { updatedAt: new Date() };
-  if (patch.label !== undefined) {
-    const label = cleanName(patch.label);
-    if (!label) return fail("צריך שם לשדה");
-    set.label = label;
+  if (label) set.label = label;
+  const kind = patch.kind ?? f.kind;
+  if (patch.kind !== undefined && patch.kind !== f.kind) {
+    if (!switchable(patch.kind) || f.kind === "ref") return fail('את הסוג "שייך ל…" אי אפשר להחליף');
+    set.kind = patch.kind;
   }
-  if (patch.options !== undefined && f.kind === "select") {
-    const options = cleanOptions(patch.options);
+  if (kind === "select") {
+    const options = patch.options !== undefined ? cleanOptions(patch.options) : f.kind === "select" ? f.options : await valuesIn(typeId, f.key);
     if (!options.length) return fail("שדה בחירה צריך לפחות אפשרות אחת");
     set.options = options;
+    if (patch.multi !== undefined) set.multi = patch.multi;
+  } else if (set.kind) {
+    set.options = [];
+    set.multi = false;
   }
-  if (patch.multi !== undefined && f.kind === "select") set.multi = patch.multi;
+  // Several picks become one line ("א, ב") first, so a field that is no longer a choice still shows them.
+  if (set.kind && f.kind === "select" && f.multi && kind !== "select") {
+    await db
+      .update(listRecords)
+      .set({
+        values: sql`${listRecords.values} || jsonb_build_object(${f.key}::text, (select string_agg(x, ', ') from jsonb_array_elements_text(${listRecords.values} -> ${f.key}) as x))`,
+      })
+      .where(and(eq(listRecords.listTypeId, typeId), sql`jsonb_typeof(${listRecords.values} -> ${f.key}) = 'array'`));
+  }
   await db.update(listTypeFields).set(set).where(eq(listTypeFields.id, fieldId));
   return { ok: true };
 }

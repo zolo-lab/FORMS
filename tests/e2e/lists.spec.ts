@@ -60,6 +60,22 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await panel.getByRole("radio", { name: "דרום" }).click();
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
 
+  // A text field turned into a choice keeps its values, and they become its options.
+  await page.getByRole("button", { name: "שדה", exact: true }).click();
+  await add.getByLabel("שם השדה").fill("צבע");
+  await add.getByRole("button", { name: "הוספה" }).click();
+  await expect(add).toBeHidden();
+  const color = page.getByLabel("צבע – סניף בדיקה").locator(visible);
+  await color.fill("אדום");
+  await color.blur();
+  await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
+  await page.getByRole("button", { name: "צבע", exact: true }).locator(visible).click();
+  const colorSettings = page.getByRole("dialog", { name: 'השדה "צבע"' });
+  await colorSettings.getByLabel("סוג").selectOption("select");
+  await colorSettings.getByRole("button", { name: "שמירה" }).click();
+  await expect(colorSettings).toBeHidden();
+  await expect(page.getByRole("button", { name: "צבע – סניף בדיקה" }).locator(visible)).toHaveText("אדום");
+
   // It stays after a reload.
   await page.reload();
   await expect(page.getByRole("button", { name: "אזור – סניף בדיקה" }).locator(visible)).toHaveText("דרום");

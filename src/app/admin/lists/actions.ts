@@ -59,7 +59,7 @@ export async function deleteTypeAction(id: string) {
 export async function addFieldAction(typeId: string, input: FieldInput) {
   return ID.test(typeId) ? run(typeId, () => addField(typeId, input)) : bad;
 }
-export async function updateFieldAction(typeId: string, fieldId: string, patch: { label?: string; options?: string[]; multi?: boolean }) {
+export async function updateFieldAction(typeId: string, fieldId: string, patch: { label?: string; kind?: string; options?: string[]; multi?: boolean }) {
   return ID.test(typeId) && ID.test(fieldId) ? run(typeId, () => updateField(typeId, fieldId, patch)) : bad;
 }
 export async function fieldUsageAction(typeId: string, key: string) {
