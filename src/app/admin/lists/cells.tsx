@@ -67,7 +67,7 @@ function CellInner({ typeId, field, value, refs, label, failed, save, boxed, id 
   if (field.kind === "select") {
     const picked = Array.isArray(value) ? value : value ? [value] : [];
     return (
-      <ChoiceCell id={id} typeId={typeId} field={field} value={picked} label={label} className={cls} onChange={(v) => enqueue(field.multi ? v : (v[0] ?? ""))} />
+      <ChoiceCell id={id} typeId={typeId} field={field} value={picked} label={label} className={cls} onChange={enqueue} />
     );
   }
   if (field.kind === "yes_no" || field.kind === "ref") {
@@ -137,7 +137,7 @@ function TextCell({ id, field, value, label, failed, className, onCommit }: { id
 }
 
 /**
- * A choice: a button showing what is picked, and a panel to pick – ticks when several are allowed, one otherwise.
+ * A choice: a button showing which options this record offers, and a panel of ticks to change them.
  * The panel also edits the field's options in place: a new one is typed at the bottom (and picked here at once), and
  * an option can be taken off the list. Taking one off does not erase it from records that already chose it.
  */
@@ -199,11 +199,11 @@ function ChoiceCell({
     };
   }, [isOpen]);
 
-  const choose = (o: string) => {
-    const next = field.multi ? (picked.includes(o) ? picked.filter((p) => p !== o) : [...options.filter((x) => x === o || picked.includes(x)), ...picked.filter((p) => !options.includes(p))]) : picked[0] === o ? [] : [o];
+  // `known` is the option list to order by – passed in when it was just changed and state has not caught up.
+  const choose = (o: string, known: string[] = options) => {
+    const next = picked.includes(o) ? picked.filter((p) => p !== o) : [...known.filter((x) => x === o || picked.includes(x)), ...picked.filter((p) => !known.includes(p))];
     setPicked(next);
     onChange(next);
-    if (!field.multi) setOpen(null);
   };
   const saveOptions = async (next: string[]) => {
     setBusy(true);
@@ -227,9 +227,10 @@ function ChoiceCell({
   const addOption = async () => {
     const o = draft.replace(/\s+/g, " ").trim();
     if (!o) return;
-    if (!options.includes(o) && !(await saveOptions([...options, o]))) return;
+    const next = options.includes(o) ? options : [...options, o];
+    if (next !== options && !(await saveOptions(next))) return;
     setDraft("");
-    if (!picked.includes(o)) choose(o);
+    if (!picked.includes(o)) choose(o, next);
   };
   // Taking an option off the list also drops it from this cell; other records keep it, marked as no longer listed.
   const removeOption = async (o: string) => {
@@ -267,7 +268,7 @@ function ChoiceCell({
               return (
                 <li key={o} className="flex items-center gap-1 rounded hover:bg-muted">
                   <label className="flex min-h-10 flex-1 cursor-pointer items-center gap-2 px-2">
-                    <input type={field.multi ? "checkbox" : "radio"} name={`${id ?? label}-choice`} checked={picked.includes(o)} onChange={() => choose(o)} onClick={() => !field.multi && picked[0] === o && choose(o)} className="size-4" />
+                    <input type="checkbox" checked={picked.includes(o)} onChange={() => choose(o)} className="size-4" />
                     <span className="text-sm">{o}</span>
                     {stray && <span className="text-xs text-muted-foreground">(הוסרה מהרשימה)</span>}
                   </label>

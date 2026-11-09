@@ -77,7 +77,7 @@ export function LinkedFieldsDialog({
                   <div className="font-medium">{lf.label}</div>
                   <div className="text-xs text-muted-foreground">
                     {isListFieldKind(lf.kind) ? KIND_LABELS[lf.kind] : lf.kind}
-                    {lf.kind === "select" && (lf.multi ? " · כמה" : " · אחת")} · שם פנימי{" "}
+                    {" "}· שם פנימי{" "}
                     <code dir="ltr" className="rounded bg-muted px-1">{lf.key}</code>
                   </div>
                 </div>

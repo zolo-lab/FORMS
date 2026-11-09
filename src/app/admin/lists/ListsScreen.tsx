@@ -225,7 +225,7 @@ function DesktopTable({ sheet, failed, saver, onEditField }: { sheet: Sheet; fai
                 >
                   <span>
                     {f.label}
-                    <span className="ms-2 text-xs font-normal text-muted-foreground">{KIND_LABELS[f.kind]}{f.multi ? " · כמה" : ""}</span>
+                    <span className="ms-2 text-xs font-normal text-muted-foreground">{KIND_LABELS[f.kind]}</span>
                   </span>
                   <Settings2 className="size-4 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden />
                 </button>

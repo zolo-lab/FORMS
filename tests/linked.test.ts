@@ -8,7 +8,7 @@ const listFields: OrgListField[] = [
   { key: "__reg", label: 'ח"פ', kind: "id_number", options: [], multi: false },
   { key: "tyk", label: "תיק ניכויים", kind: "number", options: [], multi: false },
   { key: "dkg", label: "סוג פעילות", kind: "select", options: ["פעילות", "שכר מלמדים", "משרדיות"], multi: true },
-  { key: "zone", label: "אזור", kind: "select", options: ["צפון", "דרום"], multi: false },
+  { key: "zone", label: "אזור", kind: "select", options: ["צפון", "דרום"], multi: true },
 ];
 
 const form = (fields: FormField[]): FormDefinition => ({ schemaVersion: 1, title: "t", pages: [{ id: "p", title: "", fields }] });
@@ -54,7 +54,7 @@ describe("binding", () => {
   it("adds a missing field of a fitting type, already bound", () => {
     const { def, id } = addLinkedField(form([{ id: "tyk", type: "short_text", label: "אחר" }]), listFields[3]!, 0);
     const f = def.pages[0]!.fields.find((x) => x.id === id)!;
-    expect(f.type).toBe("checkboxes");
+    expect(f.type).toBe("dropdown");
     expect(f.label).toBe("סוג פעילות");
     expect(bindingOf(f)).toBe("dkg");
     const { def: d2, id: id2 } = addLinkedField(def, listFields[2]!, 0);

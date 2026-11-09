@@ -22,6 +22,7 @@ export interface OrgListField {
   label: string;
   kind: string;
   options: string[];
+  /** Always true for a choice: a record's value is the set of options it offers. Kept for the sheet's shape. */
   multi: boolean;
 }
 
@@ -105,7 +106,8 @@ export function unbindField(def: FormDefinition, fieldId: string): FormDefinitio
 
 /** The form field type a list field becomes when it is added to a form. */
 export function fieldTypeFor(lf: OrgListField): FieldType {
-  if (lf.kind === "select") return lf.multi ? "checkboxes" : "dropdown";
+  // A choice starts as a dropdown; the builder turns it into radios or ticks (one or several is the form's call).
+  if (lf.kind === "select") return "dropdown";
   const same: FieldType[] = ["short_text", "long_text", "number", "currency", "percent", "email", "phone", "id_number", "date", "yes_no"];
   return (same as string[]).includes(lf.kind) ? (lf.kind as FieldType) : "short_text";
 }
