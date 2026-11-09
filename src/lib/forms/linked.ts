@@ -61,7 +61,8 @@ const asOptions = (values: string[]): FieldOption[] => values.map((v) => ({ valu
 /** Link a form field to a list field: a choice takes the options, anything else is filled with the value. */
 export function bindField(def: FormDefinition, fieldId: string, lf: OrgListField): FormDefinition {
   const field = allFields(def).find((f) => f.id === fieldId);
-  if (!field) return def;
+  // org_name / org_number are bound by their id to the name and number; a second link could never be undone.
+  if (!field || linkedById(fieldId)) return def;
   if (isChoice(field.type)) {
     return updateField(def, fieldId, {
       optionsSource: `${ORG_FIELD_PREFIX}${lf.key}`,

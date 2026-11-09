@@ -76,6 +76,8 @@ describe("unbindField", () => {
   it("never renames: org_name stays linked by its id; others keep their id", () => {
     const def = form([{ id: "org_name", type: "short_text", label: "שם" }, { id: "x", type: "short_text", label: "y", prefill: "org.fields.tyk" }]);
     expect(unbindField(def, "org_name")).toBe(def);
+    // Nor is it linked to anything else.
+    expect(bindField(def, "org_name", listFields[2]!)).toBe(def);
     const f = unbindField(def, "x").pages[0]!.fields[1]!;
     expect(f.id).toBe("x");
     expect(f.prefill).toBeUndefined();

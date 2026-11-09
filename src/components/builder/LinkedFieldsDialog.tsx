@@ -69,7 +69,8 @@ export function LinkedFieldsDialog({
           {rows.map((r) => {
             const lf = r.field;
             const bound = r.state === "bound" ? r.formFieldIds : [];
-            const candidates = fields.filter((f) => !bound.includes(f.id) && fits(f, lf));
+            // org_name / org_number already show the name and number by their id: never re-linked to another field.
+            const candidates = fields.filter((f) => !bound.includes(f.id) && !linkedById(f.id) && fits(f, lf));
             return (
               <li key={lf.key} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-center">
                 <div className="min-w-0">
