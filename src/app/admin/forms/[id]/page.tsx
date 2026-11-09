@@ -1,6 +1,8 @@
 import { formLinkOrgs } from "@/server/public-fill";
 import { listOrgFieldDefs, listOrgs, listProjects } from "@/server/orgs-store";
 import { builderLists } from "@/server/lists-store";
+import { hasGrant, isAdmin } from "@/lib/auth/permissions";
+import { currentUser } from "@/server/users-store";
 import { notFound, redirect } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
@@ -23,7 +25,9 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   if (!data) notFound();
   const pkgId = await formPackageId(id, data.template.title);
   const [pdf, groups, contacts, pkg, orgs] = await Promise.all([getPdfFile(data.version.pdfFileId), listGroups(), listContacts(), getPackage(pkgId), listOrgs()]);
-  const [orgFields, lists] = await Promise.all([listOrgFieldDefs(), builderLists()]);
+  // A record's values are copied into the form only by who may see them on the lists screen.
+  const me = await currentUser();
+  const [orgFields, lists] = await Promise.all([listOrgFieldDefs(), builderLists({ records: hasGrant(me, "manageFields"), orgRecords: isAdmin(me) })]);
   const projects = await listProjects();
 
   // Every step that goes to a person has its own role, so every step can be picked for a field ("שלב 2", "שלב 3"…).

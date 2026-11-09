@@ -139,7 +139,9 @@ export function AddFromListDialog({
                             />
                           </span>
                         ) : (
-                          <span className="block text-xs text-muted-foreground">אין עדיין רשומות ברשימה הזאת.</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {current.list.fields.length === 0 ? "אין שדות ברשימה הזאת." : "אין רשומות לבחירה – או שהרשימה ריקה, או שההרשאה שלך לא כוללת את מסך הרשימות."}
+                          </span>
                         )}
                       </span>
                     </label>

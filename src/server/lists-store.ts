@@ -194,20 +194,34 @@ export interface BuilderListData {
   records: { id: string; title: string; values: Record<string, string | string[]> }[];
 }
 
-/** Every list the builder can add from: the organizations first (as records), then the list types. */
-export async function builderLists(): Promise<{ org: BuilderListData; types: BuilderListData[] }> {
-  const toList = (sheet: Sheet, id: string, name: string): BuilderListData => ({
-    id,
-    name,
-    fields: sheet.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi })),
-    records: sheet.rows.map((r) => ({ id: r.id, title: listTitle(r.values, sheet.fields), values: r.values })),
-  });
+/**
+ * Every list the builder can add from: the organizations first, then the list types. The records go only to who may
+ * see them on the lists screen (`manageFields`; the organizations' to admins) – others get the fields alone, so they
+ * can still link, just not copy a record's values in. A "belongs to" value is given as the parent record's title.
+ */
+export async function builderLists(access: { records: boolean; orgRecords: boolean }): Promise<{ org: BuilderListData; types: BuilderListData[] }> {
+  const toList = (sheet: Sheet, id: string, name: string, withRecords: boolean): BuilderListData => {
+    const titled = (f: SheetField, v: string | string[] | undefined) =>
+      f.kind === "ref" && f.parentTypeId && typeof v === "string" ? (sheet.refs[f.parentTypeId]?.find((r) => r.id === v)?.title ?? "") : v;
+    return {
+      id,
+      name,
+      fields: sheet.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi })),
+      records: withRecords
+        ? sheet.rows.map((r) => ({
+            id: r.id,
+            title: listTitle(r.values, sheet.fields),
+            values: Object.fromEntries(sheet.fields.map((f) => [f.key, titled(f, r.values[f.key])]).filter((e): e is [string, string | string[]] => e[1] !== undefined)),
+          }))
+        : [],
+    };
+  };
   const orgSheet = (await loadSheet(ORG_TYPE))!;
-  const org = toList(orgSheet, ORG_TYPE, "עמותות ועסקים");
+  const org = toList(orgSheet, ORG_TYPE, "עמותות ועסקים", access.records && access.orgRecords);
   const types: BuilderListData[] = [];
   for (const t of await db.select().from(listTypes).orderBy(asc(listTypes.order), asc(listTypes.name))) {
     const sheet = await loadSheet(t.id);
-    if (sheet) types.push(toList(sheet, t.id, t.name));
+    if (sheet) types.push(toList(sheet, t.id, t.name, access.records));
   }
   return { org, types };
 }
