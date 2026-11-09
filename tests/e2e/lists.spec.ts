@@ -35,7 +35,17 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await name.fill("סניף בדיקה");
   await name.blur();
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
-  await page.getByLabel("אזור – סניף בדיקה").locator(visible).selectOption("דרום");
+  // The choice is picked in a panel under the cell, which also adds an option to the field on the spot.
+  const region = page.getByRole("button", { name: "אזור – סניף בדיקה" }).locator(visible);
+  await region.click();
+  const panel = page.getByRole("group", { name: "אזור – סניף בדיקה" });
+  await panel.getByLabel("אפשרות חדשה לאזור").fill("מרכז");
+  await panel.getByRole("button", { name: "הוספת האפשרות" }).click();
+  await expect(region).toHaveText("מרכז");
+  await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
+  await region.click();
+  await panel.getByRole("radio", { name: "דרום" }).click();
+  await expect(region).toHaveText("דרום");
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
 
   // The field's settings: which record gets which value, in one grid.
@@ -45,13 +55,14 @@ test("lists: a type with a choice field, a list filled and saved, then the type 
   await settings.getByLabel("אזור: צפון – סניף בדיקה").check();
   await settings.getByRole("button", { name: "שמירה" }).click();
   await expect(settings).toBeHidden();
-  await expect(page.getByLabel("אזור – סניף בדיקה").locator(visible)).toHaveValue("צפון");
-  await page.getByLabel("אזור – סניף בדיקה").locator(visible).selectOption("דרום");
+  await expect(region).toHaveText("צפון");
+  await region.click();
+  await panel.getByRole("radio", { name: "דרום" }).click();
   await expect(page.getByText(/כל השינויים נשמרו/)).toBeVisible();
 
   // It stays after a reload.
   await page.reload();
-  await expect(page.getByLabel("אזור – סניף בדיקה").locator(visible)).toHaveValue("דרום");
+  await expect(page.getByRole("button", { name: "אזור – סניף בדיקה" }).locator(visible)).toHaveText("דרום");
 
   await page.getByRole("button", { name: "מחיקת הסוג" }).click();
   const del = page.getByRole("dialog", { name: `מחיקת "${type}"` });

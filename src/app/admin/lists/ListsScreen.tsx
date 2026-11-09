@@ -246,7 +246,7 @@ function DesktopTable({ sheet, failed, saver, onEditField }: { sheet: Sheet; fai
               <tr key={r.id} className="border-b last:border-b-0">
                 {fields.map((f) => (
                   <td key={f.id} className="border-e p-0 last:border-e-0">
-                    <Cell field={f} value={r.values[f.key]} refs={refsFor(sheet, f)} label={`${f.label} – ${title}`} failed={failed.has(`${r.id}:${f.key}`)} save={saver(r.id, f.key)} />
+                    <Cell typeId={type.id} field={f} value={r.values[f.key]} refs={refsFor(sheet, f)} label={`${f.label} – ${title}`} failed={failed.has(`${r.id}:${f.key}`)} save={saver(r.id, f.key)} />
                   </td>
                 ))}
                 {type.id !== "org" && (
@@ -299,7 +299,7 @@ function MobileCards({ sheet, failed, saver }: { sheet: Sheet; failed: Set<strin
               return (
                 <div key={f.id} className="space-y-1">
                   <Label htmlFor={id} className="text-xs text-muted-foreground">{f.label}</Label>
-                  <Cell id={id} boxed field={f} value={r.values[f.key]} refs={refsFor(sheet, f)} label={`${f.label} – ${title}`} failed={failed.has(`${r.id}:${f.key}`)} save={saver(r.id, f.key)} />
+                  <Cell typeId={type.id} id={id} boxed field={f} value={r.values[f.key]} refs={refsFor(sheet, f)} label={`${f.label} – ${title}`} failed={failed.has(`${r.id}:${f.key}`)} save={saver(r.id, f.key)} />
                 </div>
               );
             })}

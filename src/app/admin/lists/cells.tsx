@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Plus, X } from "lucide-react";
+import { updateFieldAction } from "./actions";
 import { Input, Select } from "@/components/ui/input";
 import { LTR_KINDS, type CellValue } from "@/lib/lists/kinds";
 import type { SheetField } from "@/server/lists-store";
@@ -42,6 +43,7 @@ function useCellQueue(initial: CellValue, save: SaveFn) {
 const base = "h-10 w-full min-w-36 rounded-none border-0 bg-transparent px-3 shadow-none focus-visible:bg-background focus-visible:ring-2";
 
 interface CellProps {
+  typeId: string;
   field: SheetField;
   value: CellValue | undefined;
   refs?: { id: string; title: string }[];
@@ -58,14 +60,17 @@ export function Cell(props: CellProps) {
   return <CellInner key={JSON.stringify(props.value ?? "")} {...props} />;
 }
 
-function CellInner({ field, value, refs, label, failed, save, boxed, id }: CellProps) {
+function CellInner({ typeId, field, value, refs, label, failed, save, boxed, id }: CellProps) {
   const enqueue = useCellQueue(value ?? (field.multi ? [] : ""), save);
   const cls = cn(base, boxed && "rounded-md border", failed && "bg-destructive/10");
 
-  if (field.kind === "select" && field.multi) {
-    return <MultiCell id={id} options={field.options} value={Array.isArray(value) ? value : value ? [value] : []} label={label} className={cls} onChange={enqueue} />;
+  if (field.kind === "select") {
+    const picked = Array.isArray(value) ? value : value ? [value] : [];
+    return (
+      <ChoiceCell id={id} typeId={typeId} field={field} value={picked} label={label} className={cls} onChange={(v) => enqueue(field.multi ? v : (v[0] ?? ""))} />
+    );
   }
-  if (field.kind === "select" || field.kind === "yes_no" || field.kind === "ref") {
+  if (field.kind === "yes_no" || field.kind === "ref") {
     const current = typeof value === "string" ? value : "";
     const options =
       field.kind === "yes_no"
@@ -83,7 +88,7 @@ function CellInner({ field, value, refs, label, failed, save, boxed, id }: CellP
         {options.map((o) => (
           <option key={o.v} value={o.v}>{o.t}</option>
         ))}
-        {missing && <option value={current}>{field.kind === "ref" ? "(נמחקה)" : `${current} (לא ברשימה)`}</option>}
+        {missing && <option value={current}>{field.kind === "ref" ? "(נמחקה)" : current}</option>}
       </Select>
     );
   }
@@ -131,54 +136,171 @@ function TextCell({ id, field, value, label, failed, className, onCommit }: { id
   );
 }
 
-/** Several choices: a button showing what is picked; a panel of checkboxes, each tick saved at once. */
-function MultiCell({ id, options, value, label, className, onChange }: { id?: string; options: string[]; value: string[]; label: string; className: string; onChange: (v: string[]) => void }) {
+/**
+ * A choice: a button showing what is picked, and a panel to pick – ticks when several are allowed, one otherwise.
+ * The panel also edits the field's options in place: a new one is typed at the bottom (and picked here at once), and
+ * an option can be taken off the list. Taking one off does not erase it from records that already chose it.
+ */
+function ChoiceCell({
+  id,
+  typeId,
+  field,
+  value,
+  label,
+  className,
+  onChange,
+}: {
+  id?: string;
+  typeId: string;
+  field: SheetField;
+  value: string[];
+  label: string;
+  className: string;
+  onChange: (v: string[]) => void;
+}) {
   // Where the panel opens: fixed to the screen under the button, so the table's scroll box cannot clip it.
-  const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
+  const [open, setOpen] = useState<{ top?: number; bottom?: number; right: number; max: number } | null>(null);
   const [picked, setPicked] = useState(value);
+  // The field's options as the server last sent them, with this cell's own edits laid over until the refresh arrives.
+  const [added, setAdded] = useState<string[]>([]);
+  const [dropped, setDropped] = useState<string[]>([]);
+  const options = [...field.options.filter((o) => !dropped.includes(o)), ...added.filter((o) => !field.options.includes(o) && !dropped.includes(o))];
+  const [draft, setDraft] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const place = () => {
+    const r = button.current?.getBoundingClientRect();
+    if (!r) return null;
+    const right = Math.max(8, window.innerWidth - r.right);
+    const below = window.innerHeight - r.bottom - 12;
+    // Under the cell when there is room, otherwise above it – a fixed panel off the screen could never be reached.
+    return below >= 280 || below >= r.top ? { top: r.bottom + 4, right, max: below } : { bottom: window.innerHeight - r.top + 4, right, max: r.top - 12 };
+  };
+  const isOpen = !!open;
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
+    // A click or touch outside closes it; when the page scrolls, it follows its cell.
     const close = (e: Event) => {
-      // A scroll or a click inside the panel keeps it open; anything else closes it.
-      if (e.type === "resize" || !box.current?.contains(e.target as Node)) setOpen(null);
+      if (!box.current?.contains(e.target as Node)) setOpen(null);
     };
-    document.addEventListener("mousedown", close);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    const follow = (e: Event) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(place());
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("resize", follow);
+    window.addEventListener("scroll", follow, true);
     return () => {
-      document.removeEventListener("mousedown", close);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", follow);
+      window.removeEventListener("scroll", follow, true);
     };
-  }, [open]);
-  const toggle = (o: string) => {
-    const next = picked.includes(o) ? picked.filter((p) => p !== o) : options.filter((x) => x === o || picked.includes(x));
+  }, [isOpen]);
+
+  const choose = (o: string) => {
+    const next = field.multi ? (picked.includes(o) ? picked.filter((p) => p !== o) : [...options.filter((x) => x === o || picked.includes(x)), ...picked.filter((p) => !options.includes(p))]) : picked[0] === o ? [] : [o];
     setPicked(next);
     onChange(next);
+    if (!field.multi) setOpen(null);
   };
+  const saveOptions = async (next: string[]) => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await updateFieldAction(typeId, field.id, { options: next });
+      if (!r.ok) {
+        setError(r.error);
+        return false;
+      }
+      setAdded(next.filter((o) => !field.options.includes(o)));
+      setDropped(field.options.filter((o) => !next.includes(o)));
+      return true;
+    } catch {
+      setError("לא נשמר – נסו שוב");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const addOption = async () => {
+    const o = draft.replace(/\s+/g, " ").trim();
+    if (!o) return;
+    if (!options.includes(o) && !(await saveOptions([...options, o]))) return;
+    setDraft("");
+    if (!picked.includes(o)) choose(o);
+  };
+  const removeOption = async (o: string) => {
+    if (await saveOptions(options.filter((x) => x !== o))) setRemoving(null);
+  };
+  const strays = picked.filter((p) => !options.includes(p));
+
   return (
     <div ref={box}>
       <button
+        ref={button}
         id={id}
         type="button"
         aria-label={label}
         aria-expanded={!!open}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setOpen((v) => (v ? null : { top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }));
-        }} className={cn(className, "flex items-center justify-between gap-2 text-start text-sm")}>
+        onClick={() => setOpen((v) => (v ? null : place()))}
+        className={cn(className, "flex items-center justify-between gap-2 text-start text-sm")}
+      >
         <span className="truncate">{picked.length ? picked.join(", ") : "—"}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       </button>
       {open && (
-        <div role="group" aria-label={label} style={{ top: open.top, right: open.right }} className="fixed z-50 max-h-64 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-          {options.map((o) => (
-            <label key={o} className="flex min-h-10 cursor-pointer items-center gap-2 rounded px-2 hover:bg-muted">
-              <input type="checkbox" checked={picked.includes(o)} onChange={() => toggle(o)} className="size-4" />
-              <span className="text-sm">{o}</span>
-            </label>
-          ))}
+        <div
+          role="group"
+          aria-label={label}
+          style={{ top: open.top, bottom: open.bottom, right: open.right, maxHeight: open.max }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(null);
+          }}
+          className="fixed z-50 flex w-64 flex-col rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+          <ul className="min-h-0 flex-1 overflow-y-auto">
+            {[...strays, ...options].map((o) => {
+              const stray = !options.includes(o);
+              return (
+                <li key={o} className="flex items-center gap-1 rounded hover:bg-muted">
+                  {removing === o ? (
+                    <div className="flex min-h-10 flex-1 items-center gap-2 px-2 text-sm">
+                      <span className="flex-1">להוריד את &quot;{o}&quot; מהרשימה?</span>
+                      <button type="button" disabled={busy} className="font-medium text-destructive" onClick={() => removeOption(o)}>כן</button>
+                      <button type="button" className="text-muted-foreground" onClick={() => setRemoving(null)}>לא</button>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="flex min-h-10 flex-1 cursor-pointer items-center gap-2 px-2">
+                        <input type={field.multi ? "checkbox" : "radio"} name={`${id ?? label}-choice`} checked={picked.includes(o)} onChange={() => choose(o)} onClick={() => !field.multi && picked[0] === o && choose(o)} className="size-4" />
+                        <span className="text-sm">{o}</span>
+                        {stray && <span className="text-xs text-muted-foreground">(הוסרה מהרשימה)</span>}
+                      </label>
+                      {!stray && (
+                        <button type="button" aria-label={`הורדת האפשרות ${o} מהרשימה`} className="flex size-10 items-center justify-center rounded text-muted-foreground hover:text-destructive" onClick={() => setRemoving(o)}>
+                          <X className="size-4" aria-hidden />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <form
+            className="mt-1 flex gap-1 border-t pt-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addOption();
+            }}
+          >
+            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="אפשרות חדשה" aria-label={`אפשרות חדשה ל${field.label}`} maxLength={120} className="h-10" />
+            <button type="submit" disabled={busy || !draft.trim()} aria-label="הוספת האפשרות" className="flex size-10 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-50">
+              <Plus className="size-4" aria-hidden />
+            </button>
+          </form>
+          {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
         </div>
       )}
     </div>
