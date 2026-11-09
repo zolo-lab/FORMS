@@ -297,3 +297,18 @@ describe("what reaches the browser, and fields with no picker", async () => {
     expect(allOf(lockListFields(odd), pick).readOnly).toBeUndefined();
   });
 });
+
+describe("a picker of another role", async () => {
+  const { withListPicks, listSource, pickerKey, keyFor, addPicker } = await import("@/lib/forms/linked");
+  const T = "44444444-4444-4444-8444-444444444444";
+  const lookups = { [pickerKey(T)]: [{ value: "r1", label: "א", data: { pay: "7" } }, { value: "r2", label: "ב", data: { pay: "8" } }] };
+  const { def: full, id: pick } = addPicker(form([{ id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") }]), T, "ספקים", 0);
+  const view = form(full.pages[0]!.fields.filter((f) => f.id !== pick));
+  it("fills this role's fields only from what that role already picked – an id sent now, for its picker, is dropped first", () => {
+    const own = new Set(view.pages[0]!.fields.map((f) => f.id));
+    const sent = Object.fromEntries(Object.entries({ [pick]: "r2", pay: 1 }).filter(([k]) => own.has(k)));
+    expect(withListPicks(view, sent, lookups, full).pay).toBeUndefined();
+    // With the pick already saved (by the other role), it fills.
+    expect(withListPicks(view, { ...sent, [pick]: "r1" }, lookups, full).pay).toBe(7);
+  });
+});

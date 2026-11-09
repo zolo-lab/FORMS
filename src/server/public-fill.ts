@@ -10,7 +10,7 @@ import { db, schema } from "@/db";
 import type { Answers } from "@/lib/forms/conditions";
 import { mergedDefinitionForStep } from "@/lib/forms/merge";
 import { roleView } from "@/lib/forms/role-view";
-import type { FormDefinition } from "@/lib/forms/schema";
+import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { allowedOrgs, linkOrg, linkProject, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
@@ -93,7 +93,9 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
   if (!view.ok) return { ok: false, error: view.reason };
   const org = view.org;
   // The organization comes from the link, never from what was sent.
-  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, rawInput);
+  // Only this role's own fields: an id sent for another role's picker must not choose that role's record.
+  const own = new Set(allFields(view.definition).map((f) => f.id));
+  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, Object.fromEntries(Object.entries(rawInput).filter(([k]) => own.has(k))));
   // Check before anything is created, so a form with mistakes leaves nothing behind.
   // The lookups the form was shown with: a list picked in it fills its fields from the record, here as there.
   const check = validateAnswers(view.definition, input, { role: view.role, lookups: await listLookupsFor([view.fullDefinition]), fullForm: view.fullDefinition });
