@@ -174,7 +174,8 @@ function ChoiceCell({
   const place = () => {
     const r = button.current?.getBoundingClientRect();
     if (!r) return null;
-    const right = Math.max(8, window.innerWidth - r.right);
+    // The panel is 16rem wide: kept inside the screen even under the last (leftmost) column.
+    const right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - 256 - 8));
     const below = window.innerHeight - r.bottom - 12;
     // Under the cell when there is room, otherwise above it – a fixed panel off the screen could never be reached.
     return below >= 280 || below >= r.top ? { top: r.bottom + 4, right, max: below } : { bottom: window.innerHeight - r.top + 4, right, max: r.top - 12 };
