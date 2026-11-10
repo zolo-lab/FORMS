@@ -113,7 +113,7 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
             order: 2, role: "employee", action: "fill",
             expiry: {
               kind: "cases" as const,
-              cases: [{ when: { type: "today" as const, fieldId: "start", op: "within" as const, days: 10 }, then: { kind: "calc" as const, base: { from: "stepStart" as const }, addDays: 5 } }],
+              cases: [{ when: { fieldId: "start", op: "nextDays" as const, n: 10 }, then: { kind: "calc" as const, base: { from: "stepStart" as const }, addDays: 5 } }],
               otherwise: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } },
             },
           },
