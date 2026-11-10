@@ -162,7 +162,7 @@ function ConditionSentence({ id, lead, value, onChange, dateFields, onRemove }: 
       }}>
         {!isToday && !dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שכבר לא קיים" : "בחרו שדה תאריך…"}</option>}
         {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-        <option value={TODAY_FIELD}>התאריך הנוכחי</option>
+        {isToday && <option value={TODAY_FIELD}>התאריך הנוכחי</option>}
       </Select>
       <Select id={`${id}-not`} aria-label="הוא או אינו" className="w-auto" value={value.not ? "not" : "is"} onChange={(e) => { const c = { ...value }; if (e.target.value === "not") c.not = true; else delete c.not; onChange(c); }}>
         <option value="is">הוא</option>
@@ -235,7 +235,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const otherwise: ExpiryOutcome | null = value?.kind === "cases" ? value.otherwise : value?.kind === "calc" ? value : null;
   // Conditions are checked again every day, so they (and what they lead to) may read a date a later step fills.
   const anyDate = dateFields.map((f) => ({ id: f.id, label: f.label }));
-  const newCondition = (): ExpiryCondition => (anyDate[0] ? { fieldId: anyDate[0].id, op: "thisMonth" } : { fieldId: TODAY_FIELD, op: "dayLte", n: 20 });
+  const newCondition = (): ExpiryCondition => ({ fieldId: anyDate[0]?.id ?? "", op: "thisMonth" });
   const newCase = (): ExpiryCase => ({ when: newCondition(), then: otherwise?.kind === "calc" ? otherwise : fresh() });
   const setCases = (next: ExpiryCase[], other: ExpiryOutcome = otherwise ?? fresh()) => onChange(next.length ? { kind: "cases", cases: next, otherwise: other } : other);
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
@@ -260,7 +260,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
     { id: "simple", title: "תנאי פשוט", hint: "כלל אחד – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    { id: "complex", title: "תנאי מורכב", hint: "כלל שונה לפי מקרה: אם… אז…, אחרת…" },
+    { id: "complex", title: "תנאי מורכב", hint: anyDate.length ? "כלל שונה לפי מקרה: אם [שדה תאריך] הוא… אז…, אחרת…" : "תנאי בודק שדה תאריך מהטופס, ואין בטופס שדה כזה. הוסיפו שדה תאריך בלשונית העריכה." },
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
@@ -298,7 +298,8 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 role="radio"
                 aria-checked={on}
                 onClick={() => pick(o.id)}
-                className="flex min-h-12 w-full items-start gap-3 p-3 text-start disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={o.id === "complex" && !on && anyDate.length === 0}
+                className="flex min-h-12 w-full items-start gap-3 p-3 text-start disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", on ? "border-primary" : "border-muted-foreground/50")} aria-hidden>
                   {on && <span className="size-2 rounded-full bg-primary" />}
