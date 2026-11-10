@@ -281,7 +281,8 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
     { id: "simple", title: "תנאי פשוט", hint: "כלל אחד – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    { id: "complex", title: "תנאי מורכב", hint: anyDate.length ? "תנאים על שדות התאריך בטופס: אם… אז…, אחרת…" : "תנאי בודק שדה תאריך מהטופס, ואין בטופס שדה כזה. הוסיפו שדה תאריך בלשונית העריכה." },
+    // "תנאי מורכב" (if… then…, otherwise…) is offered only to show and replace a rule saved with it.
+    ...(mode === "complex" ? [{ id: "complex" as const, title: "תנאי מורכב (הוסר)", hint: "בחרו תנאי פשוט או ללא תוקף." }] : []),
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
