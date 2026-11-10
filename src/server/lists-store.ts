@@ -11,7 +11,7 @@ import { keyFor, linkedTypeIds, listSource, parseKey, pickerKey, type LinkedList
 import type { Lookups } from "@/lib/forms/lookups";
 import { prefillOf } from "@/lib/forms/prefill";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
-import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, fillerTitle, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
 
@@ -146,24 +146,12 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
 }
 
-/**
- * A record's name as a filler may see it: its first plain-text field (a name is text; an ID number, a phone, an
- * amount or a date is not, and is never shown unless the form itself asks for it), else nothing.
- */
-function safeTitle(values: Record<string, string | string[]>, fields: { key: string; kind: string }[]): string | undefined {
-  for (const f of fields) {
-    if (f.kind !== "short_text" && f.kind !== "long_text") continue;
-    const v = values[f.key];
-    if (typeof v === "string" && v) return v;
-  }
-  return undefined;
-}
-
-/** The records of a type by id with their safe titles (see `safeTitle`), for a "belongs to" value shown to a filler. */
+/** The parent records of a type by id with their names (see `fillerTitle`; the form links none of their fields). */
 async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
   if (typeId === ORG_TYPE) return new Map((await listOrgs()).map((o) => [o.id, o.name]));
   const [fields, rows] = await Promise.all([fieldsOf(typeId), db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId))]);
-  return new Map(rows.map((r, i) => [r.id, safeTitle(r.values, fields) ?? `רשומה ${i + 1}`]));
+  const none = new Set<string>();
+  return new Map(rows.map((r, i) => [r.id, fillerTitle(r.values, fields, none) ?? `רשומה ${i + 1}`]));
 }
 
 /**
@@ -200,8 +188,8 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
         if (v === undefined || v === "") continue;
         data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
       }
-      // The title shown to the filler comes from the text fields only – never from a choice the form did not ask for.
-      return { value: r.id, label: safeTitle(r.values, fields) ?? `רשומה ${i + 1}`, data };
+      // The title shown to the filler: the record's name field, or a text field the form links to – nothing else.
+      return { value: r.id, label: fillerTitle(r.values, fields, used) ?? `רשומה ${i + 1}`, data };
     });
     for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));
   }

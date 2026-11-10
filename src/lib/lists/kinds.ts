@@ -99,6 +99,31 @@ export function cleanCell(field: ListField, raw: unknown, refIds?: ReadonlySet<s
   return problem ? { ok: false, error: problem } : { ok: true, value: v };
 }
 
+/**
+ * A record's name as a filler may see it in a form: the first field of the list when it is plain text (that field
+ * is the record's name by convention – the one the lists screen names it by), or else a plain-text field the form
+ * itself links to (`used`). Never an ID number, a phone, an amount, a date or a choice, and never a text field the
+ * form did not ask for beyond the name – a list may hold notes a filler must not see. Nothing when none applies.
+ */
+export function fillerTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[], used: ReadonlySet<string>): string | undefined {
+  const text = (f: { key: string; kind: ListFieldKind }) => {
+    if (f.kind !== "short_text" && f.kind !== "long_text") return undefined;
+    const v = values[f.key];
+    return typeof v === "string" && v ? v : undefined;
+  };
+  const first = fields[0];
+  if (first) {
+    const v = text(first);
+    if (v) return v;
+  }
+  for (const f of fields) {
+    if (!used.has(f.key)) continue;
+    const v = text(f);
+    if (v) return v;
+  }
+  return undefined;
+}
+
 /** What a list is called in a dropdown: its first non-empty text value, else "ללא שם". */
 export function listTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[]): string {
   for (const f of fields) {

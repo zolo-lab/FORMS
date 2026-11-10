@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCell, cleanOptions, listTitle, splitPicks, type ListField } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, fillerTitle, listTitle, splitPicks, type ListField } from "@/lib/lists/kinds";
 
 const f = (kind: ListField["kind"], extra: Partial<ListField> = {}): ListField => ({ key: "k", label: "ש", kind, ...extra });
 
@@ -54,6 +54,23 @@ describe("a list's title", () => {
   });
 });
 
+describe("a record's title as a filler sees it", () => {
+  const fields = [f("short_text", { key: "name" }), f("id_number", { key: "id" }), f("long_text", { key: "notes" }), f("select", { key: "veg", options: ["א"] })];
+  const values = { name: "גדע ירקות", id: "123456782", notes: "אבחנה: רגיש", veg: ["א"] };
+  it("is the name field (the first field, when it is text) whatever the form links", () => {
+    expect(fillerTitle(values, fields, new Set())).toBe("גדע ירקות");
+  });
+  it("never leaks a text field the form does not link, an ID number or a choice", () => {
+    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["id", "veg"]))).toBeUndefined();
+    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["notes"]))).toBe("אבחנה: רגיש");
+  });
+  it("falls back to a linked text field when the first field is not text", () => {
+    const byId = [f("id_number", { key: "id" }), f("short_text", { key: "name" })];
+    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set())).toBeUndefined();
+    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set(["name"]))).toBe("מ.ר.");
+  });
+});
+
 describe("splitPicks", () => {
   it("reads several picks back, keeping an option that holds a comma", () => {
     expect(splitPicks("א, ב", ["א", "ב"])).toEqual(["א", "ב"]);
@@ -69,5 +86,22 @@ describe("listTitle without a text value", () => {
     const fields = [{ key: "n", kind: "short_text" as const }, { key: "c", kind: "select" as const }];
     expect(listTitle({ c: ["א", "ב"] }, fields)).toBe("א, ב");
     expect(listTitle({}, fields)).toBe("ללא שם");
+  });
+});
+
+describe("a record's title as a filler sees it", () => {
+  const fields = [f("short_text", { key: "name" }), f("id_number", { key: "id" }), f("long_text", { key: "notes" }), f("select", { key: "veg", options: ["א"] })];
+  const values = { name: "גדע ירקות", id: "123456782", notes: "אבחנה: רגיש", veg: ["א"] };
+  it("is the name field (the first field, when it is text) whatever the form links", () => {
+    expect(fillerTitle(values, fields, new Set())).toBe("גדע ירקות");
+  });
+  it("never leaks a text field the form does not link, an ID number or a choice", () => {
+    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["id", "veg"]))).toBeUndefined();
+    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["notes"]))).toBe("אבחנה: רגיש");
+  });
+  it("falls back to a linked text field when the first field is not text", () => {
+    const byId = [f("id_number", { key: "id" }), f("short_text", { key: "name" })];
+    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set())).toBeUndefined();
+    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set(["name"]))).toBe("מ.ר.");
   });
 });
