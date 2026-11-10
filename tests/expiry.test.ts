@@ -290,3 +290,26 @@ describe("older forms' rules move with their steps", () => {
   });
 });
 
+
+describe("expires when (one filter row)", () => {
+  const today = new Date("2026-11-10T08:00:00Z");
+  const when = (condition: object) => ({ kind: "when" as const, condition: condition as never });
+  it("closes at the end of the day before the condition first holds", () => {
+    // "the start date is before today": on 2026-11-21 the start (11-20) is past → closes at the end of 11-20.
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), { start: "2026-11-20" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(when({ fieldId: "start", op: "duringNext", n: 7, unit: "days" }), { start: "2026-12-31" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 12, 23));
+  });
+  it("already past when it holds today; none when it never does", () => {
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), { start: "2026-11-01" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 11, 9));
+    expect(expiryFor(when({ fieldId: "start", op: "is", date: "2026-01-01" }), { start: "2026-12-01" }, { sent: today, today })).toBeNull();
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), {}, { sent: today, today })).toBeNull();
+  });
+  it("reads, describes and is checked again every day", () => {
+    const rule = when({ fieldId: "start", op: "nextMonth" });
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+    expect(normalizeExpiryRule(when({ fieldId: "start", op: "is" }))).toBeNull();
+    expect(describeExpiryRule(rule, () => "תחילה")).toBe('פג כאשר "תחילה" בחודש הבא');
+    expect(comparesToday(rule)).toBe(true);
+    expect(expiryRuleFields(rule)).toEqual(["start"]);
+  });
+});

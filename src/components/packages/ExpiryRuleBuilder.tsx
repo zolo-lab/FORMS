@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, CalendarClock, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  COND_PERIODS, COND_TEXT, COND_UNITS, DEFAULT_EXPIRY_DAYS, PERIOD_TEXT, TODAY_FIELD, UNIT_TEXT, caseHolds, condNeeds, expiryFor, expiryRuleFields,
-  type CondOp, type CondPeriod, type CondUnit, type ExpiryBase, type ExpiryCalc, type ExpiryCase, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
+  COND_PERIODS, COND_TEXT, COND_UNITS, DEFAULT_EXPIRY_DAYS, PERIOD_TEXT, TODAY_FIELD, UNIT_TEXT, condNeeds, describeExpiryRule, expiryFor, expiryRuleFields,
+  type CondOp, type CondPeriod, type CondUnit, type ExpiryBase, type ExpiryCalc, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
 } from "@/lib/requests/expiry";
 
 /** `unavailable`: why the field cannot be used here (filled only later) – listed, but not chosen. */
@@ -42,7 +42,6 @@ const OP_LABEL: Partial<Record<CondOp, string>> = {
 const opLabel = (op: CondOp) => OP_LABEL[op] ?? COND_TEXT[op];
 type Kind = "days" | "months" | "fixed" | "none";
 const KIND_LABEL: Record<Kind, string> = { days: "לפי ימים", months: "לפי חודשים", fixed: "ביום קבוע בחודש", none: "ללא תוקף" };
-const MAX_CASES = 10;
 const fmt = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric" });
 const ymd = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
 /** Noon in Israel on a yyyy-mm-dd day, as the moment an example link is set. */
@@ -72,14 +71,14 @@ function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNo
   const baseValue = fieldId !== null ? `field:${fieldId}` : base.from;
   const missing = !!calc && fieldId !== null && !usableOf(dateFields).some((f) => f.id === fieldId);
   const baseSelect = calc && (
-    <Select id={`${id}-base`} aria-label="מאיזה תאריך" className="w-auto max-w-full" value={baseValue} onChange={(e) => {
+    <Select id={`${id}-base`} aria-label="מאיזה תאריך" className="w-auto min-w-0 max-w-full" value={baseValue} onChange={(e) => {
       const v = e.target.value;
       onChange({ ...calc, base: v.startsWith("field:") ? { from: "field", fieldId: v.slice(6) } : { from: v as BaseKind } });
     }}>
       {bases.map((b) => <option key={b} value={b}>{BASE_LABEL[b]}</option>)}
       {dateFields.length > 0 && (
         <optgroup label="תאריך מהטופס">
-          {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`} disabled={!!f.unavailable}>{f.label}{f.unavailable ? ` – ${f.unavailable}` : ""}</option>)}
+          {dateFields.map((f) => <option key={f.id} value={`field:${f.id}`} disabled={!!f.unavailable}>{f.label}{f.unavailable ? " (ממולא מאוחר יותר)" : ""}</option>)}
         </optgroup>
       )}
       {fieldId !== null && !dateFields.some((f) => f.id === fieldId) && <option value={baseValue}>שדה שלא זמין כאן</option>}
@@ -90,9 +89,9 @@ function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNo
     : "";
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
-        <span className="min-w-8 font-semibold">{lead}</span>
-        <Select id={`${id}-kind`} aria-label="איך נקבעת סגירת הקישור" className="w-auto" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm md:flex-nowrap">
+        <span className="shrink-0 whitespace-nowrap font-semibold">{lead}</span>
+        <Select id={`${id}-kind`} aria-label="איך נקבעת סגירת הקישור" className="w-auto shrink-0" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
           {(Object.keys(KIND_LABEL) as Kind[]).filter((k) => k !== "none" || allowNone).map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
         </Select>
         {calc && kind === "days" && (
@@ -117,9 +116,9 @@ function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNo
           <>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
               ה־
-              <Input id={`${id}-n`} aria-label="היום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={calc.snap.day} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, day: num(e.target.value, 1, 31) } })} />
+              <Input id={`${id}-n`} aria-label="היום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-16" value={calc.snap.day} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, day: num(e.target.value, 1, 31) } })} />
             </span>
-            <Select id={`${id}-month`} aria-label="באיזה חודש" className="w-auto min-w-0 max-w-full" value={calc.snap.mode} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, mode: e.target.value as ExpirySnap["mode"] } })}>
+            <Select id={`${id}-month`} aria-label="באיזה חודש" className="w-auto shrink-0" value={calc.snap.mode} onChange={(e) => onChange({ ...calc, snap: { ...calc.snap!, mode: e.target.value as ExpirySnap["mode"] } })}>
               {(Object.keys(SNAP_LABEL) as ExpirySnap["mode"][]).map((k) => <option key={k} value={k}>{SNAP_LABEL[k]}</option>)}
             </Select>
             {baseSelect}
@@ -236,9 +235,9 @@ function Trail({ calc, answers, start, fieldName }: { calc: ExpiryCalc; answers:
 
 /**
  * "תוקף הקישור": a closed choice – [the default | no expiry | a simple rule | a complex rule] – whose chosen option
- * opens. A simple rule reads as a sentence ("הקישור נסגר 7 ימים אחרי תחילת
- * השלב, ואז ביום 20 באותו חודש"), and may differ by conditions on a date of the form ("אם תאריך התחילה חל עד ה-20 →
- * …; בכל מקרה אחר → …"), so Make's rules are built here. Under it, the calculation on example dates, step by step.
+ * opens. A simple rule reads as a sentence ("סגירת הקישור: ה-7 בחודש שאחרי שליחת הבקשה"). A complex rule is one
+ * filter row, as in Tadabase / Airtable: "הקישור פג כאשר [date field] [operator] [value]" – checked every day.
+ * A rule saved with the older if/then cases still reads, and is replaced by choosing another option.
  * `inherit`: the label of "follow the default".
  */
 export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inherit }: {
@@ -250,22 +249,18 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   inherit?: string;
 }) {
   type Mode = "inherit" | "none" | "simple" | "complex";
-  const mode: Mode = !value ? "inherit" : value.kind === "none" ? "none" : value.kind === "cases" ? "complex" : "simple";
+  const mode: Mode = !value ? "inherit" : value.kind === "none" ? "none" : value.kind === "calc" ? "simple" : "complex";
   const fresh = (): ExpiryCalc => ({ kind: "calc", base: { from: bases[0]! } as ExpiryBase, addDays: bases[0] === "stepStart" ? 7 : 30 });
-  const cases: ExpiryCase[] = value?.kind === "cases" ? value.cases : [];
-  const otherwise: ExpiryOutcome | null = value?.kind === "cases" ? value.otherwise : value?.kind === "calc" ? value : null;
-  // Conditions are checked again every day, so they (and what they lead to) may read a date a later step fills.
+  const calc = value?.kind === "calc" ? value : null;
+  // The condition is checked again every day, so it may read a date a later step fills.
   const anyDate = dateFields.map((f) => ({ id: f.id, label: f.label }));
-  const newCondition = (): ExpiryCondition => ({ fieldId: anyDate[0]?.id ?? "", op: "thisMonth" });
-  const newCase = (): ExpiryCase => ({ conditions: [newCondition()], then: otherwise?.kind === "calc" ? otherwise : fresh() });
-  const setCases = (next: ExpiryCase[], other: ExpiryOutcome = otherwise ?? fresh()) => onChange(next.length ? { kind: "cases", cases: next, otherwise: other } : other);
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const pick = (m: Mode) => {
     if (m === mode) return;
     if (m === "inherit") onChange(undefined);
     else if (m === "none") onChange({ kind: "none" });
-    else if (m === "simple") onChange(otherwise?.kind === "calc" ? otherwise : fresh());
-    else onChange({ kind: "cases", cases: [newCase()], otherwise: otherwise ?? fresh() });
+    else if (m === "simple") onChange(fresh());
+    else onChange({ kind: "when", condition: { fieldId: anyDate[0]?.id ?? "", op: "beforeToday" } });
   };
 
   // Example dates: the moment the link is set ("today"), and each date field the rule reads.
@@ -274,15 +269,16 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const [examples, setExamples] = useState<Record<string, string>>({});
   const answers: Record<string, string> = Object.fromEntries(used.map((f) => [f, examples[f] ?? startDay]));
   const start = noonOf(startDay);
-  const chosen = cases.findIndex((c) => caseHolds(c, answers, start));
-  const outcome = chosen >= 0 ? cases[chosen]!.then : otherwise;
+  const closes = value && mode === "complex" ? expiryFor(value, answers, start) : null;
 
   const options: { id: Mode; title: string; hint: string }[] = [
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
-    { id: "simple", title: "תנאי פשוט", hint: "כלל אחד – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    // "תנאי מורכב" (if… then…, otherwise…) is offered only to show and replace a rule saved with it.
-    ...(mode === "complex" ? [{ id: "complex" as const, title: "תנאי מורכב (הוסר)", hint: "בחרו תנאי פשוט או ללא תוקף." }] : []),
+    { id: "simple", title: "תנאי פשוט", hint: "תאריך קבוע – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
+    {
+      id: "complex", title: "תנאי מורכב",
+      hint: anyDate.length ? "הקישור פג כאשר שדה תאריך עונה על תנאי – למשל \"תאריך תחילה\" לפני היום." : "צריך שדה תאריך בטופס. הוסיפו אחד בלשונית העריכה.",
+    },
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
@@ -291,7 +287,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
       <div className="mt-3 space-y-3" aria-live="polite">
         <div className="flex flex-wrap gap-3">
           <span className="flex items-center gap-2 text-sm">
-            <Label htmlFor={`${id}-ex-start`} className="font-normal text-muted-foreground">{bases.includes("stepStart") ? "השלב מתחיל ב־" : "נשלח ב־"}</Label>
+            <Label htmlFor={`${id}-ex-start`} className="font-normal text-muted-foreground">{mode === "complex" ? "היום:" : bases.includes("stepStart") ? "השלב מתחיל ב־" : "נשלח ב־"}</Label>
             <Input id={`${id}-ex-start`} type="date" value={startDay} onChange={(e) => e.target.value && setStartDay(e.target.value)} className="h-9 w-40" />
           </span>
           {used.map((f) => (
@@ -301,8 +297,9 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
             </span>
           ))}
         </div>
-        {cases.length > 0 && <p className="text-sm text-muted-foreground">חל: <strong className="text-foreground">{chosen >= 0 ? `קבוצת תנאים ${chosen + 1}` : "אחרת"}</strong></p>}
-        {outcome?.kind === "calc" ? <Trail calc={outcome} answers={answers} start={start} fieldName={fieldName} /> : <p className="text-sm font-medium">הקישור לא נסגר.</p>}
+        {calc
+          ? <Trail calc={calc} answers={answers} start={start} fieldName={fieldName} />
+          : <p className="text-sm">{closes === null ? "הקישור לא פג (התנאי לא מתקיים)." : closes < start ? <strong>הקישור כבר פג – התנאי מתקיים היום.</strong> : <>הקישור פג בסוף יום <strong>{fmt.format(closes)}</strong>.</>}</p>}
       </div>
     </details>
   );
@@ -332,59 +329,29 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 </span>
               </button>
 
-              {on && o.id === "simple" && otherwise?.kind === "calc" && (
+              {on && o.id === "simple" && calc && (
                 <div className="space-y-3 border-t p-3">
-                  <OutcomeSentence id={`${id}-simple`} lead="סגירת הקישור:" value={otherwise} onChange={onChange} dateFields={dateFields} bases={bases} />
+                  <OutcomeSentence id={`${id}-simple`} lead="סגירת הקישור:" value={calc} onChange={onChange} dateFields={dateFields} bases={bases} />
                   {example}
                 </div>
               )}
 
-              {on && o.id === "complex" && otherwise && (
+              {on && o.id === "complex" && (
                 <div className="space-y-3 border-t p-3">
-                  {cases.map((c, k) => {
-                    const setCase = (next: ExpiryCase) => setCases(cases.map((x, j) => (j === k ? next : x)));
-                    return (
-                      <section key={k} aria-label={`קבוצת תנאים ${k + 1}`} className="rounded-lg border bg-card">
-                        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-                          <span className="text-sm font-semibold">אם</span>
-                          <div role="group" aria-label="איך התנאים מצטרפים" className="inline-flex rounded-md border p-0.5">
-                            {([["all", "כל התנאים מתקיימים"], ["any", "אחד מהתנאים מתקיים"]] as const).map(([m, text]) => (
-                              <button key={m} type="button" aria-pressed={(c.match ?? "all") === m} onClick={() => { const next = { ...c }; if (m === "any") next.match = "any"; else delete next.match; setCase(next); }}
-                                className={cn("min-h-8 rounded px-2.5 text-xs font-medium", (c.match ?? "all") === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>
-                                {text}
-                              </button>
-                            ))}
-                          </div>
-                          <Button type="button" variant="ghost" size="icon" className="ms-auto text-destructive" disabled={cases.length === 1} onClick={() => setCases(cases.filter((_, j) => j !== k))} aria-label={`מחיקת קבוצת תנאים ${k + 1}`}><Trash2 className="size-4" aria-hidden /></Button>
-                        </div>
-                        <div className="space-y-2 p-3">
-                          {c.conditions.map((cond, n) => (
-                            <ConditionRow
-                              key={n}
-                              id={`${id}-c${k}-${n}`}
-                              value={cond}
-                              dateFields={anyDate}
-                              onChange={(next) => setCase({ ...c, conditions: c.conditions.map((y, m) => (m === n ? next : y)) })}
-                              onRemove={c.conditions.length > 1 ? () => setCase({ ...c, conditions: c.conditions.filter((_, m) => m !== n) }) : undefined}
-                            />
-                          ))}
-                          <Button type="button" variant="outline" size="sm" disabled={c.conditions.length >= 20} onClick={() => setCase({ ...c, conditions: [...c.conditions, newCondition()] })}>
-                            <Plus className="size-4" aria-hidden />תנאי נוסף
-                          </Button>
-                        </div>
-                        <div className="border-t bg-muted/30 p-3">
-                          <OutcomeSentence id={`${id}-t${k}`} lead="אז" value={c.then} onChange={(then) => setCase({ ...c, then })} dateFields={anyDate} bases={bases} allowNone />
-                        </div>
-                      </section>
-                    );
-                  })}
-                  <Button type="button" variant="ghost" size="sm" className="text-primary" disabled={cases.length >= MAX_CASES} onClick={() => setCases([...cases, newCase()])}>
-                    <Plus className="size-4" aria-hidden />קבוצת תנאים נוספת
-                  </Button>
-                  <section aria-label="אחרת" className="rounded-lg border bg-card p-3">
-                    <OutcomeSentence id={`${id}-else`} lead="אחרת" value={otherwise} onChange={(other) => setCases(cases, other)} dateFields={anyDate} bases={bases} allowNone />
-                  </section>
-                  <p className="text-xs text-muted-foreground">הקבוצה הראשונה שמתקיימת קובעת. התנאים נבדקים מחדש כל יום, והתוקף מתעדכן לפיהם.</p>
+                  {value?.kind === "when" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-sm md:flex-nowrap">
+                      <span className="shrink-0 whitespace-nowrap font-semibold">הקישור פג כאשר:</span>
+                      <div className="min-w-0 basis-full md:basis-auto md:flex-1">
+                        <ConditionRow id={`${id}-when`} value={value.condition} dateFields={anyDate} onChange={(condition) => onChange({ kind: "when", condition })} />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      כלל ישן: {value ? describeExpiryRule(value, fieldName) : ""}.{" "}
+                      <button type="button" className="text-primary underline" onClick={() => onChange({ kind: "when", condition: { fieldId: anyDate[0]?.id ?? "", op: "beforeToday" } })}>החלפה בתנאי חדש</button>
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">נבדק כל יום: ביום שהתנאי מתקיים, הקישור נסגר.</p>
                   {example}
                 </div>
               )}

@@ -56,7 +56,7 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
     const ids = expiryRuleFields(rule);
     if (ids.some((id) => !fields.some((f) => f.id === id))) return "שדה תאריך בכלל כבר לא קיים בטופס";
     // A rule with conditions is worked out again every day, so it may read a date that is filled later.
-    if (rule.kind !== "cases" && ids.some((id) => fields.find((f) => f.id === id)?.unavailable)) return scope ? "התאריך עוד לא מולא כשהשלב מתחיל" : "התאריך עוד לא מולא כשהבקשה נשלחת";
+    if (rule.kind !== "cases" && rule.kind !== "when" && ids.some((id) => fields.find((f) => f.id === id)?.unavailable)) return scope ? "התאריך עוד לא מולא כשהשלב מתחיל" : "התאריך עוד לא מולא כשהבקשה נשלחת";
     return null;
   };
   // Shown in order: by step (as the route goes, "all steps" first), then by organization.
