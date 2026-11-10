@@ -7,8 +7,8 @@ import { assignRoles, sanitizeDraft, stepFromDraft, type StepDraft } from "@/lib
 import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { draftProblems, emailFieldsOf } from "@/lib/workflow/step-fields";
 import { getEditorData } from "@/server/forms-store";
-import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setOrgWorkflows, setProcessing, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
-import { normalizeExpiryRule } from "@/lib/requests/expiry";
+import { addDocument, createPackage, getPackage, moveDocument, removeDocument, setArchived, setDocumentRequired, setExpiryRules, setOrgWorkflows, setProcessing, setWorkflow, updatePackage, updatePackageSettings } from "@/server/packages-store";
+import { normalizeExpiryRows, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses, parseFollowUpStatuses } from "@/lib/requests/follow-up";
 import { parseRecipients } from "@/lib/requests/recipients";
 import { normalizeProcessing, splitProcessing } from "@/lib/processing/model";
@@ -60,18 +60,9 @@ export async function savePackageSettingsAction(fd: FormData) {
   const id = pkgId(fd);
   const data = await getPackage(id);
   if (!data) redirect("/admin/packages");
-  const kind = String(fd.get("expiryKind") ?? "default");
-  const rule =
-    kind === "none" ? { kind: "none" }
-    : kind === "days" ? { kind: "days", days: Number(fd.get("expiryDays")) }
-    : kind === "dayOfNextMonth" ? { kind: "dayOfNextMonth", day: Number(fd.get("expiryDay")), dateFieldId: String(fd.get("expiryField") ?? "") }
-    : null;
-  const expiryRule = normalizeExpiryRule(rule);
-  if (kind !== "default" && !expiryRule) back(id, "?settingsError=expiry", fd);
   const recipients = parseRecipients(String(fd.get("recipients") ?? ""));
   if (recipients.invalid.length) back(id, `?settingsError=${encodeURIComponent(recipients.invalid.join(", "))}`, fd);
   await updatePackageSettings(id, {
-    expiryRule,
     completionRecipients: recipients.valid,
     followUpStatuses: parseFollowUpStatuses(String(fd.get("followUp") ?? ""), normalizeFollowUpStatuses(data!.pkg.followUpStatuses)),
     remindersEnabled: fd.get("remindersEnabled") === "on",
@@ -201,6 +192,25 @@ export async function saveProcessingAction(packageId: string, view: unknown): Pr
   const { processing, completionRecipients } = splitProcessing(normalizeProcessing(view, true));
   if (processing.parts.length > 30 || processing.destinations.length > 30) return { ok: false, errors: ["יותר מדי חלקים או יעדים"] };
   await setProcessing(packageId, processing, completionRecipients);
+  revalidatePath(`/admin/packages/${packageId}`);
+  revalidatePath("/admin/forms", "layout");
+  return { ok: true };
+}
+
+/**
+ * "כללי תוקף": the form's rule and the table, in one save. A row that does not survive normalizing (no scope, an
+ * incomplete rule, a second row for the same scope) is an error, not dropped silently.
+ */
+export async function saveExpiryRulesAction(packageId: string, formRule: unknown, rows: unknown): Promise<SaveStepsResult> {
+  await requireGrant("manageForms");
+  if (!UUID.test(packageId) || !Array.isArray(rows)) return { ok: false, errors: ["קלט לא תקין"] };
+  const data = await getPackage(packageId);
+  if (!data) return { ok: false, errors: ["הטופס לא נמצא"] };
+  const rule = formRule === null ? null : normalizeExpiryRule(formRule);
+  if (formRule !== null && !rule) return { ok: false, errors: ["הכלל של כל הטופס לא שלם"] };
+  const clean = normalizeExpiryRows(rows);
+  if (clean.length !== rows.length) return { ok: false, errors: ["יש כלל לא שלם, או שני כללים לאותו שלב ולאותה עמותה"] };
+  await setExpiryRules(packageId, rule, clean);
   revalidatePath(`/admin/packages/${packageId}`);
   revalidatePath("/admin/forms", "layout");
   return { ok: true };

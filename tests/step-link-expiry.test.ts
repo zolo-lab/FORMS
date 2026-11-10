@@ -29,8 +29,8 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
           { order: 1, role: "requester", action: "fill" },
           {
             order: 2, role: "employee", action: "fill",
-            expiry: { kind: "dayOfNextMonth", day: 7, dateFieldId: "start" },
-            expiryByOrg: { [special.id]: { kind: "dayOfMonth", day: 20, dateFieldId: "start" } },
+            expiry: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } },
+            expiryByOrg: { [special.id]: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" as const } } },
           },
         ],
       },
@@ -83,7 +83,7 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
         [special.id]: {
           steps: [
             { order: 1, role: "requester", action: "fill" },
-            { order: 2, role: "employee", action: "fill", expiry: { kind: "none" }, expiryByOrg: { [special.id]: { kind: "dayOfMonth", day: 20, dateFieldId: "start" } } },
+            { order: 2, role: "employee", action: "fill", expiry: { kind: "none" }, expiryByOrg: { [special.id]: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" as const } } } },
           ],
         },
       },
@@ -92,5 +92,83 @@ describe.skipIf(!hasDb)("a step's own link expiry (dev DB)", () => {
     expect(c.step.ownLinkExpiry).toBe(true);
     expect(c.step.linkExpiresAt).toBeNull();
     expect(c.token.expiresAt).toBeNull();
+  });
+  it("a rule that compares with today is worked out again as the days pass, unless the request was extended", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const stamp = Date.now();
+    const [org] = await db.insert(schema.organizations).values({ name: `ארגון היום ${stamp}`, registrationNumber: `ET${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.organizations).where(eq(schema.organizations.id, org!.id)));
+    // Start date 12 days from now. If it is within 10 days of today: 5 days from the step's start; otherwise the 7th
+    // of the month after it.
+    const ymd = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
+    const start = ymd(new Date(stamp + 12 * 86_400_000));
+    const [pkg] = await db.insert(schema.packageTemplates).values({
+      name: `test-expiry-today-${stamp}`,
+      workflow: {
+        steps: [
+          { order: 1, role: "requester", action: "fill" },
+          {
+            order: 2, role: "employee", action: "fill",
+            expiry: {
+              kind: "cases" as const,
+              cases: [{ conditions: [{ fieldId: "start", op: "duringNext" as const, n: 10, unit: "days" as const }], then: { kind: "calc" as const, base: { from: "stepStart" as const }, addDays: 5 } }],
+              otherwise: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } },
+            },
+          },
+        ],
+      },
+    }).returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: `today${stamp}@example.test` }, requesterAnswers: { start } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    await store.sendRequest(id);
+    const stepOf = async () => (await db.select().from(schema.signingSteps).where(eq(schema.signingSteps.requestId, id))).find((s) => s.role === "employee")!;
+    const first = await stepOf();
+    const [y, m] = start.split("-").map(Number) as [number, number];
+    expect(first.linkExpiresAt).toEqual(endOfDayIsrael(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 7));
+
+    // Three days later the start date is within 10 days: the deadline moves to 5 days from the step's start.
+    await store.expireOverdue(new Date(stamp + 3 * 86_400_000));
+    const moved = await stepOf();
+    expect(moved.linkExpiresAt).toEqual(new Date(first.activatedAt!.getTime() + 5 * 86_400_000));
+    const tokens = (await db.select().from(schema.stepTokens).where(eq(schema.stepTokens.stepId, first.id))).filter((t) => !t.revokedAt);
+    expect(tokens.every((t) => t.expiresAt?.getTime() === moved.linkExpiresAt!.getTime())).toBe(true);
+    expect((await store.getRequest(id))!.request.status).toBe("in_progress");
+
+    // An admin's extension stands: the rule no longer moves it.
+    await store.extendExpiry(id, 20);
+    const extended = (await stepOf()).linkExpiresAt!;
+    await store.expireOverdue(new Date(stamp + 4 * 86_400_000));
+    expect((await stepOf()).linkExpiresAt).toEqual(extended);
+  });
+  it("rules of the \"כללי תוקף\" table: the step's row for the organization, and the organization's row for the request", async () => {
+    const { db, schema } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const store = await import("@/server/requests-store");
+    const stamp = Date.now();
+    const [org] = await db.insert(schema.organizations).values({ name: `ארגון טבלה ${stamp}`, registrationNumber: `TB${stamp}` }).returning();
+    cleanup.push(() => db.delete(schema.organizations).where(eq(schema.organizations.id, org!.id)));
+    const [pkg] = await db.insert(schema.packageTemplates).values({
+      name: `test-expiry-table-${stamp}`,
+      workflow: { steps: [{ order: 1, role: "requester", action: "fill" }, { order: 2, role: "employee", action: "fill" }] },
+      expiryRule: { kind: "calc", base: { from: "sent" }, addDays: 30 },
+      expiryRules: [
+        { id: "a", stepRole: "employee", rule: { kind: "calc", base: { from: "stepStart" }, addDays: 5 } },
+        { id: "b", stepRole: "employee", orgId: org!.id, rule: { kind: "calc", base: { from: "stepStart" }, addDays: 9 } },
+        { id: "c", orgId: org!.id, rule: { kind: "calc", base: { from: "sent" }, addDays: 12 } },
+      ],
+    }).returning();
+    cleanup.push(() => db.delete(schema.packageTemplates).where(eq(schema.packageTemplates.id, pkg!.id)));
+    const id = await store.createRequest({ packageTemplateId: pkg!.id, organizationId: org!.id, subject: { name: "עובד", email: `table${stamp}@example.test` } });
+    cleanup.push(() => db.delete(schema.requests).where(eq(schema.requests.id, id)));
+    const [req] = await db.select().from(schema.requests).where(eq(schema.requests.id, id));
+    expect(req!.expiresAt!.getTime() - req!.createdAt.getTime()).toBeGreaterThan(11.9 * 86_400_000);
+    expect(req!.expiresAt!.getTime() - req!.createdAt.getTime()).toBeLessThan(12.1 * 86_400_000);
+    await store.sendRequest(id);
+    const step = (await db.select().from(schema.signingSteps).where(eq(schema.signingSteps.requestId, id))).find((s) => s.role === "employee")!;
+    expect(step.ownLinkExpiry).toBe(true);
+    expect(step.linkExpiresAt!.getTime() - step.activatedAt!.getTime()).toBe(9 * 86_400_000);
   });
 });

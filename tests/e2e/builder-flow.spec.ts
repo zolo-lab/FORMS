@@ -80,19 +80,27 @@ test("from scratch: eight field types, labels, a condition, a second page, previ
   await page.getByRole("tab", { name: "שלבים", exact: true }).click();
   await expect(page.getByRole("heading", { name: "שלבי הטופס" })).toBeVisible();
   // A new form starts with the sender → the employee. Step 1 is fixed; add a third step.
-  await expect(page.getByRole("listitem", { name: "שלב 1" })).toContainText("שלב 1 · השולח");
+  await expect(page.getByRole("row", { name: "שלב 1", exact: true })).toContainText("השולח");
   await page.getByRole("button", { name: "הוספת שלב" }).click();
-  const step3 = page.getByRole("listitem", { name: "שלב 3" });
+  const step3 = page.getByRole("row", { name: "שלב 3", exact: true });
   // What is missing shows on the step itself, and nothing can be saved until it is fixed.
   await expect(step3).toContainText("בחרו משתמש");
   await expect(page.getByRole("button", { name: "שמירת השלבים" })).toBeDisabled();
-  await step3.getByLabel("למי השלב הולך").selectOption({ label: "מייל קבוע (למשל גורם חיצוני)" });
-  await step3.getByLabel("מייל").fill("payroll@example.test");
-  await expect(step3).toContainText("שלב 3 · payroll@example.test");
+  // A new step opens its settings right away.
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("למי השלב הולך").selectOption({ label: "מייל קבוע (למשל גורם חיצוני)" });
+  await dialog.getByLabel("מייל").fill("payroll@example.test");
+  await expect(dialog.getByRole("heading")).toContainText("שלב 3 · payroll@example.test");
+  await dialog.getByRole("button", { name: "סיום" }).click();
+  await expect(step3).toContainText("payroll@example.test");
   await page.getByRole("button", { name: "שמירת השלבים" }).click();
   await expect(page.getByRole("status").filter({ hasText: "השלבים נשמרו" })).toBeVisible();
   await page.goto(`/admin/forms/${id}/flow`); // old link: lands on the steps tab
-  await expect(page.getByRole("listitem", { name: "שלב 3" }).getByLabel("מייל")).toHaveValue("payroll@example.test");
+  await expect(page.getByRole("row", { name: "שלב 3", exact: true })).toContainText("payroll@example.test");
+  // An existing step opens from its name, without scrolling the table sideways.
+  await page.getByRole("row", { name: "שלב 3", exact: true }).getByRole("button", { name: /payroll@example\.test/ }).click();
+  await expect(page.getByRole("dialog").getByLabel("מייל")).toHaveValue("payroll@example.test");
+  await page.getByRole("dialog").getByRole("button", { name: "סיום" }).click();
 
   // "הצגת שלב" only shows a step's fields; "עריכת שלבים" marks fields and moves them to the step(s) chosen.
   await openEditView(page, "רספונסיבי");

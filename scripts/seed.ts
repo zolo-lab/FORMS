@@ -100,7 +100,7 @@ async function main() {
         name: testName,
         description: "ערכת בדיקה של v4: שדות פנימיים, תוקף מחושב, מאשר משדה, טיפול אחרי חתימה",
         workflow: termsChangeWorkflow,
-        expiryRule: { kind: "dayOfNextMonth", day: 4, dateFieldId: "start_work_date" },
+        expiryRule: { kind: "calc" as const, base: { from: "field" as const, fieldId: "start_work_date" }, snap: { day: 4, mode: "next" as const } },
         followUpStatuses: [{ key: "payroll", label: "עודכן בשכר" }],
       })
       .returning();

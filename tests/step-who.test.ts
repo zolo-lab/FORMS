@@ -114,19 +114,10 @@ describe("group_any in the steps editor", () => {
   });
 });
 
-describe("step link expiry in drafts", () => {
-  const org = "0b8f6c2e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
-  it("round-trips a step's rule and its organization exceptions", () => {
-    const d = { who: "employee" as const, role: "employee" as const, expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { [org]: { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
-    const step = stepFromDraft(d, 1);
-    expect(step.expiry).toEqual(d.expiry);
-    expect(step.expiryByOrg).toEqual(d.expiryByOrg);
-    expect(draftOf(step)).toMatchObject({ expiry: d.expiry, expiryByOrg: d.expiryByOrg });
-  });
-  it("drops junk rules and never gives the sender its own expiry", () => {
-    const junk = sanitizeDraft({ who: "employee", expiry: { kind: "days", days: -3 }, expiryByOrg: { "not-an-id": { kind: "none" }, [org]: { kind: "bad" } } });
-    expect(junk.expiry).toBeUndefined();
-    expect(junk.expiryByOrg).toBeUndefined();
-    expect(stepFromDraft({ who: "requester", role: "requester", expiry: { kind: "none" } }, 0).expiry).toBeUndefined();
+describe("link expiry is not part of a step draft", () => {
+  it("drafts neither read nor write it (the \"כללי תוקף\" table owns it)", () => {
+    const step = stepFromDraft({ who: "employee", role: "employee" }, 1);
+    expect(step.expiry).toBeUndefined();
+    expect(draftOf({ order: 2, role: "employee", action: "fill", expiry: { kind: "none" } })).not.toHaveProperty("expiry");
   });
 });

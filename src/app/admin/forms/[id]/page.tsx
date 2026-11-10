@@ -1,10 +1,11 @@
+import { normalizeExpiryRule, withLegacyExpiryRows } from "@/lib/requests/expiry";
 import { formLinkOrgs } from "@/server/public-fill";
 import { listOrgFieldDefs, listOrgs, listProjects } from "@/server/orgs-store";
 import { orgListFields } from "@/server/lists-store";
 import { notFound, redirect } from "next/navigation";
 import { FormEditor } from "@/components/builder/FormEditor";
 import { FlowSettings, type FlowQuery } from "@/components/packages/FlowSettings";
-import { saveStepsAction, saveOrgRouteAction, saveProcessingAction } from "@/app/admin/packages/actions";
+import { saveExpiryRulesAction, saveStepsAction, saveOrgRouteAction, saveProcessingAction } from "@/app/admin/packages/actions";
 import { assignRoles, draftOf, stepFromDraft } from "@/lib/workflow/step-who";
 import { getEditorData, getPdfFile } from "@/server/forms-store";
 import { listContacts, listGroups } from "@/server/people-store";
@@ -35,7 +36,7 @@ export default async function EditFormPage({ params, searchParams }: { params: P
   if (drafts.length !== stored.length || drafts.some((d, i) => d.role !== stored[i]!.role)) await setWorkflow(pkgId, { steps: drafts.map((d, i) => stepFromDraft(d, i)) });
 
   const sendSettings = await FlowSettings({ id: pkgId, query, formId: id, settingsOnly: true });
-  const initialTab = tab === "pdf" || tab === "steps" || tab === "process" ? tab : "edit";
+  const initialTab = tab === "pdf" || tab === "steps" || tab === "process" || tab === "expiry" ? tab : "edit";
   return (
     <FormEditor
       templateId={id}
@@ -58,6 +59,12 @@ export default async function EditFormPage({ params, searchParams }: { params: P
         completionRecipients: pkg?.pkg.completionRecipients ?? [],
         saveProcessing: saveProcessingAction,
         sendSettings,
+        // "כללי תוקף": rules older forms kept on their steps are shown in the table (and move into it on saving).
+        expiry: {
+          formRule: normalizeExpiryRule(pkg?.pkg.expiryRule),
+          rows: withLegacyExpiryRows(pkg?.pkg.expiryRules, pkg?.pkg.workflow, pkg?.pkg.orgWorkflows),
+          save: saveExpiryRulesAction,
+        },
         sendSettingsOpen: !!(query.saved === "settings" || query.saved === "org" || query.settingsError || query.error),
       }}
       initial={data.version.definition}

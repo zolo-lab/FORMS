@@ -15,18 +15,8 @@ type Option = { id: string; label: string };
 export type SaveRoute = (organizationId: string, drafts: StepDraft[] | null) => Promise<{ ok: true } | { ok: false; errors: string[] }>;
 
 const strip = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
-/**
- * Editable copies of steps. A route of its own already belongs to one organization, so per-organization link-expiry
- * exceptions have no meaning in it (and are not shown here): they are dropped, and the step's own rule is what applies.
- */
-const fresh = (drafts: StepDraft[], forOrg?: string): EditorDraft[] =>
-  drafts.map((d) => {
-    // Copied for one organization: its exception (if it had one) becomes the step's own rule, so nothing changes for it.
-    const own = (forOrg && d.expiryByOrg?.[forOrg]) || d.expiry;
-    const copy: EditorDraft = { ...d, key: crypto.randomUUID(), origRole: d.role, ...(own ? { expiry: own } : {}) };
-    delete copy.expiryByOrg;
-    return copy;
-  });
+/** Editable copies of steps. */
+const fresh = (drafts: StepDraft[]): EditorDraft[] => drafts.map((d) => ({ ...d, key: crypto.randomUUID(), origRole: d.role }));
 const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringify(a?.map(strip) ?? null) === JSON.stringify(b?.map(strip) ?? null);
 
 /**
@@ -34,9 +24,10 @@ const same = (a: EditorDraft[] | null, b: EditorDraft[] | null) => JSON.stringif
  * made from the general one or copied from another organization's, then edited (another manager, one more step).
  */
 export function OrgRoutes({
-  org, orgs, routes, fallback, contacts, groups, emailFields, dateFields, heldRoles, save, onRoutesChange,
+  org, orgs, routes, fallback, contacts, groups, emailFields, expiryText, heldRoles, save, onRoutesChange,
 }: {
-  dateFields?: Option[];
+  /** The link rule of a step of this organization (by role), in words – from the "כללי תוקף" tab. */
+  expiryText?: (role: string) => string;
   org: Option;
   orgs: Option[];
   /** Saved routes, per organization id. */
@@ -102,7 +93,7 @@ export function OrgRoutes({
           {fallback.drafts.map((d, i) => <li key={i}>{stepLabel(d, i, ctx)}</li>)}
         </ol>
         <div className="flex flex-wrap items-end gap-3">
-          <Button type="button" onClick={() => setMine(fresh(fallback.drafts, org.id))}>
+          <Button type="button" onClick={() => setMine(fresh(fallback.drafts))}>
             <GitBranch className="size-4" aria-hidden />מסלול נפרד ל{org.label} (מ{fallback.label})
           </Button>
           {withRoute.length > 0 && (
@@ -155,7 +146,7 @@ export function OrgRoutes({
         contacts={contacts}
         groups={groups}
         emailFields={emailFields}
-        dateFields={dateFields}
+        expiryText={expiryText}
         dirty={dirty}
         state={state[org.id] ?? { kind: "idle" }}
         onSave={() => void persist(mine)}

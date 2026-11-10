@@ -5,7 +5,7 @@ import { roleView } from "@/lib/forms/role-view";
 import type { FormDefinition } from "@/lib/forms/schema";
 import type { Workflow } from "@/lib/workflow/types";
 import { normalizeOrders } from "@/lib/workflow/validate-workflow";
-import type { ExpiryRule } from "@/lib/requests/expiry";
+import { hasStepExpiry, withLegacyExpiryRows, withoutStepExpiry, type ExpiryRule, type ExpiryRuleRow } from "@/lib/requests/expiry";
 import type { FollowUpStatus } from "@/lib/requests/follow-up";
 import type { Processing } from "@/lib/processing/types";
 
@@ -117,7 +117,6 @@ export async function updatePackage(id: string, patch: { name: string; descripti
 
 /** Process settings of a package: link expiry, completion recipients, handling steps after signing, reminders. */
 export async function updatePackageSettings(id: string, patch: {
-  expiryRule: ExpiryRule | null;
   completionRecipients: { name: string; email: string }[];
   followUpStatuses: FollowUpStatus[];
   remindersEnabled: boolean;
@@ -138,12 +137,37 @@ export async function setArchived(id: string, archived: boolean) {
   await db.update(packageTemplates).set({ archivedAt: archived ? new Date() : null }).where(eq(packageTemplates.id, id));
 }
 
+/**
+ * Link-expiry rules an older form kept on its steps move into the "כללי תוקף" table before its steps are written
+ * (the step editors no longer carry them), so saving steps never drops a rule.
+ */
+async function absorbStepExpiry(id: string, next?: Workflow) {
+  const [pkg] = await db.select({ workflow: packageTemplates.workflow, orgWorkflows: packageTemplates.orgWorkflows, expiryRules: packageTemplates.expiryRules }).from(packageTemplates).where(eq(packageTemplates.id, id));
+  if (!pkg || !hasStepExpiry(pkg.workflow, pkg.orgWorkflows)) return;
+  // The general route about to be written keeps its steps in order: a rule follows its step to the role it gets now.
+  const sameShape = next && next.steps.length === pkg.workflow.steps.length;
+  const rows = withLegacyExpiryRows(pkg.expiryRules, pkg.workflow, pkg.orgWorkflows, sameShape ? (i) => next.steps[i]?.role : undefined);
+  await db.update(packageTemplates).set({
+    expiryRules: rows,
+    workflow: withoutStepExpiry(pkg.workflow),
+    orgWorkflows: Object.fromEntries(Object.entries(pkg.orgWorkflows ?? {}).map(([k, w]) => [k, withoutStepExpiry(w)])),
+  }).where(eq(packageTemplates.id, id));
+}
+
 export async function setOrgWorkflows(id: string, routes: Record<string, Workflow>) {
-  await db.update(packageTemplates).set({ orgWorkflows: Object.fromEntries(Object.entries(routes).map(([org, w]) => [org, { steps: normalizeOrders(w.steps) }])) }).where(eq(packageTemplates.id, id));
+  await absorbStepExpiry(id);
+  await db.update(packageTemplates).set({ orgWorkflows: Object.fromEntries(Object.entries(routes).map(([org, w]) => [org, { steps: withoutStepExpiry({ steps: normalizeOrders(w.steps) }).steps }])) }).where(eq(packageTemplates.id, id));
 }
 
 export async function setWorkflow(id: string, workflow: Workflow) {
-  await db.update(packageTemplates).set({ workflow: { steps: normalizeOrders(workflow.steps) } }).where(eq(packageTemplates.id, id));
+  await absorbStepExpiry(id, workflow);
+  await db.update(packageTemplates).set({ workflow: withoutStepExpiry({ steps: normalizeOrders(workflow.steps) }) }).where(eq(packageTemplates.id, id));
+}
+
+/** "כללי תוקף": the form's own rule (null = 30 days after sending) and the table's rows, in one save. */
+export async function setExpiryRules(id: string, formRule: ExpiryRule | null, rows: ExpiryRuleRow[]) {
+  await absorbStepExpiry(id);
+  await db.update(packageTemplates).set({ expiryRule: formRule, expiryRules: rows }).where(eq(packageTemplates.id, id));
 }
 
 export async function addDocument(packageId: string, templateId: string) {

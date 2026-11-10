@@ -4,9 +4,12 @@ import { dependentsOf, revealWord, setDependents } from "@/lib/forms/dependents"
 import { cn } from "@/lib/utils";
 import { StepsEditor, type EditorDraft, type StepsSaveState } from "@/components/packages/StepsEditor";
 import { OrgRoutes } from "@/components/packages/OrgRoutes";
+import { ExpiryRulesTab, type ExpiryRules } from "@/components/packages/ExpiryRulesTab";
+import type { DateFieldOption } from "@/components/packages/ExpiryRuleBuilder";
+import { describeExpiryRule, requestExpiryRule, stepRowRule, type ExpiryRule, type ExpiryRuleRow } from "@/lib/requests/expiry";
 import type { SaveStepsResult } from "@/app/admin/packages/actions";
 import { assignRoles, type StepDraft } from "@/lib/workflow/step-who";
-import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
+import { answerFields, comboPatch, emailFieldsOf, fieldRole, stepComboOptions, stepLabel, stepViews, unassignedFields, type StepView } from "@/lib/workflow/step-fields";
 import type { FillerRole } from "@/lib/forms/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -45,7 +48,7 @@ import { viewProcessing } from "@/lib/processing/model";
 import type { Processing } from "@/lib/processing/types";
 import type { Recipient } from "@/lib/requests/recipients";
 
-type TabId = "edit" | "preview" | "pdf" | "steps" | "process" | "json";
+type TabId = "edit" | "preview" | "pdf" | "steps" | "process" | "expiry" | "json";
 /** The tabs above: "עריכה" stands for both the PDF and the responsive form (switched just below it). */
 type TopTab = Exclude<TabId, "edit" | "pdf"> | "build";
 type HistoryEntry = { def: FormDefinition; pdf?: PdfState | null };
@@ -86,6 +89,8 @@ export interface FormEditorProps {
     saveProcessing?: (packageId: string, view: Processing) => Promise<SaveStepsResult>;
     /** Sending settings (recipients, reminders…), rendered on the server. */
     sendSettings?: React.ReactNode;
+    /** "כללי תוקף": the form's own rule, the table's rows, and saving both. */
+    expiry?: ExpiryRules & { save: (packageId: string, formRule: ExpiryRule | null, rows: ExpiryRuleRow[]) => Promise<SaveStepsResult> };
     /** Open the sending settings (they were just saved, or failed). */
     sendSettingsOpen?: boolean;
   };
@@ -93,7 +98,13 @@ export interface FormEditorProps {
 
 /** A draft as the server takes it (without the editor's own keys). */
 /** The form's date fields, for a step's "the Nth of the month after…" link expiry. */
-const dateFieldsOf = (def: FormDefinition) => answerFields(def).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id }));
+/** `moves`: steps whose role changes on saving (old → new), as the fields will follow them. */
+const dateFieldsOf = (def: FormDefinition, steps: { role: string }[] = [], moves?: Map<string, string>) => answerFields(def).filter((f) => f.type === "date").map((f) => {
+  const role = moves?.get(fieldRole(f)) ?? fieldRole(f);
+  const at = steps.findIndex((d) => d.role === role);
+  return { id: f.id, label: f.label || f.id, hint: at >= 0 ? `שלב ${at + 1}` : undefined, roles: [role, ...(f.alsoFilledBy ?? [])] };
+});
+const EXPIRY_FOLLOW_ERROR = "השלבים נשמרו, אבל כללי התוקף לא עודכנו לפיהם – שמרו אותם בלשונית כללי תוקף";
 const stripDraft = (e: EditorDraft): StepDraft => { const d: Partial<EditorDraft> = { ...e }; delete d.key; delete d.origRole; return d as StepDraft; };
 
 export function FormEditor({ templateId, initial, initialVersion, initiallyPublished, initialPdf, initialTab = "edit", needsPdf = false, groups = [], orgFields = [], orgList = [], flow, linkOrgs = [] }: FormEditorProps) {
@@ -107,6 +118,9 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   const [procWork, setProcWork] = useState<Processing>(() => viewProcessing(flow?.processing, flow?.completionRecipients));
   const [procSaved, setProcSaved] = useState(procWork);
   const [procState, setProcState] = useState<StepsSaveState>({ kind: "idle" });
+  const [expWork, setExpWork] = useState<ExpiryRules>(() => ({ formRule: flow?.expiry?.formRule ?? null, rows: flow?.expiry?.rows ?? [] }));
+  const [expSaved, setExpSaved] = useState(expWork);
+  const [expState, setExpState] = useState<StepsSaveState>({ kind: "idle" });
   /** "שלבי הטופס" shows the general route ("") or one organization's. */
   const [routeOrg, setRouteOrg] = useState("");
   const [orgRoutes, setOrgRoutes] = useState<Record<string, StepDraft[]>>(flow?.orgRoutes ?? {});
@@ -122,6 +136,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
   };
   const stepsDirty = JSON.stringify(stepWork.map(stripDraft)) !== JSON.stringify(stepSaved.map(stripDraft));
   const procDirty = JSON.stringify(procWork) !== JSON.stringify(procSaved);
+  const expDirty = JSON.stringify(expWork) !== JSON.stringify(expSaved);
   const ctx = { contacts: flow?.contacts, groups: flow?.groups, fields: emailFieldsOf(def) };
   const views: StepView[] | undefined = flow ? stepViews(stepWork, ctx) : undefined;
   const stepRoles = (views ?? []).map((v) => v.role);
@@ -344,6 +359,25 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
 
   // A step whose role is about to change takes its fields along on save: check the steps as if it already had.
   const pendingMoves = new Map(stepWork.filter((d) => d.origRole && d.origRole !== d.role).map((d) => [d.origRole!, d.role] as const));
+  /**
+   * "כללי תוקף": the date fields a rule can count from – for a step, those filled by the steps before it; for every
+   * step or an organization (set when the request is sent), the sender's. The others are listed with why not.
+   */
+  const expiryDateFields = (stepRole: string | null): DateFieldOption[] => {
+    const at = stepRole ? stepWork.findIndex((d) => d.role === stepRole) : 1;
+    const before = new Set(stepWork.slice(0, Math.max(at, 0)).map((d) => d.role as string));
+    return dateFieldsOf(def, stepWork, pendingMoves).map((f) => (f.roles.some((r) => before.has(r))
+      ? f
+      : { ...f, unavailable: f.hint ? `ממולא ב${f.hint}, ${stepRole ? "לא לפני השלב" : "אחרי השליחה"}` : "לא משויך לשלב שממלא אותו" }));
+  };
+  /** The rule a step's link follows, in words, for the table of steps. */
+  const expiryText = (role: string, orgId: string | null): string => {
+    const label = (fid: string) => answerFields(def).find((f) => f.id === fid)?.label || fid;
+    const own = stepRowRule(expWork.rows, role, orgId);
+    if (own) return describeExpiryRule(own, label);
+    const all = requestExpiryRule(expWork.formRule, expWork.rows, orgId);
+    return `כמו כל הטופס: ${all ? describeExpiryRule(all, label) : "30 ימים מהשליחה"}`;
+  };
   // Leaving the page with unsaved steps asks first.
   useEffect(() => {
     if (!stepsDirty) return;
@@ -375,6 +409,45 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
     setStepWork(now);
     setStepSaved(now);
     setStepState({ kind: "saved" });
+    // "כללי תוקף" follow the steps of the general route: a step whose role changed keeps its rules (the moved rule wins
+    // over one the new role had); a step that is gone takes its rules along, so a later step that gets the same role
+    // does not inherit them. Rules of an organization with a route of its own stay with that route.
+    if (flow.expiry) {
+      const movedRoles = new Map<string, string>([...moved].map(([a, b]) => [String(a), String(b)]));
+      const ownRoute = (r: ExpiryRuleRow) => !!r.orgId && !!orgRoutes[r.orgId];
+      const roles = new Set([...now.map((d) => d.role as string), ...Object.values(orgRoutes).flatMap((r) => r.map((d) => d.role as string))]);
+      const follow = (rows: ExpiryRuleRow[]) => {
+        const out = rows.map((r) => { const to = r.stepRole && !ownRoute(r) ? movedRoles.get(r.stepRole) : undefined; return to ? { ...r, stepRole: to, moved: true } : { ...r, moved: false }; });
+        const key = (r: ExpiryRuleRow) => `${r.stepRole ?? ""}|${r.orgId ?? ""}`;
+        const movedKeys = new Set(out.filter((r) => r.moved).map(key));
+        return out
+          .filter((r) => r.moved || !movedKeys.has(key(r)))
+          .filter((r) => !r.stepRole || roles.has(r.stepRole))
+          .map((r) => { const c: Partial<typeof r> = { ...r }; delete c.moved; return c as ExpiryRuleRow; });
+      };
+      const savedRows = follow(expSaved.rows);
+      setExpWork((w) => ({ ...w, rows: follow(w.rows) }));
+      if (JSON.stringify(savedRows) !== JSON.stringify(expSaved.rows)) {
+        const r2 = await flow.expiry.save(flow.packageId, expSaved.formRule, savedRows);
+        // On failure the tab keeps the rules as they follow the steps (unsaved), with the error, to save from there.
+        if (r2.ok) setExpSaved({ ...expSaved, rows: savedRows });
+        else {
+          // Shown in both tabs: the steps were saved, but their rules still have to be.
+          setExpState({ kind: "error", errors: [EXPIRY_FOLLOW_ERROR, ...r2.errors] });
+          setStepState({ kind: "error", errors: [EXPIRY_FOLLOW_ERROR] });
+        }
+      }
+    }
+  }
+
+  async function saveExpiry() {
+    if (!flow?.expiry) return;
+    setExpState({ kind: "saving" });
+    const r = await flow.expiry.save(flow.packageId, expWork.formRule, expWork.rows);
+    if (!r.ok) { setExpState({ kind: "error", errors: r.errors }); return; }
+    setExpSaved(expWork);
+    setExpState({ kind: "saved" });
+    setStepState((st) => (st.kind === "error" && st.errors[0] === EXPIRY_FOLLOW_ERROR ? { kind: "saved" } : st));
   }
 
   async function saveProcessing() {
@@ -458,6 +531,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
           tabs={[
             { id: "build", label: "עריכה" },
             ...(flow ? [{ id: "steps" as const, label: stepsDirty ? "שלבים •" : "שלבים" }] : []),
+            ...(flow?.expiry ? [{ id: "expiry" as const, label: expDirty ? "כללי תוקף •" : "כללי תוקף" }] : []),
             ...(flow?.saveProcessing ? [{ id: "process" as const, label: procDirty ? "עיבוד •" : "עיבוד" }] : []),
             { id: "preview", label: "תצוגה מקדימה" },
             ...(tab === "json" ? [{ id: "json" as const, label: "JSON" }] : []),
@@ -757,7 +831,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                   contacts={flow.contacts}
                   groups={flow.groups}
                   emailFields={emailFieldsOf(def)}
-                  dateFields={dateFieldsOf(def)}
+                  expiryText={flow.expiry ? (role) => expiryText(role, routeOrg) : undefined}
                   heldRoles={[...new Set([...answerFields(def).map(fieldRole), ...stepWork.map((d) => d.role)])]}
                   save={(org, drafts) => flow.saveOrgRoute!(flow.packageId, org, drafts)}
                   onRoutesChange={setOrgRoutes}
@@ -769,8 +843,7 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
                 contacts={flow.contacts}
                 groups={flow.groups}
                 emailFields={emailFieldsOf(def).map((f) => ({ ...f, role: pendingMoves.get(f.role) ?? f.role }))}
-                dateFields={dateFieldsOf(def)}
-                orgs={flow.orgs?.map((o) => ({ id: o.id, label: o.label }))}
+                expiryText={flow.expiry ? (role) => expiryText(role, null) : undefined}
                 dirty={stepsDirty}
                 state={stepState}
                 onSave={() => void saveSteps()}
@@ -781,11 +854,24 @@ export function FormEditor({ templateId, initial, initialVersion, initiallyPubli
             </section>
             {flow.sendSettings && (
               <details className="rounded-lg border bg-card p-4" open={flow.sendSettingsOpen}>
-                <summary className="cursor-pointer font-semibold">הגדרות שליחה: מקבלי המסמכים, תזכורות ותוקף הקישורים</summary>
+                <summary className="cursor-pointer font-semibold">הגדרות שליחה: מקבלי המסמכים ותזכורות</summary>
                 <div className="mt-4">{flow.sendSettings}</div>
               </details>
             )}
           </div>
+        )}
+        {tab === "expiry" && flow?.expiry && (
+          <ExpiryRulesTab
+            value={expWork}
+            onChange={(v) => { setExpWork(v); setExpState({ kind: "idle" }); }}
+            steps={stepWork.map((d, i) => ({ id: d.role, label: stepLabel(d, i, ctx) })).filter((s) => s.id !== "requester")}
+            orgs={(flow.orgs ?? []).map((o) => ({ id: o.id, label: o.label }))}
+            dateFieldsFor={expiryDateFields}
+            dirty={expDirty}
+            state={expState}
+            onSave={() => void saveExpiry()}
+            waitingForForm={save !== "saved"}
+          />
         )}
         {tab === "process" && flow?.saveProcessing && (
           <ProcessingTab

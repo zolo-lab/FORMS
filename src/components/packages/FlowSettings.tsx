@@ -8,9 +8,6 @@ import { validateWorkflow } from "@/lib/workflow/validate-workflow";
 import { listOrgs } from "@/server/orgs-store";
 import { availableForms, getPackage } from "@/server/packages-store";
 import { archivePackageAction, documentAction, savePackageAction, savePackageSettingsAction } from "@/app/admin/packages/actions";
-import { getWizardPackage } from "@/server/packages-store";
-import { allFields } from "@/lib/forms/schema";
-import { describeExpiryRule, normalizeExpiryRule } from "@/lib/requests/expiry";
 import { normalizeFollowUpStatuses } from "@/lib/requests/follow-up";
 import { formatRecipients } from "@/lib/requests/recipients";
 
@@ -32,12 +29,6 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
   const addable = forms.filter((f) => !inPackage.has(f.id));
   const problems = validateWorkflow(pkg.workflow);
   const unpublishedRequired = items.filter((i) => i.required && !i.publishedVersion);
-  // Date fields the requester fills: the "Nth of the next month" expiry counts from one of them.
-  const wizard = await getWizardPackage(id);
-  // The wizard reads the published version: before the first publish the requester's fields are not known yet.
-  const published = (wizard?.documentTitles.length ?? 0) > 0;
-  const dateFields = wizard ? allFields(wizard.requesterDefinition).filter((f) => f.type === "date").map((f) => ({ id: f.id, label: f.label || f.id })) : [];
-  const rule = normalizeExpiryRule(pkg.expiryRule);
   const followUps = normalizeFollowUpStatuses(pkg.followUpStatuses);
 
   const orgCard = (
@@ -143,71 +134,44 @@ export async function FlowSettings({ id, query, formId, settingsOnly = false }: 
         <h2 id="settings-h" className="text-lg font-semibold">{formId ? "הגדרות שליחה" : "הגדרות התהליך"}</h2>
         {settingsError && (
           <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {settingsError === "expiry" ? "יש לבחור יום ושדה תאריך לתפוגה" : `כתובות לא תקינות: ${settingsError}`}
+            {`כתובות לא תקינות: ${settingsError}`}
           </p>
         )}
-        <Card className="p-4">
-          <form action={savePackageSettingsAction} className="grid gap-4 sm:grid-cols-2">
+        <Card className="p-0">
+          <form action={savePackageSettingsAction} className="divide-y">
             <input type="hidden" name="id" value={pkg.id} />
             {returnTo}
-            <div className="space-y-1">
-              <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
-              <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
-              <p className="text-xs text-muted-foreground">
-                שורה לכל נמען. מקבלים מייל עם קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.
-                {formId && <> אותן כתובות מופיעות גם בלשונית <Link href={`/admin/forms/${formId}?tab=process`} className="underline">עיבוד טופס</Link>.</>}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="pk-mail-note">הערה במיילים של הטופס</Label>
-              <Textarea id="pk-mail-note" name="mailNote" rows={3} maxLength={500} defaultValue={pkg.mailNote ?? ""} placeholder="לא ניתן להתחיל עבודה בפועל ללא חתימה על הטפסים." />
-              <p className="text-xs text-muted-foreground">מופיעה במייל במקום שבו כתוב {"{{note}}"} (עריכת הנוסח במרכז המיילים ← טריגרים).</p>
-            </div>
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
-              לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
-            </label>
-            <details className="sm:col-span-2 rounded-md border p-3">
-              <summary className="cursor-pointer text-sm font-medium">הגדרות נוספות: תוקף הקישורים וטיפול אחרי החתימה</summary>
-              <div className="mt-3 grid gap-4">
-            <fieldset className="space-y-2 sm:col-span-2">
-              <legend className="text-sm font-medium">תוקף הקישורים</legend>
-              <p className="text-xs text-muted-foreground">כרגע: {describeExpiryRule(rule, (fid) => dateFields.find((f) => f.id === fid)?.label ?? fid)}. אפשר להאריך כל בקשה בנפרד.</p>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="space-y-1">
-                  <Label htmlFor="ex-kind">סוג</Label>
-                  <Select id="ex-kind" name="expiryKind" defaultValue={rule?.kind ?? "default"}>
-                    <option value="default">ברירת מחדל (30 יום)</option>
-                    <option value="days">מספר ימים מהשליחה</option>
-                    <option value="dayOfNextMonth">יום בחודש שאחרי תאריך</option>
-                    <option value="none">ללא תפוגה</option>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="ex-days">ימים</Label>
-                  <Input id="ex-days" name="expiryDays" type="number" min={1} max={365} inputMode="numeric" defaultValue={rule?.kind === "days" ? rule.days : 30} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="ex-day">יום בחודש</Label>
-                  <Input id="ex-day" name="expiryDay" type="number" min={1} max={31} inputMode="numeric" defaultValue={rule?.kind === "dayOfNextMonth" ? rule.day : 7} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="ex-field">אחרי התאריך בשדה</Label>
-                  <Select id="ex-field" name="expiryField" defaultValue={rule?.kind === "dayOfNextMonth" ? rule.dateFieldId : (dateFields[0]?.id ?? "")}>
-                    {dateFields.length === 0 && <option value="">{published ? "אין שדה תאריך שממלא המבקש" : "השדות יופיעו כאן אחרי פרסום הטופס"}</option>}
-                    {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-                  </Select>
-                </div>
+            <fieldset className="grid gap-4 p-4 sm:grid-cols-2">
+              <legend className="sr-only">מיילים</legend>
+              <div className="space-y-1">
+                <Label htmlFor="pk-recipients">מקבלי המסמכים החתומים בסיום</Label>
+                <Textarea id="pk-recipients" name="recipients" dir="ltr" rows={3} defaultValue={formatRecipients(pkg.completionRecipients)} placeholder={"חשבות שכר <payroll@misrad.org.il>\nhr@misrad.org.il"} />
+                <p className="text-xs text-muted-foreground">
+                  שורה לכל נמען. מקבלים את קובצי ה-PDF החתומים, בנוסף לעובד ולמי שפתח את הבקשה.
+                  {formId && <> אותן כתובות מופיעות גם ב<Link href={`/admin/forms/${formId}?tab=process`} className="underline">עיבוד טופס</Link>.</>}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="pk-mail-note">הערה במיילים של הטופס</Label>
+                <Textarea id="pk-mail-note" name="mailNote" rows={3} maxLength={500} defaultValue={pkg.mailNote ?? ""} placeholder="לא ניתן להתחיל עבודה בפועל ללא חתימה על הטפסים." />
+                <p className="text-xs text-muted-foreground">מופיעה במייל במקום {"{{note}}"} (הנוסח במרכז המיילים ← טריגרים).</p>
               </div>
             </fieldset>
-            <div className="space-y-1">
+            <fieldset className="space-y-3 p-4">
+              <legend className="sr-only">תזכורות</legend>
+              {formId && <p className="text-sm text-muted-foreground">מתי הקישורים נסגרים – בלשונית <Link href={`/admin/forms/${formId}?tab=expiry`} className="underline">כללי תוקף</Link>.</p>}
+              <label className="flex min-h-10 items-center gap-2 text-sm">
+                <Checkbox name="remindersEnabled" defaultChecked={pkg.remindersEnabled} />
+                לשלוח תזכורות אוטומטיות עד שהשלב מסתיים
+              </label>
+            </fieldset>
+            <fieldset className="space-y-1 p-4">
+              <legend className="sr-only">אחרי החתימה</legend>
               <Label htmlFor="pk-followup">טיפול אחרי החתימה</Label>
-              <Textarea id="pk-followup" name="followUp" rows={3} defaultValue={followUps.map((f) => f.label).join("\n")} placeholder={"עודכן בשכר\nהוקם בפריוריטי"} />
+              <Textarea id="pk-followup" name="followUp" rows={2} defaultValue={followUps.map((f) => f.label).join("\n")} placeholder={"עודכן בשכר\nהוקם בפריוריטי"} />
               <p className="text-xs text-muted-foreground">שורה לכל שלב. הצוות מסמן אותם בבקשה אחרי שכולם חתמו.</p>
-            </div>
-              </div>
-            </details>
-            <div className="sm:col-span-2">
+            </fieldset>
+            <div className="p-4">
               <SubmitButton saved={saved === "settings"}>שמירת ההגדרות</SubmitButton>
             </div>
           </form>

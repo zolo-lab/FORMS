@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeExpiryRule, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { CREATED_FIELD, comparesToday, holds, type CondOp, type ExpiryCondition, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -38,15 +38,16 @@ describe("expiryFor", () => {
 
 describe("normalizeExpiryRule / describe", () => {
   it("keeps valid rules and drops junk", () => {
-    expect(normalizeExpiryRule({ kind: "days", days: "14" })).toEqual({ kind: "days", days: 14 });
-    expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 40, dateFieldId: "x" })).toEqual({ kind: "dayOfNextMonth", day: 31, dateFieldId: "x" });
+    // Older rules read as the general rule.
+    expect(normalizeExpiryRule({ kind: "days", days: "14" })).toEqual({ kind: "calc", base: { from: "sent" }, addDays: 14 });
+    expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 40, dateFieldId: "x" })).toEqual({ kind: "calc", base: { from: "field", fieldId: "x" }, snap: { day: 31, mode: "next" } });
     expect(normalizeExpiryRule({ kind: "dayOfNextMonth", day: 4 })).toBeNull();
     expect(normalizeExpiryRule("x")).toBeNull();
     expect(normalizeExpiryRule({ kind: "none" })).toEqual({ kind: "none" });
   });
   it("describes in Hebrew", () => {
     expect(describeExpiryRule({ kind: "dayOfNextMonth", day: 4, dateFieldId: "s" }, () => "תאריך תחילה")).toBe('ה-4 בחודש שאחרי "תאריך תחילה"');
-    expect(describeExpiryRule({ kind: "none" })).toBe("ללא תפוגה");
+    expect(describeExpiryRule({ kind: "none" })).toBe("ללא תוקף");
   });
 });
 
@@ -64,9 +65,9 @@ describe("dayOfMonth: the Nth on or after the date (Make's Shivat Zion rule: the
     expect(expiryFor({ ...rule, fallbackDays: 5 }, {}, sent)).toEqual(new Date(sent.getTime() + 5 * 86_400_000));
   });
   it("normalizes and describes", () => {
-    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20, dateFieldId: "start" })).toEqual(rule);
+    expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20, dateFieldId: "start" })).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" } });
     expect(normalizeExpiryRule({ kind: "dayOfMonth", day: 20 })).toBeNull();
-    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('ה-20 בחודש לפי "תאריך תחילה" (אותו חודש עד ה-20, אחרת החודש הבא)');
+    expect(describeExpiryRule(rule, () => "תאריך תחילה")).toBe('ה-20 בחודש לפי "תאריך תחילה" (אותו חודש אם לא עבר, אחרת הבא)');
   });
 });
 
@@ -85,14 +86,14 @@ describe("linkExpiryOf: a step's own deadline wins over the request's", () => {
 describe("stepExpiryRule: the organization's exception wins", () => {
   const step = { expiry: { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" }, expiryByOrg: { "org-sz": { kind: "dayOfMonth" as const, day: 20, dateFieldId: "start" } } };
   it("picks the exception for its organization, the step rule otherwise", () => {
-    expect(stepExpiryRule(step, "org-sz")).toEqual(step.expiryByOrg["org-sz"]);
-    expect(stepExpiryRule(step, "org-other")).toEqual(step.expiry);
+    expect(stepExpiryRule(step, "org-sz")).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 20, mode: "sameOrNext" } });
+    expect(stepExpiryRule(step, "org-other")).toEqual({ kind: "calc", base: { from: "field", fieldId: "start" }, snap: { day: 7, mode: "next" } });
     expect(stepExpiryRule({}, "org-sz")).toBeNull();
   });
 });
 
 describe("stepLinkDeadline: never dead on arrival", () => {
-  const rule = { kind: "dayOfNextMonth" as const, day: 7, dateFieldId: "start" };
+  const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const } };
   it("keeps the rule's date when it is far enough", () => {
     expect(stepLinkDeadline(rule, { start: "2026-10-15" }, sent)).toEqual(endOfDayIsrael(2026, 11, 7));
   });
@@ -101,5 +102,230 @@ describe("stepLinkDeadline: never dead on arrival", () => {
   });
   it("none stays none", () => {
     expect(stepLinkDeadline({ kind: "none" }, {}, sent)).toBeNull();
+  });
+});
+
+describe("the general rule (start → add → round)", () => {
+  const sentAt = new Date("2026-11-03T08:00:00Z");
+  const field = (fieldId: string) => ({ from: "field" as const, fieldId });
+  it("Make's presets: the 7th / 10th of the month after the start date, the 20th this month or the next", () => {
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 7, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 7));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 10, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 10));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 20, mode: "sameOrNext" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor({ kind: "calc", base: field("start"), snap: { day: 20, mode: "sameOrNext" } }, { start: "2026-11-25" }, sentAt)).toEqual(endOfDayIsrael(2026, 12, 20));
+  });
+  it("adds months and days before rounding", () => {
+    // 15.11 + 1 month = 15.12 → the 1st of the month after = 1.1.2027
+    expect(expiryFor({ kind: "calc", base: field("start"), addMonths: 1, snap: { day: 1, mode: "next" } }, { start: "2026-11-15" }, sentAt)).toEqual(endOfDayIsrael(2027, 1, 1));
+    // 31.1 + 1 month = 28.2 (no 31st)
+    expect(expiryFor({ kind: "calc", base: field("start"), addMonths: 1 }, { start: "2027-01-31" }, sentAt)).toEqual(endOfDayIsrael(2027, 2, 28));
+    expect(expiryFor({ kind: "calc", base: field("start"), addDays: 14 }, { start: "2026-12-25" }, sentAt)).toEqual(endOfDayIsrael(2027, 1, 8));
+  });
+  it("from sending: N days keeps the time; with rounding, the end of that day", () => {
+    expect(expiryFor({ kind: "calc", base: { from: "sent" }, addDays: 30 }, {}, sentAt)).toEqual(new Date(sentAt.getTime() + 30 * 86_400_000));
+    expect(expiryFor({ kind: "calc", base: { from: "sent" }, snap: { day: 7, mode: "next" } }, {}, sentAt)).toEqual(endOfDayIsrael(2026, 12, 7));
+  });
+  it("from the step's start uses the step's moment, not the sending", () => {
+    const start = new Date("2026-11-20T08:00:00Z");
+    expect(expiryFor({ kind: "calc", base: { from: "stepStart" }, addDays: 5 }, {}, { sent: sentAt, start })).toEqual(new Date(start.getTime() + 5 * 86_400_000));
+  });
+  it("rejects a rule that would expire at once, and describes rules as sentences", () => {
+    expect(normalizeExpiryRule({ kind: "calc", base: { from: "sent" } })).toBeNull();
+    expect(describeExpiryRule({ kind: "calc", base: { from: "sent" }, addDays: 30 })).toBe("30 ימים מהשליחה");
+    expect(describeExpiryRule({ kind: "calc", base: field("s"), snap: { day: 7, mode: "next" } }, () => "תאריך תחילה")).toBe('ה-7 בחודש שאחרי "תאריך תחילה"');
+    expect(describeExpiryRule({ kind: "calc", base: field("s"), addMonths: 1, snap: { day: 1, mode: "next" } }, () => "תאריך תחילה")).toBe('ה-1 בחודש שאחרי חודש אחרי "תאריך תחילה"');
+  });
+});
+
+describe("old step rules keep counting from the step's start", () => {
+  const sentAt = new Date("2026-11-01T08:00:00Z");
+  const start = new Date("2026-11-21T08:00:00Z");
+  it("an old 7-day step rule is 7 days from the step's start, not from sending", () => {
+    const rule = stepExpiryRule({ expiry: { kind: "days", days: 7 } }, null)!;
+    expect(rule).toEqual({ kind: "calc", base: { from: "stepStart" }, addDays: 7 });
+    expect(stepLinkDeadline(rule, {}, start, sentAt)).toEqual(new Date(start.getTime() + 7 * 86_400_000));
+  });
+  it("a date rule with the date missing falls back from the step's start", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, snap: { day: 7, mode: "next" as const }, fallbackDays: 30 };
+    expect(stepLinkDeadline(rule, {}, start, sentAt)).toEqual(new Date(start.getTime() + 30 * 86_400_000));
+  });
+});
+
+describe("snap to a day of the same month", () => {
+  it("the 5th of the date's month, even when the date is later in it", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "d" }, snap: { day: 5, mode: "same" as const } };
+    expect(expiryFor(rule, { d: "2026-11-20" }, new Date("2026-11-01T08:00:00Z"))).toEqual(endOfDayIsrael(2026, 11, 5));
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+  });
+  it("day 31 is the last day of the month", () => {
+    const rule = { kind: "calc" as const, base: { from: "field" as const, fieldId: "d" }, snap: { day: 31, mode: "same" as const } };
+    expect(expiryFor(rule, { d: "2027-02-10" }, new Date("2027-02-01T08:00:00Z"))).toEqual(endOfDayIsrael(2027, 2, 28));
+  });
+});
+
+describe("conditions choose the rule", () => {
+  const sent = new Date("2026-11-10T08:00:00Z");
+  const calc = (extra: object) => ({ kind: "calc" as const, base: { from: "field" as const, fieldId: "start" }, ...extra });
+  // Make's Shivat Zion rule, written with conditions: start day ≤ 20 → the 20th of that month, else of the next.
+  const shivat = {
+    kind: "cases" as const,
+    cases: [{ conditions: [{ fieldId: "start", op: "dayLte" as const, n: 20 }], then: calc({ snap: { day: 20, mode: "same" as const } }) }],
+    otherwise: calc({ snap: { day: 20, mode: "next" as const } }),
+  };
+  it("the first group that holds decides, else the otherwise rule", () => {
+    expect(expiryFor(shivat, { start: "2026-12-15" }, sent)).toEqual(endOfDayIsrael(2026, 12, 20));
+    expect(expiryFor(shivat, { start: "2026-12-25" }, sent)).toEqual(endOfDayIsrael(2027, 1, 20));
+    expect(normalizeExpiryRule(shivat)).toEqual(shivat);
+    expect(expiryRuleFields(shivat)).toEqual(["start"]);
+  });
+  it("a condition on a missing date does not hold", () => {
+    expect(expiryFor(shivat, {}, sent)).toEqual(new Date(sent.getTime() + 30 * 86_400_000));
+  });
+  it("is worked out for the current day, so the same rule moves as the days pass", () => {
+    const rule = { kind: "cases" as const, cases: [{ conditions: [{ fieldId: "start", op: "beforeToday" as const }], then: { kind: "none" as const } }], otherwise: { kind: "calc" as const, base: { from: "sent" as const }, addDays: 30 } };
+    expect(expiryFor(rule, { start: "2026-11-12" }, { sent, today: sent })).toEqual(new Date(sent.getTime() + 30 * 86_400_000));
+    expect(expiryFor(rule, { start: "2026-11-12" }, { sent, today: new Date("2026-11-13T08:00:00Z") })).toBeNull();
+    expect(comparesToday(rule)).toBe(true);
+    expect(comparesToday(rule.otherwise)).toBe(false);
+  });
+  it("a group: all of its conditions, or any of them", () => {
+    const conditions = [{ fieldId: "start", op: "nextMonth" as const }, { fieldId: "start", op: "dayLte" as const, n: 10 }];
+    const all = { kind: "cases" as const, cases: [{ conditions, then: { kind: "none" as const } }], otherwise: { kind: "calc" as const, base: { from: "sent" as const }, addDays: 5 } };
+    const any = { ...all, cases: [{ match: "any" as const, conditions, then: { kind: "none" as const } }] };
+    const five = new Date(sent.getTime() + 5 * 86_400_000);
+    expect([expiryFor(all, { start: "2026-12-05" }, sent), expiryFor(all, { start: "2026-12-15" }, sent)]).toEqual([null, five]);
+    expect([expiryFor(any, { start: "2026-12-15" }, sent), expiryFor(any, { start: "2027-02-25" }, sent)]).toEqual([null, five]);
+    expect(normalizeExpiryRule(any)).toEqual(any);
+    expect(describeExpiryRule(all, () => "תחילה")).toBe('אם "תחילה" בחודש הבא וגם "תחילה" עד ה-10 בחודש: ללא תוקף; אחרת: 5 ימים מהשליחה');
+    expect(describeExpiryRule(any, () => "תחילה")).toContain('"תחילה" בחודש הבא או "תחילה" עד ה-10 בחודש');
+  });
+  it("an incomplete condition is not a rule", () => {
+    const bad = (c: object) => normalizeExpiryRule({ ...shivat, cases: [{ conditions: [c], then: shivat.otherwise }] });
+    expect([bad({ fieldId: "", op: "today" }), bad({ fieldId: "start", op: "is" }), bad({ fieldId: "start", op: "nope" }), bad({ fieldId: "start", op: "dayLte" })]).toEqual([null, null, null, null]);
+    expect(normalizeExpiryRule({ ...shivat, cases: [{ conditions: [], then: shivat.otherwise }] })).toBeNull();
+  });
+  it("reads conditions stored in the earlier shapes", () => {
+    const read = (when: object, and?: object[]) => (normalizeExpiryRule({ kind: "cases", cases: [{ when, and, then: { kind: "none" } }], otherwise: { kind: "none" } }) as { cases: { conditions: object[] }[] }).cases[0]!.conditions;
+    expect(read({ type: "today", fieldId: "start", op: "within", days: 3 })).toEqual([{ fieldId: "start", op: "duringNext", n: 3, unit: "days" }]);
+    expect(read({ type: "day", fieldId: "start", op: "lte", day: 20 }, [{ fieldId: "start", op: "thisMonth", not: true }])).toEqual([{ fieldId: "start", op: "dayLte", n: 20 }, { fieldId: "start", op: "notThisMonth" }]);
+    expect(read({ fieldId: "start", op: "on", date: "2026-12-01" })).toEqual([{ fieldId: "start", op: "is", date: "2026-12-01" }]);
+  });
+});
+
+describe("date operators (as in Tadabase)", () => {
+  const now = new Date("2026-11-10T08:00:00Z"); // Tuesday
+  const on = (op: CondOp, start: string | undefined, extra: Partial<ExpiryCondition> = {}, more: Record<string, string> = {}) => holds({ fieldId: "start", op, ...extra }, { ...(start ? { start } : {}), ...more }, now);
+  it("today", () => {
+    expect([on("today", "2026-11-10"), on("notToday", "2026-11-10"), on("beforeToday", "2026-11-09"), on("afterToday", "2026-11-10")]).toEqual([true, false, true, false]);
+    expect([on("todayOrBefore", "2026-11-10"), on("todayOrBefore", "2026-11-11"), on("todayOrAfter", "2026-11-10"), on("todayOrAfter", "2026-11-09")]).toEqual([true, false, true, false]);
+  });
+  it("this / last / next week (from Sunday), month, quarter, year, and their negations", () => {
+    expect([on("thisWeek", "2026-11-08"), on("thisWeek", "2026-11-14"), on("thisWeek", "2026-11-15"), on("nextWeek", "2026-11-15"), on("lastWeek", "2026-11-07"), on("notThisWeek", "2026-11-15")]).toEqual([true, true, false, true, true, true]);
+    expect([on("thisMonth", "2026-11-30"), on("nextMonth", "2026-12-01"), on("lastMonth", "2026-10-31"), on("nextMonth", "2027-01-01"), on("notNextMonth", "2027-01-01")]).toEqual([true, true, true, false, true]);
+    expect([on("thisQuarter", "2026-10-01"), on("nextQuarter", "2027-01-15"), on("lastQuarter", "2026-09-30"), on("notNextQuarter", "2027-01-15")]).toEqual([true, true, true, false]);
+    expect([on("thisYear", "2026-01-01"), on("nextYear", "2027-12-31"), on("lastYear", "2025-06-01"), on("notLastYear", "2025-06-01")]).toEqual([true, true, true, false]);
+  });
+  it("ranges: during the current period; the previous / next N days, weeks, months, years; before / after them", () => {
+    expect([on("duringCurrent", "2026-11-13", { period: "week" }), on("duringCurrent", "2026-12-31", { period: "quarter" }), on("duringCurrent", "2027-01-01", { period: "year" })]).toEqual([true, true, false]);
+    expect([on("duringNext", "2026-11-17", { n: 7, unit: "days" }), on("duringNext", "2026-11-18", { n: 7, unit: "days" }), on("duringNext", "2026-12-10", { n: 1, unit: "months" }), on("duringNext", "2026-11-09", { n: 1, unit: "months" })]).toEqual([true, false, true, false]);
+    expect([on("duringPrevious", "2026-10-27", { n: 2, unit: "weeks" }), on("duringPrevious", "2026-10-26", { n: 2, unit: "weeks" }), on("duringPrevious", "2025-11-10", { n: 1, unit: "years" })]).toEqual([true, false, true]);
+    expect([on("beforePrevious", "2026-11-02", { n: 7, unit: "days" }), on("beforePrevious", "2026-11-03", { n: 7, unit: "days" }), on("afterNext", "2026-12-11", { n: 1, unit: "months" }), on("afterNext", "2026-12-10", { n: 1, unit: "months" })]).toEqual([true, false, true, false]);
+  });
+  it("a given date, or another date field of the form", () => {
+    const d = { date: "2026-12-01" };
+    expect([on("is", "2026-12-01", d), on("isNot", "2026-12-01", d), on("before", "2026-11-30", d), on("after", "2026-12-01", d), on("onOrBefore", "2026-12-01", d), on("onOrAfter", "2026-11-30", d)]).toEqual([true, false, true, false, true, false]);
+    const f = { otherFieldId: "end" };
+    expect([on("before", "2026-12-01", f, { end: "2026-12-31" }), on("after", "2026-12-01", f, { end: "2026-12-31" }), on("before", "2026-12-01", f)]).toEqual([true, false, false]);
+    expect(expiryRuleFields({ kind: "cases", cases: [{ conditions: [{ fieldId: "start", op: "before", otherFieldId: "end" }], then: { kind: "none" } }], otherwise: { kind: "none" } })).toEqual(["start", "end"]);
+  });
+  it("blank, and a missing date under any other operator", () => {
+    expect([on("blank", undefined), on("blank", "2026-12-01"), on("notBlank", "2026-12-01"), on("notBlank", undefined)]).toEqual([true, false, true, false]);
+    expect([on("thisMonth", undefined), on("notThisMonth", undefined), on("isNot", undefined, { date: "2026-12-01" })]).toEqual([false, false, false]);
+  });
+  it("the day of the month", () => {
+    expect([on("dayLte", "2026-12-20", { n: 20 }), on("dayGt", "2026-12-20", { n: 20 })]).toEqual([true, false]);
+  });
+});
+
+describe("the table of rules", () => {
+  const form = { kind: "calc" as const, base: { from: "sent" as const }, addDays: 14 };
+  const r = (stepRole: string | undefined, orgId: string | undefined, days: number) => ({ id: `${stepRole}-${orgId}`, ...(stepRole ? { stepRole } : {}), ...(orgId ? { orgId } : {}), rule: { kind: "calc" as const, base: { from: "sent" as const }, addDays: days } });
+  const rows = [r("approver", undefined, 5), r("approver", "org-a", 6), r(undefined, "org-a", 20)];
+  it("the most specific rule applies", () => {
+    expect(stepRowRule(rows, "approver", "org-a")).toEqual(rows[1]!.rule);
+    expect(stepRowRule(rows, "approver", "org-b")).toEqual(rows[0]!.rule);
+    expect(stepRowRule(rows, "employee", "org-a")).toBeNull();
+    expect(requestExpiryRule(form, rows, "org-a")).toEqual(rows[2]!.rule);
+    expect(requestExpiryRule(form, rows, "org-b")).toEqual(form);
+    expect(requestExpiryRule(null, [], null)).toBeNull();
+  });
+  it("drops rows without a scope or a valid rule, and a second row for a scope", () => {
+    expect(normalizeExpiryRows([{ id: "x", rule: form }, { id: "y", stepRole: "a", rule: { kind: "bad" } }, r("a", undefined, 1), r("a", undefined, 2)])).toEqual([r("a", undefined, 1)]);
+  });
+  it("takes in the rules older forms kept on their steps, after the table's own", () => {
+    const workflow = { steps: [
+      { role: "requester", expiry: { kind: "none" } },
+      { role: "approver", expiry: { kind: "days", days: 4 }, expiryByOrg: { "org-a": { kind: "none" } } },
+    ] };
+    const out = withLegacyExpiryRows([r("approver", "org-a", 9)], workflow, { "org-b": { steps: [{ role: "manager", expiry: { kind: "none" } }] } });
+    expect(out.map((x) => [x.stepRole, x.orgId ?? null, x.rule.kind])).toEqual([["approver", "org-a", "calc"], ["approver", null, "calc"], ["manager", "org-b", "none"]]);
+    expect(out[1]!.rule).toEqual({ kind: "calc", base: { from: "stepStart" }, addDays: 4 });
+    expect(withoutStepExpiry(workflow).steps[1]).toEqual({ role: "approver" });
+  });
+});
+
+describe("older forms' rules move with their steps", () => {
+  const rule = (days: number) => ({ kind: "days", days });
+  it("steps that shared a role keep their own rules under the roles they get now", () => {
+    const workflow = { steps: [{ role: "requester" }, { role: "approver", expiry: rule(3) }, { role: "approver", expiry: rule(8) }] };
+    const out = withLegacyExpiryRows([], workflow, null, (i) => ["requester", "approver", "approver_2"][i]);
+    expect(out.map((r) => [r.stepRole, (r.rule as { addDays?: number }).addDays])).toEqual([["approver", 3], ["approver_2", 8]]);
+    expect(hasStepExpiry(workflow, null)).toBe(true);
+    expect(hasStepExpiry(withoutStepExpiry(workflow), {})).toBe(false);
+  });
+  it("a project's route rule is found for requests of that project", () => {
+    const rows = [{ id: "p", stepRole: "approver", orgId: "proj", rule: { kind: "none" as const } }];
+    expect(stepRowRule(rows, "approver", "org", "proj")).toEqual({ kind: "none" });
+    expect(stepRowRule(rows, "approver", "org", null)).toBeNull();
+  });
+});
+
+
+describe("expires when (one filter row)", () => {
+  const today = new Date("2026-11-10T08:00:00Z");
+  const when = (condition: object) => ({ kind: "when" as const, condition: condition as never });
+  it("closes at the end of the day before the condition first holds", () => {
+    // "the start date is before today": on 2026-11-21 the start (11-20) is past → closes at the end of 11-20.
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), { start: "2026-11-20" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(when({ fieldId: "start", op: "duringNext", n: 7, unit: "days" }), { start: "2026-12-31" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 12, 23));
+  });
+  it("already past when it holds today; none when it never does", () => {
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), { start: "2026-11-01" }, { sent: today, today })).toEqual(endOfDayIsrael(2026, 11, 9));
+    expect(expiryFor(when({ fieldId: "start", op: "is", date: "2026-01-01" }), { start: "2026-12-01" }, { sent: today, today })).toBeNull();
+    expect(expiryFor(when({ fieldId: "start", op: "beforeToday" }), {}, { sent: today, today })).toBeNull();
+  });
+  it("reads, describes and is checked again every day", () => {
+    const rule = when({ fieldId: "start", op: "nextMonth" });
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+    expect(normalizeExpiryRule(when({ fieldId: "start", op: "is" }))).toBeNull();
+    expect(describeExpiryRule(rule, () => "תחילה")).toBe('פג כאשר "תחילה" בחודש הבא');
+    expect(comparesToday(rule)).toBe(true);
+    expect(expiryRuleFields(rule)).toEqual(["start"]);
+  });
+});
+
+describe("expires when: the creation date and a fixed day of its month", () => {
+  const sent = new Date("2026-11-10T08:00:00Z");
+  const when = (condition: object) => ({ kind: "when" as const, condition: condition as never });
+  it("closes after day N of the creation month, or of the month after it", () => {
+    expect(expiryFor(when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 20, monthOffset: 0 }), {}, sent)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 7, monthOffset: 1 }), {}, sent)).toEqual(endOfDayIsrael(2026, 12, 7));
+    expect(expiryFor(when({ fieldId: "start", op: "pastDayOf", n: 31, monthOffset: 1 }), { start: "2027-01-15" }, sent)).toEqual(endOfDayIsrael(2027, 2, 28));
+  });
+  it("reads and describes them", () => {
+    const rule = when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 7, monthOffset: 1 });
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+    expect(describeExpiryRule(rule)).toBe("פג כאשר תאריך יצירת הבקשה – היום עבר את ה-7 בחודש שאחריו");
+    expect(expiryRuleFields(rule)).toEqual([]);
   });
 });
