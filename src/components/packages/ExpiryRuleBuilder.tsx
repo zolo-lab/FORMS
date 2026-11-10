@@ -260,8 +260,9 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const calc = value?.kind === "calc" ? value : null;
   // The condition is checked again every day, so it may read a date a later step fills.
   const anyDate = dateFields.map((f) => ({ id: f.id, label: f.label }));
-  // Without a date field in the form, the request's creation date still works: "past the 20th of its month".
-  const newWhen = (): ExpiryCondition => (anyDate[0] ? { fieldId: anyDate[0].id, op: "beforeToday" } : { fieldId: CREATED_FIELD, op: "pastDayOf", n: 20, monthOffset: 0 });
+  // Without a date field in the form, the request's creation date still works: "past the 7th of the month after it"
+  // (the next month, so a request created late in the month is not born expired).
+  const newWhen = (): ExpiryCondition => (anyDate[0] ? { fieldId: anyDate[0].id, op: "beforeToday" } : { fieldId: CREATED_FIELD, op: "pastDayOf", n: 7, monthOffset: 1 });
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const pick = (m: Mode) => {
     if (m === mode) return;
