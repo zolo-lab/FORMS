@@ -149,7 +149,11 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
 /** The parent records of a type by id with their names (see `fillerTitle`; the form links none of their fields). */
 async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
   if (typeId === ORG_TYPE) return new Map((await listOrgs()).map((o) => [o.id, o.name]));
-  const [fields, rows] = await Promise.all([fieldsOf(typeId), db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId))]);
+  // Ordered as the picker orders them, so "רשומה N" names the same record in both.
+  const [fields, rows] = await Promise.all([
+    fieldsOf(typeId),
+    db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
+  ]);
   const none = new Set<string>();
   return new Map(rows.map((r, i) => [r.id, fillerTitle(r.values, fields, none) ?? `רשומה ${i + 1}`]));
 }
