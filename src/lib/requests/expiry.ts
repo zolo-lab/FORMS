@@ -32,7 +32,7 @@ export const COND_OPS = [
   "duringCurrent", "duringPrevious", "duringNext", "beforePrevious", "afterNext",
   "is", "isNot", "before", "after", "onOrBefore", "onOrAfter",
   "blank", "notBlank",
-  "dayLte", "dayGt",
+  "dayLte", "dayGt", "pastDayOf",
 ] as const;
 export type CondOp = (typeof COND_OPS)[number];
 export const COND_UNITS = ["days", "weeks", "months", "years"] as const;
@@ -44,9 +44,17 @@ export const condNeeds = (op: CondOp): "period" | "span" | "date" | "day" | null
   op === "duringCurrent" ? "period"
     : op === "duringPrevious" || op === "duringNext" || op === "beforePrevious" || op === "afterNext" ? "span"
       : op === "is" || op === "isNot" || op === "before" || op === "after" || op === "onOrBefore" || op === "onOrAfter" ? "date"
-        : op === "dayLte" || op === "dayGt" ? "day" : null;
+        : op === "dayLte" || op === "dayGt" || op === "pastDayOf" ? "day" : null;
 /** `date`: a given day (yyyy-mm-dd), or `otherFieldId`: another date field of the form, for the "date" operators. */
-export type ExpiryCondition = { fieldId: string; op: CondOp; n?: number; unit?: CondUnit; period?: CondPeriod; date?: string; otherFieldId?: string };
+/**
+ * `n`: days / the day of the month; `monthOffset` (pastDayOf): 0 = the field's own month, 1 = the month after it.
+ * pastDayOf – "today is past day n of [the field's month | the month after]": e.g. the 20th of the start month.
+ */
+export type ExpiryCondition = { fieldId: string; op: CondOp; n?: number; unit?: CondUnit; period?: CondPeriod; date?: string; otherFieldId?: string; monthOffset?: 0 | 1 };
+/** A moment as its Israeli calendar day, yyyy-mm-dd. */
+const ymdOf = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
+/** "תאריך יצירת הבקשה": the day the request was created (sent), usable as a date field in conditions. */
+export const CREATED_FIELD = "__created";
 /** A group of conditions: all of them have to hold, or (`match: "any"`) at least one. */
 export type ExpiryCase = { match?: "any"; conditions: ExpiryCondition[]; then: ExpiryOutcome };
 export const caseConditions = (c: ExpiryCase): ExpiryCondition[] => c.conditions;
@@ -109,7 +117,7 @@ export function expiryFor(raw: ExpiryRule | LegacyRule | null | undefined, answe
   if (raw === null || raw === undefined) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
   const normalized = normalizeExpiryRule(raw);
   if (!normalized) return plusDays(sent, DEFAULT_EXPIRY_DAYS);
-  if (normalized.kind === "when") return whenDeadline(normalized.condition, answers, today);
+  if (normalized.kind === "when") return whenDeadline(normalized.condition, { ...answers, [CREATED_FIELD]: ymdOf(sent) }, today);
   const rule = normalized.kind === "cases" ? (normalized.cases.find((c) => caseHolds(c, answers, today))?.then ?? normalized.otherwise) : normalized;
   if (rule.kind === "none") return null;
   const days = Math.round(rule.addDays ?? 0);
@@ -217,6 +225,11 @@ export function holds(c: ExpiryCondition, answers: Record<string, unknown>, now:
     case "after": return !!given && day > dayNo(given);
     case "onOrBefore": return !!given && day <= dayNo(given);
     case "onOrAfter": return !!given && day >= dayNo(given);
+    case "pastDayOf": {
+      const month = shift({ y: date.y, m: date.m, d: 1 }, c.monthOffset ?? 0, "months");
+      const last = new Date(Date.UTC(month.y, month.m, 0)).getUTCDate();
+      return today > dayNo({ y: month.y, m: month.m, d: Math.min(n, last) });
+    }
     case "dayLte": return date.d <= n;
     case "dayGt": return date.d > n;
     default: return false;
@@ -284,6 +297,7 @@ function normalizeCondition(raw: unknown): ExpiryCondition | null {
     const day = pos(o.n, 31);
     if (!day) return null;
     out.n = day;
+    if (op === "pastDayOf") out.monthOffset = o.monthOffset === 1 ? 1 : 0;
   } else if (needs === "span") {
     out.n = Math.min(3650, Math.max(0, Math.round(Number(o.n) || 0)));
     out.unit = (COND_UNITS as readonly string[]).includes(String(o.unit)) ? (o.unit as CondUnit) : "days";
@@ -415,7 +429,7 @@ export function expiryRuleFields(raw: unknown): string[] {
   if (!rule || rule.kind === "none") return [];
   const of = (r: ExpiryOutcome) => (r.kind === "calc" && r.base.from === "field" ? [r.base.fieldId] : []);
   if (rule.kind === "calc") return of(rule);
-  if (rule.kind === "when") return [rule.condition.fieldId, ...(rule.condition.otherFieldId ? [rule.condition.otherFieldId] : [])].filter((f) => f !== TODAY_FIELD);
+  if (rule.kind === "when") return [rule.condition.fieldId, ...(rule.condition.otherFieldId ? [rule.condition.otherFieldId] : [])].filter((f) => f !== TODAY_FIELD && f !== CREATED_FIELD);
   return [...new Set([...rule.cases.flatMap((c) => [...c.conditions.flatMap((x) => [x.fieldId, ...(x.otherFieldId ? [x.otherFieldId] : [])]), ...of(c.then)]), ...of(rule.otherwise)])].filter((f) => f !== TODAY_FIELD);
 }
 
@@ -440,17 +454,18 @@ export const COND_TEXT: Record<CondOp, string> = {
   duringCurrent: "במהלך {v}", duringPrevious: "במהלך {v} האחרונים", duringNext: "במהלך {v} הבאים", beforePrevious: "לפני יותר מ-{v}", afterNext: "בעוד יותר מ-{v}",
   is: "שווה ל-{v}", isNot: "שונה מ-{v}", before: "לפני {v}", after: "אחרי {v}", onOrBefore: "עד {v} (כולל)", onOrAfter: "מ-{v} והלאה",
   blank: "ריק", notBlank: "לא ריק",
-  dayLte: "עד ה-{v} בחודש", dayGt: "אחרי ה-{v} בחודש",
+  dayLte: "עד ה-{v} בחודש", dayGt: "אחרי ה-{v} בחודש", pastDayOf: "– היום עבר את ה-{v}",
 };
 export const UNIT_TEXT: Record<CondUnit, string> = { days: "ימים", weeks: "שבועות", months: "חודשים", years: "שנים" };
 export const PERIOD_TEXT: Record<CondPeriod, string> = { week: "השבוע הנוכחי", month: "החודש הנוכחי", quarter: "הרבעון הנוכחי", year: "השנה הנוכחית" };
 
 /** A condition in words: '"תאריך תחילה" בחודש הבא'. */
 export function describeCondition(c: ExpiryCondition, fieldLabel?: (id: string) => string): string {
-  const name = (id: string) => (id === TODAY_FIELD ? "התאריך הנוכחי" : `"${fieldLabel?.(id) ?? id}"`);
+  const name = (id: string) => (id === TODAY_FIELD ? "התאריך הנוכחי" : id === CREATED_FIELD ? "תאריך יצירת הבקשה" : `"${fieldLabel?.(id) ?? id}"`);
   const needs = condNeeds(c.op);
   const date = parseDate(c.date);
-  const v = needs === "day" ? String(c.n ?? 0)
+  const v = c.op === "pastDayOf" ? `${c.n ?? 0} ${c.monthOffset === 1 ? "בחודש שאחריו" : "בחודש שלו"}`
+    : needs === "day" ? String(c.n ?? 0)
     : needs === "span" ? `${c.n ?? 0} ${UNIT_TEXT[c.unit ?? "days"]}`
       : needs === "period" ? PERIOD_TEXT[c.period ?? "month"]
         : needs === "date" ? (c.otherFieldId ? name(c.otherFieldId) : date ? `${date.d}.${date.m}.${date.y}` : "") : "";

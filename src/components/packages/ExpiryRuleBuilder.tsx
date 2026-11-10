@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, CalendarClock, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, CalendarClock } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  COND_PERIODS, COND_TEXT, COND_UNITS, DEFAULT_EXPIRY_DAYS, PERIOD_TEXT, TODAY_FIELD, UNIT_TEXT, condNeeds, describeExpiryRule, expiryFor, expiryRuleFields,
+  COND_PERIODS, COND_TEXT, COND_UNITS, CREATED_FIELD, DEFAULT_EXPIRY_DAYS, PERIOD_TEXT, TODAY_FIELD, UNIT_TEXT, condNeeds, describeExpiryRule, expiryFor, expiryRuleFields,
   type CondOp, type CondPeriod, type CondUnit, type ExpiryBase, type ExpiryCalc, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
 } from "@/lib/requests/expiry";
 
@@ -31,13 +30,13 @@ const COND_GROUPS: { title: string; ops: CondOp[] }[] = [
   { title: "טווח", ops: ["duringCurrent", "duringPrevious", "duringNext", "beforePrevious", "afterNext"] },
   { title: "תאריך מסוים", ops: ["is", "isNot", "before", "after", "onOrBefore", "onOrAfter"] },
   { title: "ריק", ops: ["blank", "notBlank"] },
-  { title: "יום בחודש", ops: ["dayLte", "dayGt"] },
+  { title: "יום בחודש", ops: ["pastDayOf"] },
 ];
 /** The names in the list of the operators that take a value (the value comes right after); the rest read as they are. */
 const OP_LABEL: Partial<Record<CondOp, string>> = {
   duringCurrent: "במהלך", duringPrevious: "בטווח האחרון של", duringNext: "בטווח הקרוב של", beforePrevious: "לפני יותר מ־", afterNext: "בעוד יותר מ־",
   is: "שווה ל־", isNot: "שונה מ־", before: "לפני", after: "אחרי", onOrBefore: "עד (כולל)", onOrAfter: "החל מ־ (כולל)",
-  dayLte: "עד ה־", dayGt: "אחרי ה־",
+  dayLte: "עד ה־", dayGt: "אחרי ה־", pastDayOf: "היום עבר את ה־",
 };
 const opLabel = (op: CondOp) => OP_LABEL[op] ?? COND_TEXT[op];
 type Kind = "days" | "months" | "fixed" | "none";
@@ -138,71 +137,78 @@ function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNo
  * One condition, as a filter row: [a date field of the form] [operator] [its value, when it takes one] [remove].
  * The value is a period (week…year), a number with a unit, a given date or another date field, or a day of the month.
  */
-function ConditionRow({ id, value, onChange, dateFields, onRemove }: {
-  id: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[]; onRemove?: () => void;
+function ConditionRow({ id, value, onChange, dateFields }: {
+  id: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[];
 }) {
   const needs = condNeeds(value.op);
   const setOp = (op: CondOp) => {
     const n = condNeeds(op);
     const next: ExpiryCondition = { fieldId: value.fieldId, op };
     if (n === "day") next.n = needs === "day" ? value.n : 20;
+    if (op === "pastDayOf") next.monthOffset = value.monthOffset ?? 0;
     if (n === "span") { next.n = needs === "span" ? value.n : 7; next.unit = value.unit ?? "days"; }
     if (n === "period") next.period = value.period ?? "month";
     if (n === "date") { if (value.otherFieldId) next.otherFieldId = value.otherFieldId; else next.date = value.date ?? ymd(new Date()); }
     onChange(next);
   };
-  const others = dateFields.filter((f) => f.id !== value.fieldId);
+  // The date fields of the form, and the day the request was created.
+  const fields = [{ id: CREATED_FIELD, label: "תאריך יצירת הבקשה" }, ...dateFields];
+  const others = fields.filter((f) => f.id !== value.fieldId);
+  const sm = "h-9 px-2 text-sm";
   return (
-    <div className="flex items-start gap-2 text-sm">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <Select id={`${id}-field`} aria-label="שדה התאריך" className="w-auto max-w-full" value={value.fieldId} onChange={(e) => onChange({ ...value, fieldId: e.target.value })}>
-        {!dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId === TODAY_FIELD ? "התאריך הנוכחי" : value.fieldId ? "שדה שכבר לא קיים" : "בחרו שדה תאריך…"}</option>}
-        {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+    <div className="flex flex-wrap items-center gap-1.5 text-sm md:flex-nowrap">
+      <Select id={`${id}-field`} aria-label="שדה התאריך" className={cn(sm, "w-auto min-w-0 shrink")} value={value.fieldId} onChange={(e) => onChange({ ...value, fieldId: e.target.value })}>
+        {!fields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId === TODAY_FIELD ? "התאריך הנוכחי" : value.fieldId ? "שדה שכבר לא קיים" : "בחרו שדה תאריך…"}</option>}
+        {fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
       </Select>
-      <Select id={`${id}-op`} aria-label="התנאי" className="w-auto max-w-full" value={value.op} onChange={(e) => setOp(e.target.value as CondOp)}>
+      <Select id={`${id}-op`} aria-label="התנאי" className={cn(sm, "w-auto min-w-0 shrink")} value={value.op} onChange={(e) => setOp(e.target.value as CondOp)}>
         {COND_GROUPS.map((g) => <optgroup key={g.title} label={g.title}>{g.ops.map((op) => <option key={op} value={op}>{opLabel(op)}</option>)}</optgroup>)}
+        {(value.op === "dayLte" || value.op === "dayGt") && <option value={value.op}>{opLabel(value.op)}</option>}
       </Select>
       {needs === "period" && (
-        <Select id={`${id}-period`} aria-label="התקופה" className="w-auto" value={value.period ?? "month"} onChange={(e) => onChange({ ...value, period: e.target.value as CondPeriod })}>
+        <Select id={`${id}-period`} aria-label="התקופה" className={cn(sm, "w-auto shrink-0")} value={value.period ?? "month"} onChange={(e) => onChange({ ...value, period: e.target.value as CondPeriod })}>
           {COND_PERIODS.map((p) => <option key={p} value={p}>{PERIOD_TEXT[p]}</option>)}
         </Select>
       )}
       {needs === "span" && (
-        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-          <Input id={`${id}-n`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={value.n ?? 0} onChange={(e) => onChange({ ...value, n: num(e.target.value, 0, 3650) })} />
-          <Select id={`${id}-unit`} aria-label="יחידה" className="w-auto" value={value.unit ?? "days"} onChange={(e) => onChange({ ...value, unit: e.target.value as CondUnit })}>
+        <>
+          <Input id={`${id}-n`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className={cn(sm, "w-16 shrink-0")} value={value.n ?? 0} onChange={(e) => onChange({ ...value, n: num(e.target.value, 0, 3650) })} />
+          <Select id={`${id}-unit`} aria-label="יחידה" className={cn(sm, "w-auto shrink-0")} value={value.unit ?? "days"} onChange={(e) => onChange({ ...value, unit: e.target.value as CondUnit })}>
             {COND_UNITS.map((u) => <option key={u} value={u}>{UNIT_TEXT[u]}</option>)}
           </Select>
-        </span>
+        </>
       )}
       {needs === "day" && (
-        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-          <Input id={`${id}-n`} aria-label="יום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.n ?? 1} onChange={(e) => onChange({ ...value, n: num(e.target.value, 1, 31) })} />
-          בחודש
-        </span>
+        <>
+          <Input id={`${id}-n`} aria-label="יום בחודש" type="number" min={1} max={31} inputMode="numeric" className={cn(sm, "w-16 shrink-0")} value={value.n ?? 1} onChange={(e) => onChange({ ...value, n: num(e.target.value, 1, 31) })} />
+          {value.op === "pastDayOf" ? (
+            <Select id={`${id}-month`} aria-label="באיזה חודש" className={cn(sm, "w-auto shrink-0")} value={String(value.monthOffset ?? 0)} onChange={(e) => onChange({ ...value, monthOffset: e.target.value === "1" ? 1 : 0 })}>
+              <option value="0">בחודש שלו</option>
+              <option value="1">בחודש שאחריו</option>
+            </Select>
+          ) : <span className="whitespace-nowrap">בחודש</span>}
+        </>
       )}
       {needs === "date" && (
         <>
-          <Select id={`${id}-vs`} aria-label="מול מה" className="w-auto" value={value.otherFieldId ? "field" : "date"} onChange={(e) => {
+          <Select id={`${id}-vs`} aria-label="מול מה" className={cn(sm, "w-auto shrink-0")} value={value.otherFieldId !== undefined ? "field" : "date"} onChange={(e) => {
             const next = { ...value };
             if (e.target.value === "field") { delete next.date; next.otherFieldId = others[0]?.id ?? ""; } else { delete next.otherFieldId; next.date = ymd(new Date()); }
             onChange(next);
           }}>
             <option value="date">תאריך מסוים</option>
-            <option value="field" disabled={others.length === 0}>שדה תאריך אחר</option>
+            <option value="field">שדה תאריך</option>
           </Select>
           {value.otherFieldId !== undefined
             ? (
-              <Select id={`${id}-other`} aria-label="השדה האחר" className="w-auto max-w-full" value={value.otherFieldId} onChange={(e) => onChange({ ...value, otherFieldId: e.target.value })}>
+              <Select id={`${id}-other`} aria-label="השדה האחר" className={cn(sm, "w-auto min-w-0 shrink")} value={value.otherFieldId} onChange={(e) => onChange({ ...value, otherFieldId: e.target.value })}>
                 {!others.some((f) => f.id === value.otherFieldId) && <option value={value.otherFieldId}>{value.otherFieldId ? "שדה שכבר לא קיים" : "בחרו…"}</option>}
                 {others.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
               </Select>
             )
-            : <Input id={`${id}-date`} aria-label="התאריך" type="date" className="w-40" value={value.date ?? ""} onChange={(e) => onChange({ ...value, date: e.target.value })} />}
+            : <Input id={`${id}-date`} aria-label="התאריך" type="date" className={cn(sm, "w-36 shrink-0")} value={value.date ?? ""} onChange={(e) => onChange({ ...value, date: e.target.value })} />}
         </>
       )}
-      </div>
-      {onRemove && <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground" onClick={onRemove} aria-label="מחיקת התנאי"><Trash2 className="size-4" aria-hidden /></Button>}
     </div>
   );
 }
@@ -339,8 +345,8 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
               {on && o.id === "complex" && (
                 <div className="space-y-3 border-t p-3">
                   {value?.kind === "when" ? (
-                    <div className="flex flex-wrap items-center gap-2 text-sm md:flex-nowrap">
-                      <span className="shrink-0 whitespace-nowrap font-semibold">הקישור פג כאשר:</span>
+                    <div className="flex flex-wrap items-center gap-1.5 text-sm md:flex-nowrap">
+                      <span className="shrink-0 whitespace-nowrap font-semibold">פג כאשר:</span>
                       <div className="min-w-0 basis-full md:basis-auto md:flex-1">
                         <ConditionRow id={`${id}-when`} value={value.condition} dateFields={anyDate} onChange={(condition) => onChange({ kind: "when", condition })} />
                       </div>

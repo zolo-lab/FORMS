@@ -172,7 +172,7 @@ export function ExpiryRulesTab({ value, onChange, steps, orgs, dateFieldsFor, di
         </Button>
       </section>
 
-      <Dialog open={!!editing} onClose={() => setEditing(null)} title={editing?.index === "form" ? "הכלל של כל הטופס" : editing?.index === -1 ? "כלל חדש" : "עריכת כלל"} className="w-[min(94vw,52rem)]">
+      <Dialog open={!!editing} onClose={() => setEditing(null)} title={editing?.index === "form" ? "הכלל של כל הטופס" : editing?.index === -1 ? "כלל חדש" : "עריכת כלל"} className="w-[min(96vw,64rem)]">
         {editing && (
           <div className="space-y-5">
             {editing.index === "form" ? (

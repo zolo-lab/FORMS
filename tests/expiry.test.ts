@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparesToday, holds, type CondOp, type ExpiryCondition, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
+import { CREATED_FIELD, comparesToday, holds, type CondOp, type ExpiryCondition, describeExpiryRule, hasStepExpiry, normalizeExpiryRows, requestExpiryRule, stepRowRule, withLegacyExpiryRows, withoutStepExpiry, expiryRuleFields, endOfDayIsrael, expiryFor, linkExpiryOf, MIN_STEP_LINK_DAYS, normalizeExpiryRule, stepExpiryRule, stepLinkDeadline } from "@/lib/requests/expiry";
 
 const day = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jerusalem" }).format(d);
 const sent = new Date("2026-10-19T08:00:00Z");
@@ -311,5 +311,21 @@ describe("expires when (one filter row)", () => {
     expect(describeExpiryRule(rule, () => "תחילה")).toBe('פג כאשר "תחילה" בחודש הבא');
     expect(comparesToday(rule)).toBe(true);
     expect(expiryRuleFields(rule)).toEqual(["start"]);
+  });
+});
+
+describe("expires when: the creation date and a fixed day of its month", () => {
+  const sent = new Date("2026-11-10T08:00:00Z");
+  const when = (condition: object) => ({ kind: "when" as const, condition: condition as never });
+  it("closes after day N of the creation month, or of the month after it", () => {
+    expect(expiryFor(when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 20, monthOffset: 0 }), {}, sent)).toEqual(endOfDayIsrael(2026, 11, 20));
+    expect(expiryFor(when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 7, monthOffset: 1 }), {}, sent)).toEqual(endOfDayIsrael(2026, 12, 7));
+    expect(expiryFor(when({ fieldId: "start", op: "pastDayOf", n: 31, monthOffset: 1 }), { start: "2027-01-15" }, sent)).toEqual(endOfDayIsrael(2027, 2, 28));
+  });
+  it("reads and describes them", () => {
+    const rule = when({ fieldId: CREATED_FIELD, op: "pastDayOf", n: 7, monthOffset: 1 });
+    expect(normalizeExpiryRule(rule)).toEqual(rule);
+    expect(describeExpiryRule(rule)).toBe("פג כאשר תאריך יצירת הבקשה – היום עבר את ה-7 בחודש שאחריו");
+    expect(expiryRuleFields(rule)).toEqual([]);
   });
 });
