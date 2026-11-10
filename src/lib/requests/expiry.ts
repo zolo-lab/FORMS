@@ -19,24 +19,37 @@ export type ExpirySnap = { day: number; mode: "sameOrNext" | "next" | "same" };
 export type ExpiryCalc = { kind: "calc"; base: ExpiryBase; addDays?: number; addMonths?: number; snap?: ExpirySnap; fallbackDays?: number };
 /** A rule that is not a choice between rules. */
 export type ExpiryOutcome = { kind: "none" } | ExpiryCalc;
+/**
+ * The date operators, as in Tadabase's filters (same names, same order), plus the day of the month:
+ * today · this / last / next week, month, quarter, year (and their negations) · a rolling range · a given date or
+ * another date field · blank.
+ */
 export const COND_OPS = [
-  "today", "beforeToday", "afterToday",
-  "thisWeek", "nextWeek", "lastWeek", "thisMonth", "nextMonth", "lastMonth",
-  "thisQuarter", "nextQuarter", "lastQuarter", "thisYear", "nextYear", "lastYear",
-  "nextDays", "lastDays", "afterDays",
-  "on", "before", "after",
+  "today", "notToday", "beforeToday", "afterToday", "todayOrBefore", "todayOrAfter",
+  "thisWeek", "notThisWeek", "thisMonth", "notThisMonth", "thisQuarter", "notThisQuarter", "thisYear", "notThisYear",
+  "lastWeek", "notLastWeek", "lastMonth", "notLastMonth", "lastQuarter", "notLastQuarter", "lastYear", "notLastYear",
+  "nextWeek", "notNextWeek", "nextMonth", "notNextMonth", "nextQuarter", "notNextQuarter", "nextYear", "notNextYear",
+  "duringCurrent", "duringPrevious", "duringNext", "beforePrevious", "afterNext",
+  "is", "isNot", "before", "after", "onOrBefore", "onOrAfter",
+  "blank", "notBlank",
   "dayLte", "dayGt",
-  "blank",
 ] as const;
 export type CondOp = (typeof COND_OPS)[number];
-/** What an operator needs beside it: a number of days, a day of the month, or a date (yyyy-mm-dd). */
-export const condNeeds = (op: CondOp): "days" | "day" | "date" | null =>
-  op === "nextDays" || op === "lastDays" || op === "afterDays" ? "days" : op === "dayLte" || op === "dayGt" ? "day" : op === "on" || op === "before" || op === "after" ? "date" : null;
-/** "[field] is / is not [op]"; `n`: days or the day of the month; `date`: the given date. */
-export type ExpiryCondition = { fieldId: string; op: CondOp; not?: boolean; n?: number; date?: string };
-/** `and`: more lines that must hold too. */
-export type ExpiryCase = { when: ExpiryCondition; and?: ExpiryCondition[]; then: ExpiryOutcome };
-export const caseConditions = (c: ExpiryCase): ExpiryCondition[] => [c.when, ...(c.and ?? [])];
+export const COND_UNITS = ["days", "weeks", "months", "years"] as const;
+export type CondUnit = (typeof COND_UNITS)[number];
+export const COND_PERIODS = ["week", "month", "quarter", "year"] as const;
+export type CondPeriod = (typeof COND_PERIODS)[number];
+/** What an operator takes: a period, a number with a unit, a date (given, or another field), a day of the month. */
+export const condNeeds = (op: CondOp): "period" | "span" | "date" | "day" | null =>
+  op === "duringCurrent" ? "period"
+    : op === "duringPrevious" || op === "duringNext" || op === "beforePrevious" || op === "afterNext" ? "span"
+      : op === "is" || op === "isNot" || op === "before" || op === "after" || op === "onOrBefore" || op === "onOrAfter" ? "date"
+        : op === "dayLte" || op === "dayGt" ? "day" : null;
+/** `date`: a given day (yyyy-mm-dd), or `otherFieldId`: another date field of the form, for the "date" operators. */
+export type ExpiryCondition = { fieldId: string; op: CondOp; n?: number; unit?: CondUnit; period?: CondPeriod; date?: string; otherFieldId?: string };
+/** A group of conditions: all of them have to hold, or (`match: "any"`) at least one. */
+export type ExpiryCase = { match?: "any"; conditions: ExpiryCondition[]; then: ExpiryOutcome };
+export const caseConditions = (c: ExpiryCase): ExpiryCondition[] => c.conditions;
 export type ExpiryRule = ExpiryOutcome | { kind: "cases"; cases: ExpiryCase[]; otherwise: ExpiryOutcome };
 
 /** Rules stored before the general rule existed; read through `normalizeExpiryRule`. */
@@ -132,73 +145,132 @@ const weekNo = (d: { y: number; m: number; d: number }) => Math.floor((dayNo(d) 
 const monthNo = (d: { y: number; m: number }) => d.y * 12 + d.m - 1;
 const quarterNo = (d: { y: number; m: number }) => d.y * 4 + Math.floor((d.m - 1) / 3);
 
-/** Whether a condition holds on `now` – the current day. A missing date holds only for "empty". */
+type Ymd = { y: number; m: number; d: number };
+/** A date moved by n units (calendar months and years; a missing day falls back to the month's last). */
+function shift(t: Ymd, n: number, unit: CondUnit): Ymd {
+  if (unit === "days" || unit === "weeks") {
+    const d = new Date(Date.UTC(t.y, t.m - 1, t.d + n * (unit === "weeks" ? 7 : 1)));
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+  }
+  const months = t.y * 12 + (t.m - 1) + n * (unit === "years" ? 12 : 1);
+  const y = Math.floor(months / 12);
+  const m = (months % 12) + 1;
+  return { y, m, d: Math.min(t.d, new Date(Date.UTC(y, m, 0)).getUTCDate()) };
+}
+const NEGATED: Partial<Record<CondOp, CondOp>> = {
+  notToday: "today", notThisWeek: "thisWeek", notThisMonth: "thisMonth", notThisQuarter: "thisQuarter", notThisYear: "thisYear",
+  notLastWeek: "lastWeek", notLastMonth: "lastMonth", notLastQuarter: "lastQuarter", notLastYear: "lastYear",
+  notNextWeek: "nextWeek", notNextMonth: "nextMonth", notNextQuarter: "nextQuarter", notNextYear: "nextYear", isNot: "is",
+};
+
+/**
+ * Whether a condition holds on `now` – the current day. A missing date holds only for "blank" (so neither
+ * "is this month" nor "is not this month" holds for it: nothing is known).
+ */
 export function holds(c: ExpiryCondition, answers: Record<string, unknown>, now: Date): boolean {
   const t = israelDate(now);
   const date = c.fieldId === TODAY_FIELD ? t : parseDate(answers[c.fieldId]);
-  if (c.op === "blank") return (date === null) !== !!c.not;
+  if (c.op === "blank") return date === null;
+  if (c.op === "notBlank") return date !== null;
   if (!date) return false;
-  const diff = dayNo(date) - dayNo(t);
+  const positive = NEGATED[c.op];
+  if (positive) return !holds({ ...c, op: positive }, answers, now);
+  const day = dayNo(date);
+  const today = dayNo(t);
   const n = c.n ?? 0;
-  const given = parseDate(c.date);
-  const is = ((): boolean | null => {
-    switch (c.op) {
-      case "today": return diff === 0;
-      case "beforeToday": return diff < 0;
-      case "afterToday": return diff > 0;
-      case "thisWeek": return weekNo(date) === weekNo(t);
-      case "nextWeek": return weekNo(date) === weekNo(t) + 1;
-      case "lastWeek": return weekNo(date) === weekNo(t) - 1;
-      case "thisMonth": return monthNo(date) === monthNo(t);
-      case "nextMonth": return monthNo(date) === monthNo(t) + 1;
-      case "lastMonth": return monthNo(date) === monthNo(t) - 1;
-      case "thisQuarter": return quarterNo(date) === quarterNo(t);
-      case "nextQuarter": return quarterNo(date) === quarterNo(t) + 1;
-      case "lastQuarter": return quarterNo(date) === quarterNo(t) - 1;
-      case "thisYear": return date.y === t.y;
-      case "nextYear": return date.y === t.y + 1;
-      case "lastYear": return date.y === t.y - 1;
-      case "nextDays": return diff >= 0 && diff <= n;
-      case "lastDays": return diff <= 0 && diff >= -n;
-      case "afterDays": return diff > n;
-      case "on": return given ? dayNo(date) === dayNo(given) : null;
-      case "before": return given ? dayNo(date) < dayNo(given) : null;
-      case "after": return given ? dayNo(date) > dayNo(given) : null;
-      case "dayLte": return date.d <= n;
-      case "dayGt": return date.d > n;
-    }
-  })();
-  return is === null ? false : is !== !!c.not;
+  const unit = c.unit ?? "days";
+  const period = (shiftBy: number, p: CondPeriod) =>
+    p === "week" ? weekNo(date) === weekNo(t) + shiftBy : p === "month" ? monthNo(date) === monthNo(t) + shiftBy : p === "quarter" ? quarterNo(date) === quarterNo(t) + shiftBy : date.y === t.y + shiftBy;
+  const given = c.otherFieldId ? parseDate(answers[c.otherFieldId]) : parseDate(c.date);
+  switch (c.op) {
+    case "today": return day === today;
+    case "beforeToday": return day < today;
+    case "afterToday": return day > today;
+    case "todayOrBefore": return day <= today;
+    case "todayOrAfter": return day >= today;
+    case "thisWeek": return period(0, "week");
+    case "thisMonth": return period(0, "month");
+    case "thisQuarter": return period(0, "quarter");
+    case "thisYear": return period(0, "year");
+    case "lastWeek": return period(-1, "week");
+    case "lastMonth": return period(-1, "month");
+    case "lastQuarter": return period(-1, "quarter");
+    case "lastYear": return period(-1, "year");
+    case "nextWeek": return period(1, "week");
+    case "nextMonth": return period(1, "month");
+    case "nextQuarter": return period(1, "quarter");
+    case "nextYear": return period(1, "year");
+    case "duringCurrent": return period(0, c.period ?? "month");
+    // Rolling ranges, today included: the last / next N days, weeks, months or years.
+    case "duringPrevious": return day <= today && day >= dayNo(shift(t, -n, unit));
+    case "duringNext": return day >= today && day <= dayNo(shift(t, n, unit));
+    case "beforePrevious": return day < dayNo(shift(t, -n, unit));
+    case "afterNext": return day > dayNo(shift(t, n, unit));
+    case "is": return !!given && day === dayNo(given);
+    case "before": return !!given && day < dayNo(given);
+    case "after": return !!given && day > dayNo(given);
+    case "onOrBefore": return !!given && day <= dayNo(given);
+    case "onOrAfter": return !!given && day >= dayNo(given);
+    case "dayLte": return date.d <= n;
+    case "dayGt": return date.d > n;
+    default: return false;
+  }
 }
 
-/** Whether every line of a case holds. */
-export const caseHolds = (c: ExpiryCase, answers: Record<string, unknown>, now: Date) => caseConditions(c).every((x) => holds(x, answers, now));
+/** Whether a group holds: all of its conditions, or any of them. */
+export const caseHolds = (c: ExpiryCase, answers: Record<string, unknown>, now: Date) =>
+  c.match === "any" ? c.conditions.some((x) => holds(x, answers, now)) : c.conditions.every((x) => holds(x, answers, now));
 
 const pos = (v: unknown, max: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Math.round(Number(v))) : undefined);
 
 const fieldIdOf = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 80) : null);
 
+/** Conditions stored in earlier shapes ("type" + op, or op + "not") as today's operators; null = no equivalent. */
+function legacyCondition(o: Record<string, unknown>): Record<string, unknown> | null {
+  const first: Record<string, string> = { "day:lte": "dayLte", "day:gt": "dayGt", "today:past": "beforeToday", "today:within": "nextDays", "today:beyond": "afterDays" };
+  const op = typeof o.type === "string" ? first[`${o.type}:${String(o.op)}`] : String(o.op);
+  const n = o.n ?? o.day ?? o.days;
+  const not = o.not === true;
+  const flip: Record<string, [string, string | null]> = {
+    beforeToday: ["beforeToday", "todayOrAfter"], afterToday: ["afterToday", "todayOrBefore"], today: ["today", "notToday"],
+    on: ["is", "isNot"], before: ["before", "onOrAfter"], after: ["after", "onOrBefore"],
+    dayLte: ["dayLte", "dayGt"], dayGt: ["dayGt", "dayLte"], blank: ["blank", "notBlank"],
+    nextDays: ["duringNext", null], lastDays: ["duringPrevious", null], afterDays: ["afterNext", null],
+  };
+  const mapped = op && flip[op] ? flip[op]![not ? 1 : 0] : op && not ? `not${op[0]!.toUpperCase()}${op.slice(1)}` : op;
+  if (!mapped) return null;
+  return { fieldId: o.fieldId, op: mapped, n, unit: "days", date: o.date };
+}
+
 function normalizeCondition(raw: unknown): ExpiryCondition | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
+  let o = raw as Record<string, unknown>;
+  if (typeof o.type === "string" || "not" in o || ["nextDays", "lastDays", "afterDays", "on"].includes(String(o.op))) {
+    const converted = legacyCondition(o);
+    if (!converted) return null;
+    o = converted;
+  }
   const fieldId = fieldIdOf(o.fieldId);
-  if (!fieldId) return null;
-  // Conditions stored before the operators list: a day of the month, or the date against today.
-  const legacy: Record<string, CondOp> = { "day:lte": "dayLte", "day:gt": "dayGt", "today:past": "beforeToday", "today:within": "nextDays", "today:beyond": "afterDays" };
-  const op = (typeof o.type === "string" ? legacy[`${o.type}:${String(o.op)}`] : undefined) ?? ((COND_OPS as readonly string[]).includes(String(o.op)) ? (o.op as CondOp) : null);
-  if (!op) return null;
+  if (!fieldId || !(COND_OPS as readonly string[]).includes(String(o.op))) return null;
+  const op = o.op as CondOp;
   const needs = condNeeds(op);
   // The current date is checked only by its day of the month: anything else compares today with itself.
   if (fieldId === TODAY_FIELD && needs !== "day") return null;
-  const out: ExpiryCondition = { fieldId, op, ...(o.not === true ? { not: true } : {}) };
+  const out: ExpiryCondition = { fieldId, op };
   if (needs === "day") {
-    const day = pos(o.n ?? o.day, 31);
+    const day = pos(o.n, 31);
     if (!day) return null;
     out.n = day;
-  } else if (needs === "days") out.n = Math.min(3650, Math.max(0, Math.round(Number(o.n ?? o.days) || 0)));
-  else if (needs === "date") {
-    if (typeof o.date !== "string" || !parseDate(o.date)) return null;
-    out.date = o.date.slice(0, 10);
+  } else if (needs === "span") {
+    out.n = Math.min(3650, Math.max(0, Math.round(Number(o.n) || 0)));
+    out.unit = (COND_UNITS as readonly string[]).includes(String(o.unit)) ? (o.unit as CondUnit) : "days";
+  } else if (needs === "period") {
+    out.period = (COND_PERIODS as readonly string[]).includes(String(o.period)) ? (o.period as CondPeriod) : "month";
+  } else if (needs === "date") {
+    const other = fieldIdOf(o.otherFieldId);
+    if (other && other !== TODAY_FIELD) out.otherFieldId = other;
+    else if (typeof o.date === "string" && parseDate(o.date)) out.date = o.date.slice(0, 10);
+    else return null;
   }
   return out;
 }
@@ -212,12 +284,13 @@ export function normalizeExpiryRule(raw: unknown): ExpiryRule | null {
     if (!otherwise || !Array.isArray(o.cases)) return null;
     const cases: ExpiryCase[] = [];
     for (const c of o.cases.slice(0, 10)) {
-      const when = normalizeCondition((c as { when?: unknown } | null)?.when);
-      const then = normalizeOutcome((c as { then?: unknown } | null)?.then);
-      const more = (c as { and?: unknown } | null)?.and;
-      const and = Array.isArray(more) ? more.slice(0, 10).map(normalizeCondition) : [];
-      if (!when || !then || and.some((x) => !x)) return null; // an incomplete condition is not saved silently without it
-      cases.push({ when, ...(and.length ? { and: and as ExpiryCondition[] } : {}), then });
+      const g = (c ?? {}) as { conditions?: unknown; when?: unknown; and?: unknown; match?: unknown; then?: unknown };
+      // Earlier shape: one condition ("when") and more that must hold too ("and").
+      const list = Array.isArray(g.conditions) ? g.conditions : [g.when, ...(Array.isArray(g.and) ? g.and : [])];
+      const conditions = list.slice(0, 20).map(normalizeCondition);
+      const then = normalizeOutcome(g.then);
+      if (!conditions.length || conditions.some((x) => !x) || !then) return null; // an incomplete condition is not saved silently without it
+      cases.push({ ...(g.match === "any" ? { match: "any" as const } : {}), conditions: conditions as ExpiryCondition[], then });
     }
     return cases.length ? { kind: "cases", cases, otherwise } : otherwise;
   }
@@ -263,7 +336,7 @@ export function describeExpiryRule(raw: ExpiryRule | LegacyRule | null | undefin
   if (!rule) return `${DEFAULT_EXPIRY_DAYS} ימים מהשליחה`;
   if (rule.kind === "cases") {
     const cond = (c: ExpiryCondition) => describeCondition(c, fieldLabel);
-    return [...rule.cases.map((c) => `אם ${caseConditions(c).map(cond).join(" וגם ")}: ${describeExpiryRule(c.then, fieldLabel)}`), `אחרת: ${describeExpiryRule(rule.otherwise, fieldLabel)}`].join("; ");
+    return [...rule.cases.map((c) => `אם ${c.conditions.map(cond).join(c.match === "any" ? " או " : " וגם ")}: ${describeExpiryRule(c.then, fieldLabel)}`), `אחרת: ${describeExpiryRule(rule.otherwise, fieldLabel)}`].join("; ");
   }
   if (rule.kind === "none") return "ללא תוקף";
   const from = rule.base.from === "sent" ? "השליחה" : rule.base.from === "stepStart" ? "תחילת השלב" : `"${fieldLabel?.(rule.base.fieldId) ?? rule.base.fieldId}"`;
@@ -314,7 +387,7 @@ export function expiryRuleFields(raw: unknown): string[] {
   if (!rule || rule.kind === "none") return [];
   const of = (r: ExpiryOutcome) => (r.kind === "calc" && r.base.from === "field" ? [r.base.fieldId] : []);
   if (rule.kind === "calc") return of(rule);
-  return [...new Set([...rule.cases.flatMap((c) => [...caseConditions(c).map((x) => x.fieldId), ...of(c.then)]), ...of(rule.otherwise)])].filter((f) => f !== TODAY_FIELD);
+  return [...new Set([...rule.cases.flatMap((c) => [...c.conditions.flatMap((x) => [x.fieldId, ...(x.otherFieldId ? [x.otherFieldId] : [])]), ...of(c.then)]), ...of(rule.otherwise)])].filter((f) => f !== TODAY_FIELD);
 }
 
 /**
@@ -325,25 +398,33 @@ export function comparesToday(raw: unknown): boolean {
   return normalizeExpiryRule(raw)?.kind === "cases";
 }
 
-/** The words of each operator after "הוא" / "אינו"; `{n}` and `{date}` stand for its value. */
+/** Each operator in words; `{v}` stands for its value. */
 export const COND_TEXT: Record<CondOp, string> = {
-  today: "היום", beforeToday: "לפני היום", afterToday: "אחרי היום",
-  thisWeek: "בשבוע הנוכחי", nextWeek: "בשבוע הבא", lastWeek: "בשבוע שעבר",
-  thisMonth: "בחודש הנוכחי", nextMonth: "בחודש הבא", lastMonth: "בחודש שעבר",
-  thisQuarter: "ברבעון הנוכחי", nextQuarter: "ברבעון הבא", lastQuarter: "ברבעון שעבר",
-  thisYear: "בשנה הנוכחית", nextYear: "בשנה הבאה", lastYear: "בשנה שעברה",
-  nextDays: "בתוך {n} הימים הקרובים", lastDays: "בתוך {n} הימים האחרונים", afterDays: "בעוד יותר מ-{n} ימים",
-  on: "בתאריך {date}", before: "לפני {date}", after: "אחרי {date}",
-  dayLte: "עד ה-{n} בחודש", dayGt: "אחרי ה-{n} בחודש",
-  blank: "ריק",
+  today: "הוא היום", notToday: "אינו היום", beforeToday: "לפני היום", afterToday: "אחרי היום", todayOrBefore: "היום או לפני", todayOrAfter: "היום או אחרי",
+  thisWeek: "בשבוע הנוכחי", notThisWeek: "לא בשבוע הנוכחי", thisMonth: "בחודש הנוכחי", notThisMonth: "לא בחודש הנוכחי",
+  thisQuarter: "ברבעון הנוכחי", notThisQuarter: "לא ברבעון הנוכחי", thisYear: "בשנה הנוכחית", notThisYear: "לא בשנה הנוכחית",
+  lastWeek: "בשבוע שעבר", notLastWeek: "לא בשבוע שעבר", lastMonth: "בחודש שעבר", notLastMonth: "לא בחודש שעבר",
+  lastQuarter: "ברבעון שעבר", notLastQuarter: "לא ברבעון שעבר", lastYear: "בשנה שעברה", notLastYear: "לא בשנה שעברה",
+  nextWeek: "בשבוע הבא", notNextWeek: "לא בשבוע הבא", nextMonth: "בחודש הבא", notNextMonth: "לא בחודש הבא",
+  nextQuarter: "ברבעון הבא", notNextQuarter: "לא ברבעון הבא", nextYear: "בשנה הבאה", notNextYear: "לא בשנה הבאה",
+  duringCurrent: "במהלך {v}", duringPrevious: "במהלך {v} האחרונים", duringNext: "במהלך {v} הבאים", beforePrevious: "לפני יותר מ-{v}", afterNext: "בעוד יותר מ-{v}",
+  is: "שווה ל-{v}", isNot: "שונה מ-{v}", before: "לפני {v}", after: "אחרי {v}", onOrBefore: "עד {v} (כולל)", onOrAfter: "מ-{v} והלאה",
+  blank: "ריק", notBlank: "לא ריק",
+  dayLte: "עד ה-{v} בחודש", dayGt: "אחרי ה-{v} בחודש",
 };
+export const UNIT_TEXT: Record<CondUnit, string> = { days: "ימים", weeks: "שבועות", months: "חודשים", years: "שנים" };
+export const PERIOD_TEXT: Record<CondPeriod, string> = { week: "השבוע הנוכחי", month: "החודש הנוכחי", quarter: "הרבעון הנוכחי", year: "השנה הנוכחית" };
 
-/** A condition in words: '"תאריך תחילה" הוא בחודש הבא'. */
+/** A condition in words: '"תאריך תחילה" בחודש הבא'. */
 export function describeCondition(c: ExpiryCondition, fieldLabel?: (id: string) => string): string {
-  const name = c.fieldId === TODAY_FIELD ? "התאריך הנוכחי" : `"${fieldLabel?.(c.fieldId) ?? c.fieldId}"`;
+  const name = (id: string) => (id === TODAY_FIELD ? "התאריך הנוכחי" : `"${fieldLabel?.(id) ?? id}"`);
+  const needs = condNeeds(c.op);
   const date = parseDate(c.date);
-  const text = COND_TEXT[c.op].replace("{n}", String(c.n ?? 0)).replace("{date}", date ? `${date.d}.${date.m}.${date.y}` : "");
-  return `${name} ${c.not ? "אינו" : "הוא"} ${text}`;
+  const v = needs === "day" ? String(c.n ?? 0)
+    : needs === "span" ? `${c.n ?? 0} ${UNIT_TEXT[c.unit ?? "days"]}`
+      : needs === "period" ? PERIOD_TEXT[c.period ?? "month"]
+        : needs === "date" ? (c.otherFieldId ? name(c.otherFieldId) : date ? `${date.d}.${date.m}.${date.y}` : "") : "";
+  return `${name(c.fieldId)} ${COND_TEXT[c.op].replace("{v}", v)}`;
 }
 
 /**

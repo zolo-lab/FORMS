@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, CalendarClock, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_EXPIRY_DAYS, TODAY_FIELD, caseConditions, caseHolds, condNeeds, expiryFor, expiryRuleFields,
-  type CondOp, type ExpiryBase, type ExpiryCalc, type ExpiryCase, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
+  COND_PERIODS, COND_TEXT, COND_UNITS, DEFAULT_EXPIRY_DAYS, PERIOD_TEXT, TODAY_FIELD, UNIT_TEXT, caseHolds, condNeeds, expiryFor, expiryRuleFields,
+  type CondOp, type CondPeriod, type CondUnit, type ExpiryBase, type ExpiryCalc, type ExpiryCase, type ExpiryCondition, type ExpiryOutcome, type ExpiryRule, type ExpirySnap,
 } from "@/lib/requests/expiry";
 
 /** `unavailable`: why the field cannot be used here (filled only later) – listed, but not chosen. */
@@ -22,25 +22,24 @@ const SNAP_LABEL: Record<ExpirySnap["mode"], string> = {
   next: "בחודש שאחרי",
   sameOrNext: "הקרוב אחרי",
 };
-/** The operators as offered, in groups; `label` is followed by the operator's value, then `suffix`. */
-const COND_GROUPS: { title: string; ops: { op: CondOp; label: string; suffix?: string }[] }[] = [
-  { title: "מול היום", ops: [
-    { op: "today", label: "היום" }, { op: "beforeToday", label: "לפני היום" }, { op: "afterToday", label: "אחרי היום" },
-    { op: "nextDays", label: "בימים הקרובים, עד", suffix: "ימים מהיום" }, { op: "lastDays", label: "בימים האחרונים, עד", suffix: "ימים אחורה" }, { op: "afterDays", label: "רחוק יותר מ־", suffix: "ימים מהיום" },
-  ] },
-  { title: "שבוע", ops: [{ op: "thisWeek", label: "בשבוע הנוכחי" }, { op: "nextWeek", label: "בשבוע הבא" }, { op: "lastWeek", label: "בשבוע שעבר" }] },
-  { title: "חודש", ops: [
-    { op: "thisMonth", label: "בחודש הנוכחי" }, { op: "nextMonth", label: "בחודש הבא" }, { op: "lastMonth", label: "בחודש שעבר" },
-    { op: "dayLte", label: "עד ה־", suffix: "בחודש שלו" }, { op: "dayGt", label: "אחרי ה־", suffix: "בחודש שלו" },
-  ] },
-  { title: "רבעון ושנה", ops: [
-    { op: "thisQuarter", label: "ברבעון הנוכחי" }, { op: "nextQuarter", label: "ברבעון הבא" }, { op: "lastQuarter", label: "ברבעון שעבר" },
-    { op: "thisYear", label: "בשנה הנוכחית" }, { op: "nextYear", label: "בשנה הבאה" }, { op: "lastYear", label: "בשנה שעברה" },
-  ] },
-  { title: "תאריך מסוים", ops: [{ op: "on", label: "בתאריך" }, { op: "before", label: "לפני התאריך" }, { op: "after", label: "אחרי התאריך" }] },
-  { title: "אחר", ops: [{ op: "blank", label: "ריק" }] },
+/** The operators as offered: Tadabase's list, in its order and groups, and the day of the month after it. */
+const COND_GROUPS: { title: string; ops: CondOp[] }[] = [
+  { title: "היום", ops: ["today", "notToday", "beforeToday", "afterToday", "todayOrBefore", "todayOrAfter"] },
+  { title: "התקופה הנוכחית", ops: ["thisWeek", "notThisWeek", "thisMonth", "notThisMonth", "thisQuarter", "notThisQuarter", "thisYear", "notThisYear"] },
+  { title: "התקופה הקודמת", ops: ["lastWeek", "notLastWeek", "lastMonth", "notLastMonth", "lastQuarter", "notLastQuarter", "lastYear", "notLastYear"] },
+  { title: "התקופה הבאה", ops: ["nextWeek", "notNextWeek", "nextMonth", "notNextMonth", "nextQuarter", "notNextQuarter", "nextYear", "notNextYear"] },
+  { title: "טווח", ops: ["duringCurrent", "duringPrevious", "duringNext", "beforePrevious", "afterNext"] },
+  { title: "תאריך מסוים", ops: ["is", "isNot", "before", "after", "onOrBefore", "onOrAfter"] },
+  { title: "ריק", ops: ["blank", "notBlank"] },
+  { title: "יום בחודש", ops: ["dayLte", "dayGt"] },
 ];
-const COND_OF = Object.fromEntries(COND_GROUPS.flatMap((g) => g.ops.map((o) => [o.op, o]))) as Record<CondOp, { op: CondOp; label: string; suffix?: string }>;
+/** The names in the list of the operators that take a value (the value comes right after); the rest read as they are. */
+const OP_LABEL: Partial<Record<CondOp, string>> = {
+  duringCurrent: "במהלך", duringPrevious: "בטווח האחרון של", duringNext: "בטווח הקרוב של", beforePrevious: "לפני יותר מ־", afterNext: "בעוד יותר מ־",
+  is: "שווה ל־", isNot: "שונה מ־", before: "לפני", after: "אחרי", onOrBefore: "עד (כולל)", onOrAfter: "החל מ־ (כולל)",
+  dayLte: "עד ה־", dayGt: "אחרי ה־",
+};
+const opLabel = (op: CondOp) => OP_LABEL[op] ?? COND_TEXT[op];
 type Kind = "days" | "months" | "fixed" | "none";
 const KIND_LABEL: Record<Kind, string> = { days: "לפי ימים", months: "לפי חודשים", fixed: "ביום קבוע בחודש", none: "ללא תוקף" };
 const MAX_CASES = 10;
@@ -137,52 +136,74 @@ function OutcomeSentence({ id, lead, value, onChange, dateFields, bases, allowNo
 }
 
 /**
- * One line of a condition: "[אם | וגם] [a date field of the form] [הוא | אינו] [היום | בחודש הבא | לפני התאריך … | …]".
- * The current date can be checked too, by its day of the month.
+ * One condition, as a filter row: [a date field of the form] [operator] [its value, when it takes one] [remove].
+ * The value is a period (week…year), a number with a unit, a given date or another date field, or a day of the month.
  */
-function ConditionSentence({ id, lead, value, onChange, dateFields, onRemove }: {
-  id: string; lead: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[]; onRemove?: () => void;
+function ConditionRow({ id, value, onChange, dateFields, onRemove }: {
+  id: string; value: ExpiryCondition; onChange: (v: ExpiryCondition) => void; dateFields: DateFieldOption[]; onRemove?: () => void;
 }) {
   const needs = condNeeds(value.op);
-  const isToday = value.fieldId === TODAY_FIELD;
   const setOp = (op: CondOp) => {
     const n = condNeeds(op);
-    onChange({
-      fieldId: value.fieldId, op, ...(value.not ? { not: true } : {}),
-      ...(n === "day" ? { n: needs === "day" ? value.n : 20 } : n === "days" ? { n: needs === "days" ? value.n : 7 } : n === "date" ? { date: value.date ?? ymd(new Date()) } : {}),
-    });
+    const next: ExpiryCondition = { fieldId: value.fieldId, op };
+    if (n === "day") next.n = needs === "day" ? value.n : 20;
+    if (n === "span") { next.n = needs === "span" ? value.n : 7; next.unit = value.unit ?? "days"; }
+    if (n === "period") next.period = value.period ?? "month";
+    if (n === "date") { if (value.otherFieldId) next.otherFieldId = value.otherFieldId; else next.date = value.date ?? ymd(new Date()); }
+    onChange(next);
   };
+  const others = dateFields.filter((f) => f.id !== value.fieldId);
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="w-8 font-semibold">{lead}</span>
-      <Select id={`${id}-field`} aria-label="איזה תאריך בודקים" className="w-auto max-w-full" value={value.fieldId} onChange={(e) => {
-        const fieldId = e.target.value;
-        // The current date is checked only by its day of the month.
-        onChange(fieldId === TODAY_FIELD && needs !== "day" ? { fieldId, op: "dayLte", n: 20, ...(value.not ? { not: true } : {}) } : { ...value, fieldId });
-      }}>
-        {!isToday && !dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId ? "שדה שכבר לא קיים" : "בחרו שדה תאריך…"}</option>}
+    <div className="flex items-start gap-2 text-sm">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <Select id={`${id}-field`} aria-label="שדה התאריך" className="w-auto max-w-full" value={value.fieldId} onChange={(e) => onChange({ ...value, fieldId: e.target.value })}>
+        {!dateFields.some((f) => f.id === value.fieldId) && <option value={value.fieldId}>{value.fieldId === TODAY_FIELD ? "התאריך הנוכחי" : value.fieldId ? "שדה שכבר לא קיים" : "בחרו שדה תאריך…"}</option>}
         {dateFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-        {isToday && <option value={TODAY_FIELD}>התאריך הנוכחי</option>}
-      </Select>
-      <Select id={`${id}-not`} aria-label="הוא או אינו" className="w-auto" value={value.not ? "not" : "is"} onChange={(e) => { const c = { ...value }; if (e.target.value === "not") c.not = true; else delete c.not; onChange(c); }}>
-        <option value="is">הוא</option>
-        <option value="not">אינו</option>
       </Select>
       <Select id={`${id}-op`} aria-label="התנאי" className="w-auto max-w-full" value={value.op} onChange={(e) => setOp(e.target.value as CondOp)}>
-        {COND_GROUPS.map((g) => {
-          const ops = g.ops.filter((o) => !isToday || condNeeds(o.op) === "day");
-          return ops.length ? <optgroup key={g.title} label={g.title}>{ops.map((o) => <option key={o.op} value={o.op}>{o.label}</option>)}</optgroup> : null;
-        })}
+        {COND_GROUPS.map((g) => <optgroup key={g.title} label={g.title}>{g.ops.map((op) => <option key={op} value={op}>{opLabel(op)}</option>)}</optgroup>)}
       </Select>
-      {needs && (
+      {needs === "period" && (
+        <Select id={`${id}-period`} aria-label="התקופה" className="w-auto" value={value.period ?? "month"} onChange={(e) => onChange({ ...value, period: e.target.value as CondPeriod })}>
+          {COND_PERIODS.map((p) => <option key={p} value={p}>{PERIOD_TEXT[p]}</option>)}
+        </Select>
+      )}
+      {needs === "span" && (
         <span className="inline-flex items-center gap-2 whitespace-nowrap">
-          {needs === "date"
-            ? <Input id={`${id}-v`} aria-label="התאריך" type="date" className="w-40" value={value.date ?? ""} onChange={(e) => onChange({ ...value, date: e.target.value })} />
-            : <Input id={`${id}-v`} aria-label={needs === "day" ? "יום בחודש" : "מספר ימים"} type="number" min={needs === "day" ? 1 : 0} max={needs === "day" ? 31 : 3650} inputMode="numeric" className="w-20" value={value.n ?? 0} onChange={(e) => onChange({ ...value, n: num(e.target.value, needs === "day" ? 1 : 0, needs === "day" ? 31 : 3650) })} />}
-          {COND_OF[value.op].suffix}
+          <Input id={`${id}-n`} aria-label="כמה" type="number" min={0} max={3650} inputMode="numeric" className="w-20" value={value.n ?? 0} onChange={(e) => onChange({ ...value, n: num(e.target.value, 0, 3650) })} />
+          <Select id={`${id}-unit`} aria-label="יחידה" className="w-auto" value={value.unit ?? "days"} onChange={(e) => onChange({ ...value, unit: e.target.value as CondUnit })}>
+            {COND_UNITS.map((u) => <option key={u} value={u}>{UNIT_TEXT[u]}</option>)}
+          </Select>
         </span>
       )}
-      {onRemove && <Button type="button" variant="ghost" size="icon" className="text-muted-foreground" onClick={onRemove} aria-label="הסרת השורה"><X className="size-4" aria-hidden /></Button>}
+      {needs === "day" && (
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <Input id={`${id}-n`} aria-label="יום בחודש" type="number" min={1} max={31} inputMode="numeric" className="w-20" value={value.n ?? 1} onChange={(e) => onChange({ ...value, n: num(e.target.value, 1, 31) })} />
+          בחודש
+        </span>
+      )}
+      {needs === "date" && (
+        <>
+          <Select id={`${id}-vs`} aria-label="מול מה" className="w-auto" value={value.otherFieldId ? "field" : "date"} onChange={(e) => {
+            const next = { ...value };
+            if (e.target.value === "field") { delete next.date; next.otherFieldId = others[0]?.id ?? ""; } else { delete next.otherFieldId; next.date = ymd(new Date()); }
+            onChange(next);
+          }}>
+            <option value="date">תאריך מסוים</option>
+            <option value="field" disabled={others.length === 0}>שדה תאריך אחר</option>
+          </Select>
+          {value.otherFieldId !== undefined
+            ? (
+              <Select id={`${id}-other`} aria-label="השדה האחר" className="w-auto max-w-full" value={value.otherFieldId} onChange={(e) => onChange({ ...value, otherFieldId: e.target.value })}>
+                {!others.some((f) => f.id === value.otherFieldId) && <option value={value.otherFieldId}>{value.otherFieldId ? "שדה שכבר לא קיים" : "בחרו…"}</option>}
+                {others.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </Select>
+            )
+            : <Input id={`${id}-date`} aria-label="התאריך" type="date" className="w-40" value={value.date ?? ""} onChange={(e) => onChange({ ...value, date: e.target.value })} />}
+        </>
+      )}
+      </div>
+      {onRemove && <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground" onClick={onRemove} aria-label="מחיקת התנאי"><Trash2 className="size-4" aria-hidden /></Button>}
     </div>
   );
 }
@@ -236,7 +257,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   // Conditions are checked again every day, so they (and what they lead to) may read a date a later step fills.
   const anyDate = dateFields.map((f) => ({ id: f.id, label: f.label }));
   const newCondition = (): ExpiryCondition => ({ fieldId: anyDate[0]?.id ?? "", op: "thisMonth" });
-  const newCase = (): ExpiryCase => ({ when: newCondition(), then: otherwise?.kind === "calc" ? otherwise : fresh() });
+  const newCase = (): ExpiryCase => ({ conditions: [newCondition()], then: otherwise?.kind === "calc" ? otherwise : fresh() });
   const setCases = (next: ExpiryCase[], other: ExpiryOutcome = otherwise ?? fresh()) => onChange(next.length ? { kind: "cases", cases: next, otherwise: other } : other);
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const pick = (m: Mode) => {
@@ -260,7 +281,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     ...(inherit ? [{ id: "inherit" as const, title: "ברירת מחדל", hint: inherit }] : []),
     { id: "none", title: "ללא תוקף", hint: "הקישור לא נסגר." },
     { id: "simple", title: "תנאי פשוט", hint: "כלל אחד – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
-    { id: "complex", title: "תנאי מורכב", hint: anyDate.length ? "כלל שונה לפי מקרה: אם [שדה תאריך] הוא… אז…, אחרת…" : "תנאי בודק שדה תאריך מהטופס, ואין בטופס שדה כזה. הוסיפו שדה תאריך בלשונית העריכה." },
+    { id: "complex", title: "תנאי מורכב", hint: anyDate.length ? "תנאים על שדות התאריך בטופס: אם… אז…, אחרת…" : "תנאי בודק שדה תאריך מהטופס, ואין בטופס שדה כזה. הוסיפו שדה תאריך בלשונית העריכה." },
   ];
 
   const example = value && (mode === "simple" || mode === "complex") && (
@@ -279,7 +300,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
             </span>
           ))}
         </div>
-        {cases.length > 0 && <p className="text-sm text-muted-foreground">חל: <strong className="text-foreground">{chosen >= 0 ? `"אם" מספר ${chosen + 1}` : "אחרת"}</strong></p>}
+        {cases.length > 0 && <p className="text-sm text-muted-foreground">חל: <strong className="text-foreground">{chosen >= 0 ? `קבוצת תנאים ${chosen + 1}` : "אחרת"}</strong></p>}
         {outcome?.kind === "calc" ? <Trail calc={outcome} answers={answers} start={start} fieldName={fieldName} /> : <p className="text-sm font-medium">הקישור לא נסגר.</p>}
       </div>
     </details>
@@ -319,39 +340,50 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
 
               {on && o.id === "complex" && otherwise && (
                 <div className="space-y-3 border-t p-3">
-                  {cases.map((c, k) => (
-                    <section key={k} aria-label={`מקרה ${k + 1}`} className="flex items-start gap-2 rounded-lg border bg-card p-3">
-                      <div className="min-w-0 flex-1 space-y-2">
-                        {caseConditions(c).map((cond, n) => (
-                          <ConditionSentence
-                            key={n}
-                            id={`${id}-c${k}-${n}`}
-                            lead={n === 0 ? "אם" : "וגם"}
-                            value={cond}
-                            dateFields={anyDate}
-                            onChange={(next) => setCases(cases.map((x, j) => (j !== k ? x : n === 0 ? { ...x, when: next } : { ...x, and: (x.and ?? []).map((y, m) => (m === n - 1 ? next : y)) })))}
-                            onRemove={n === 0 ? undefined : () => setCases(cases.map((x, j) => {
-                              if (j !== k) return x;
-                              const and = (x.and ?? []).filter((_, m) => m !== n - 1);
-                              const copy = { ...x, and };
-                              if (!and.length) delete (copy as Partial<ExpiryCase>).and;
-                              return copy;
-                            }))}
-                          />
-                        ))}
-                        <button type="button" disabled={(c.and?.length ?? 0) >= 9} onClick={() => setCases(cases.map((x, j) => (j === k ? { ...x, and: [...(x.and ?? []), newCondition()] } : x)))} className="ms-10 min-h-8 text-xs text-primary hover:underline disabled:opacity-50">+ וגם</button>
-                        <OutcomeSentence id={`${id}-t${k}`} lead="אז" value={c.then} onChange={(then) => setCases(cases.map((x, j) => (j === k ? { ...x, then } : x)))} dateFields={anyDate} bases={bases} allowNone />
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={cases.length === 1} onClick={() => setCases(cases.filter((_, j) => j !== k))} aria-label={`מחיקת מקרה ${k + 1}`}><Trash2 className="size-4" aria-hidden /></Button>
-                    </section>
-                  ))}
+                  {cases.map((c, k) => {
+                    const setCase = (next: ExpiryCase) => setCases(cases.map((x, j) => (j === k ? next : x)));
+                    return (
+                      <section key={k} aria-label={`קבוצת תנאים ${k + 1}`} className="rounded-lg border bg-card">
+                        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+                          <span className="text-sm font-semibold">אם</span>
+                          <div role="group" aria-label="איך התנאים מצטרפים" className="inline-flex rounded-md border p-0.5">
+                            {([["all", "כל התנאים מתקיימים"], ["any", "אחד מהתנאים מתקיים"]] as const).map(([m, text]) => (
+                              <button key={m} type="button" aria-pressed={(c.match ?? "all") === m} onClick={() => { const next = { ...c }; if (m === "any") next.match = "any"; else delete next.match; setCase(next); }}
+                                className={cn("min-h-8 rounded px-2.5 text-xs font-medium", (c.match ?? "all") === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>
+                                {text}
+                              </button>
+                            ))}
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="ms-auto text-destructive" disabled={cases.length === 1} onClick={() => setCases(cases.filter((_, j) => j !== k))} aria-label={`מחיקת קבוצת תנאים ${k + 1}`}><Trash2 className="size-4" aria-hidden /></Button>
+                        </div>
+                        <div className="space-y-2 p-3">
+                          {c.conditions.map((cond, n) => (
+                            <ConditionRow
+                              key={n}
+                              id={`${id}-c${k}-${n}`}
+                              value={cond}
+                              dateFields={anyDate}
+                              onChange={(next) => setCase({ ...c, conditions: c.conditions.map((y, m) => (m === n ? next : y)) })}
+                              onRemove={c.conditions.length > 1 ? () => setCase({ ...c, conditions: c.conditions.filter((_, m) => m !== n) }) : undefined}
+                            />
+                          ))}
+                          <Button type="button" variant="outline" size="sm" disabled={c.conditions.length >= 20} onClick={() => setCase({ ...c, conditions: [...c.conditions, newCondition()] })}>
+                            <Plus className="size-4" aria-hidden />תנאי נוסף
+                          </Button>
+                        </div>
+                        <div className="border-t bg-muted/30 p-3">
+                          <OutcomeSentence id={`${id}-t${k}`} lead="אז" value={c.then} onChange={(then) => setCase({ ...c, then })} dateFields={anyDate} bases={bases} allowNone />
+                        </div>
+                      </section>
+                    );
+                  })}
+                  <Button type="button" variant="ghost" size="sm" className="text-primary" disabled={cases.length >= MAX_CASES} onClick={() => setCases([...cases, newCase()])}>
+                    <Plus className="size-4" aria-hidden />קבוצת תנאים נוספת
+                  </Button>
                   <section aria-label="אחרת" className="rounded-lg border bg-card p-3">
                     <OutcomeSentence id={`${id}-else`} lead="אחרת" value={otherwise} onChange={(other) => setCases(cases, other)} dateFields={anyDate} bases={bases} allowNone />
                   </section>
-                  <Button type="button" variant="ghost" size="sm" className="text-primary" disabled={cases.length >= MAX_CASES} onClick={() => setCases([...cases, newCase()])}>
-                    <Plus className="size-4" aria-hidden />עוד &quot;אם&quot;
-                  </Button>
-                  <p className="text-xs text-muted-foreground">ה&quot;אם&quot; הראשון שמתקיים קובע. התנאים נבדקים מחדש כל יום, והתוקף מתעדכן לפיהם.</p>
+                  <p className="text-xs text-muted-foreground">הקבוצה הראשונה שמתקיימת קובעת. התנאים נבדקים מחדש כל יום, והתוקף מתעדכן לפיהם.</p>
                   {example}
                 </div>
               )}
