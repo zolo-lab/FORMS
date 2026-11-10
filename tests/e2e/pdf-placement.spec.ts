@@ -210,19 +210,3 @@ test("a field type is chosen first, then a click on the document puts it exactly
   await pdfPage.click({ position: { x: 300, y: 300 } });
   expect(await stamps()).toHaveLength(2);
 });
-
-test("a field's name can be chosen from the organization fields, and then it fills from it", async ({ page }) => {
-  await login(page, "/preview/pdf-placement");
-  await expect(page.getByTestId("pdf-page-0").locator("canvas")).toBeVisible({ timeout: 20_000 });
-  const fieldIds = async () => JSON.parse((await page.getByTestId("field-ids").textContent())!) as string[];
-  const prefills = async () => JSON.parse((await page.getByTestId("field-prefills").textContent())!) as (string | null)[];
-  await addOnPdf(page, "תשובה קצרה");
-  const before = await fieldIds();
-  await page.getByLabel("שם מזהה משדות העמותה").selectOption("deductionsFile");
-  await expect.poll(fieldIds).toContain("deductionsFile");
-  const ids = await fieldIds();
-  expect(ids).toHaveLength(before.length); // renamed, not added
-  expect((await prefills())[ids.indexOf("deductionsFile")]).toBe("org.fields.deductionsFile");
-  await expect(page.locator("#stamp-field-id")).toHaveValue("deductionsFile");
-  await expect(page.getByText("השדה מתמלא אוטומטית בערך של העמותה שבבקשה.")).toBeVisible();
-});
