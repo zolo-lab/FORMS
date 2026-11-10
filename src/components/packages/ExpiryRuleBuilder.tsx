@@ -260,13 +260,15 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
   const calc = value?.kind === "calc" ? value : null;
   // The condition is checked again every day, so it may read a date a later step fills.
   const anyDate = dateFields.map((f) => ({ id: f.id, label: f.label }));
+  // Without a date field in the form, the request's creation date still works: "past the 20th of its month".
+  const newWhen = (): ExpiryCondition => (anyDate[0] ? { fieldId: anyDate[0].id, op: "beforeToday" } : { fieldId: CREATED_FIELD, op: "pastDayOf", n: 20, monthOffset: 0 });
   const fieldName = (fid: string) => dateFields.find((f) => f.id === fid)?.label ?? "שדה שלא זמין כאן";
   const pick = (m: Mode) => {
     if (m === mode) return;
     if (m === "inherit") onChange(undefined);
     else if (m === "none") onChange({ kind: "none" });
     else if (m === "simple") onChange(fresh());
-    else onChange({ kind: "when", condition: { fieldId: anyDate[0]?.id ?? "", op: "beforeToday" } });
+    else onChange({ kind: "when", condition: newWhen() });
   };
 
   // Example dates: the moment the link is set ("today"), and each date field the rule reads.
@@ -283,7 +285,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
     { id: "simple", title: "תנאי פשוט", hint: "תאריך קבוע – למשל 7 ימים אחרי תחילת השלב, או ה-7 בחודש שאחרי תאריך התחילה." },
     {
       id: "complex", title: "תנאי מורכב",
-      hint: anyDate.length ? "הקישור פג כאשר שדה תאריך עונה על תנאי – למשל \"תאריך תחילה\" לפני היום." : "צריך שדה תאריך בטופס. הוסיפו אחד בלשונית העריכה.",
+      hint: "הקישור פג כאשר תאריך (מהטופס, או תאריך יצירת הבקשה) עונה על תנאי – למשל \"תאריך תחילה\" לפני היום.",
     },
   ];
 
@@ -323,7 +325,6 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                 role="radio"
                 aria-checked={on}
                 onClick={() => pick(o.id)}
-                disabled={o.id === "complex" && !on && anyDate.length === 0}
                 className="flex min-h-12 w-full items-start gap-3 p-3 text-start disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", on ? "border-primary" : "border-muted-foreground/50")} aria-hidden>
@@ -354,7 +355,7 @@ export function ExpiryRuleBuilder({ id, value, onChange, dateFields, bases, inhe
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       כלל ישן: {value ? describeExpiryRule(value, fieldName) : ""}.{" "}
-                      <button type="button" className="text-primary underline" onClick={() => onChange({ kind: "when", condition: { fieldId: anyDate[0]?.id ?? "", op: "beforeToday" } })}>החלפה בתנאי חדש</button>
+                      <button type="button" className="text-primary underline" onClick={() => onChange({ kind: "when", condition: newWhen() })}>החלפה בתנאי חדש</button>
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">נבדק כל יום: ביום שהתנאי מתקיים, הקישור נסגר.</p>
