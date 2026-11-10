@@ -93,7 +93,7 @@ export default async function SigningPage({ params }: { params: Promise<{ token:
           formOnly={await stepIsFormOnly(ctx.request.packageTemplateId, ctx.step, ctx.request.organizationId, ctx.request.projectId)}
           returnTargets={ctx.returnTargets}
           pdfDocs={ctx.pdfDocs.map((d) => ({ title: d.title, url: `/api/s/${token}/pdf/${d.fileId}`, mapping: d.mapping }))}
-          lookups={lookupsForView(await listLookupsFor([ctx.fullDefinition], await lookupsFor([ctx.definition])), ctx.definition, ctx.fullDefinition, ctx.answers)}
+          lookups={lookupsForView(await listLookupsFor([ctx.definition], await lookupsFor([ctx.definition])), ctx.definition, ctx.fullDefinition, ctx.answers)}
         />
       </OrgTheme>
     </main>

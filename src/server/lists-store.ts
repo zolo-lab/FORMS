@@ -146,21 +146,32 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
 }
 
-/** The first filled text value of a record, or nothing. */
-function textTitle(values: Record<string, string | string[]>, fields: { key: string; kind: string }[]): string | undefined {
+/**
+ * A record's name as a filler may see it: its first plain-text field (a name is text; an ID number, a phone, an
+ * amount or a date is not, and is never shown unless the form itself asks for it), else nothing.
+ */
+function safeTitle(values: Record<string, string | string[]>, fields: { key: string; kind: string }[]): string | undefined {
   for (const f of fields) {
-    if (f.kind === "ref" || f.kind === "select" || f.kind === "yes_no") continue;
+    if (f.kind !== "short_text" && f.kind !== "long_text") continue;
     const v = values[f.key];
     if (typeof v === "string" && v) return v;
   }
   return undefined;
 }
 
+/** The records of a type by id with their safe titles (see `safeTitle`), for a "belongs to" value shown to a filler. */
+async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
+  if (typeId === ORG_TYPE) return new Map((await listOrgs()).map((o) => [o.id, o.name]));
+  const [fields, rows] = await Promise.all([fieldsOf(typeId), db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId))]);
+  return new Map(rows.map((r, i) => [r.id, safeTitle(r.values, fields) ?? `רשומה ${i + 1}`]));
+}
+
 /**
  * Lookups for the list types a set of forms reads from: under `list.<typeId>` the records (value = id, label =
  * title, `data` = the values of the fields the forms link to – only those, so a form never carries more of a record
  * than it shows); under `list.<typeId>.<key>` every option of a choice field. A "belongs to" value is sent as the
- * parent record's title. Merged over the lookups the caller already has.
+ * parent record's title. Merged over the lookups the caller already has. For what goes to a browser, pass the role's
+ * own view of the form, so `data` holds that step's fields only; the server validates with the whole form.
  */
 export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {}): Promise<Lookups> {
   const out: Lookups = { ...into };
@@ -179,7 +190,7 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
       }
     }
     const titles = new Map<string, Map<string, string>>();
-    for (const f of fields) if (f.kind === "ref" && f.parentTypeId && used.has(f.key)) titles.set(f.key, new Map((await titlesOf(f.parentTypeId)).map((t) => [t.id, t.title])));
+    for (const f of fields) if (f.kind === "ref" && f.parentTypeId && used.has(f.key)) titles.set(f.key, await safeTitlesOf(f.parentTypeId));
     const rows = await db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt));
     out[pickerKey(typeId)] = rows.map((r, i): RecordOption => {
       const data: Record<string, string | string[]> = {};
@@ -190,7 +201,7 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
         data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
       }
       // The title shown to the filler comes from the text fields only – never from a choice the form did not ask for.
-      return { value: r.id, label: textTitle(r.values, fields) ?? `רשומה ${i + 1}`, data };
+      return { value: r.id, label: safeTitle(r.values, fields) ?? `רשומה ${i + 1}`, data };
     });
     for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));
   }

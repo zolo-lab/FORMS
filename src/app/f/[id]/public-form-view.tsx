@@ -40,7 +40,7 @@ export async function PublicFormView({ id, org: orgSlug, project: projectSlug }:
           definition={view.definition}
           role={view.role}
           initialAnswers={view.initialAnswers}
-          lookups={lookupsForView(await listLookupsFor([view.fullDefinition], await lookupsFor([view.definition])), view.definition, view.fullDefinition, view.initialAnswers)}
+          lookups={lookupsForView(await listLookupsFor([view.definition], await lookupsFor([view.definition])), view.definition, view.fullDefinition, view.initialAnswers)}
           pdf={view.pdf ? { url: `/api/f/${view.formId}/pdf${q}`, mapping: view.pdf.mapping } : undefined}
         />
       </main>
