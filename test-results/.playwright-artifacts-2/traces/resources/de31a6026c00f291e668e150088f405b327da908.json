@@ -1,1 +1,0 @@
-{"fields":[{"id":"d0","label":"ID","type":"id_number"},{"id":"d1","label":"Employee form - name","type":"short_text"},{"id":"d2","label":"Agree: [ ] Signature","type":"signature"},{"id":"d3","label":"Date","type":"date"}]}

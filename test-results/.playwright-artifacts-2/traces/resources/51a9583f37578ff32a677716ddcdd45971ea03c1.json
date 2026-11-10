@@ -1,1 +1,0 @@
-{"fields":[{"id":"d0","label":"שם פרטי ומשפחה","type":"short_text"},{"id":"d1","label":"מספר זהות","type":"id_number"},{"id":"d2","label":"תאריך לידה","type":"date"},{"id":"d3","label":"מין","type":"radio","options":[{"label":"זכר"},{"label":"נקבה"}]}]}

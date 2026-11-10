@@ -1,1 +1,0 @@
-{"version":10,"type":"context-options","origin":"library","browserName":"","playwrightVersion":"1.64.0","options":{},"platform":"linux","wallTime":1794270811078,"monotonicTime":324019.459,"sdkLanguage":"javascript","title":"pdf-placement.spec.ts:122 › copying a box adds nothing until a click on the document pastes there a new field like it"}
