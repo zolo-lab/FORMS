@@ -11,7 +11,7 @@ import { keyFor, linkedTypeIds, listSource, parseKey, pickerKey, type LinkedList
 import type { Lookups } from "@/lib/forms/lookups";
 import { prefillOf } from "@/lib/forms/prefill";
 import { allFields, type FormDefinition } from "@/lib/forms/schema";
-import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, fillerTitle, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, fillerTitle, listTitle, parentTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
 
@@ -146,7 +146,7 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
 }
 
-/** The parent records of a type by id with their names (see `fillerTitle`; the form links none of their fields). */
+/** The parent records of a type by id with their names (see `parentTitle`), for a "belongs to" field the form links. */
 async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
   if (typeId === ORG_TYPE) return new Map((await listOrgs()).map((o) => [o.id, o.name]));
   // Ordered as the picker orders them, so "רשומה N" names the same record in both.
@@ -154,8 +154,7 @@ async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
     fieldsOf(typeId),
     db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
   ]);
-  const none = new Set<string>();
-  return new Map(rows.map((r, i) => [r.id, fillerTitle(r.values, fields, none) ?? `רשומה ${i + 1}`]));
+  return new Map(rows.map((r, i) => [r.id, parentTitle(r.values, fields) ?? `רשומה ${i + 1}`]));
 }
 
 /**
@@ -192,7 +191,7 @@ export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {})
         if (v === undefined || v === "") continue;
         data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
       }
-      // The title shown to the filler: the record's name field, or a text field the form links to – nothing else.
+      // The title shown to the filler: a text field the form links to – nothing the form did not ask for.
       return { value: r.id, label: fillerTitle(r.values, fields, used) ?? `רשומה ${i + 1}`, data };
     });
     for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));

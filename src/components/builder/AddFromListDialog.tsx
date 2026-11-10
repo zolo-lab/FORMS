@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { AlertTriangle, Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Radio } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
@@ -57,6 +57,8 @@ export function AddFromListDialog({
   const chosen = picked ?? new Set(fields.map((f) => f.key));
   const record = current?.list.records.find((r) => r.id === recordId) ?? null;
   const formFields = allFields(def).filter((f) => FIELD_TYPE_META[f.type].hasAnswer);
+  // The filler's picker names a record by a text field the form links to; with none chosen it shows "רשומה 1, 2…".
+  const nameless = !record && source !== "org" && fields.length > 0 && !fields.some((f) => (f.kind === "short_text" || f.kind === "long_text") && chosen.has(f.key));
 
   const reset = () => {
     setSource(null);
@@ -197,6 +199,11 @@ export function AddFromListDialog({
                     })}
                     {fields.length === 0 && <li className="p-4 text-center text-sm text-muted-foreground">אין שדות ברשימה הזאת. מוסיפים אותם במסך הרשימות.</li>}
                   </ul>
+                  {nameless && (
+                    <p className="flex items-start gap-1.5 text-xs text-warning">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden /> בלי שדה טקסט (כמו «שם») הרשומות יופיעו לממלא כ«רשומה 1», «רשומה 2»… – הממלא רואה רק שדות שהטופס מקשר.
+                    </p>
+                  )}
                 </section>
               </>
             )}

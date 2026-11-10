@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCell, cleanOptions, fillerTitle, listTitle, splitPicks, type ListField } from "@/lib/lists/kinds";
+import { cleanCell, cleanOptions, fillerTitle, listTitle, parentTitle, splitPicks, type ListField } from "@/lib/lists/kinds";
 
 const f = (kind: ListField["kind"], extra: Partial<ListField> = {}): ListField => ({ key: "k", label: "ש", kind, ...extra });
 
@@ -54,23 +54,6 @@ describe("a list's title", () => {
   });
 });
 
-describe("a record's title as a filler sees it", () => {
-  const fields = [f("short_text", { key: "name" }), f("id_number", { key: "id" }), f("long_text", { key: "notes" }), f("select", { key: "veg", options: ["א"] })];
-  const values = { name: "גדע ירקות", id: "123456782", notes: "אבחנה: רגיש", veg: ["א"] };
-  it("is the name field (the first field, when it is text) whatever the form links", () => {
-    expect(fillerTitle(values, fields, new Set())).toBe("גדע ירקות");
-  });
-  it("never leaks a text field the form does not link, an ID number or a choice", () => {
-    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["id", "veg"]))).toBeUndefined();
-    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["notes"]))).toBe("אבחנה: רגיש");
-  });
-  it("falls back to a linked text field when the first field is not text", () => {
-    const byId = [f("id_number", { key: "id" }), f("short_text", { key: "name" })];
-    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set())).toBeUndefined();
-    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set(["name"]))).toBe("מ.ר.");
-  });
-});
-
 describe("splitPicks", () => {
   it("reads several picks back, keeping an option that holds a comma", () => {
     expect(splitPicks("א, ב", ["א", "ב"])).toEqual(["א", "ב"]);
@@ -92,16 +75,22 @@ describe("listTitle without a text value", () => {
 describe("a record's title as a filler sees it", () => {
   const fields = [f("short_text", { key: "name" }), f("id_number", { key: "id" }), f("long_text", { key: "notes" }), f("select", { key: "veg", options: ["א"] })];
   const values = { name: "גדע ירקות", id: "123456782", notes: "אבחנה: רגיש", veg: ["א"] };
-  it("is the name field (the first field, when it is text) whatever the form links", () => {
-    expect(fillerTitle(values, fields, new Set())).toBe("גדע ירקות");
+  it("is the first text field the form links to", () => {
+    expect(fillerTitle(values, fields, new Set(["name", "notes"]))).toBe("גדע ירקות");
+    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["name", "notes"]))).toBe("אבחנה: רגיש");
   });
-  it("never leaks a text field the form does not link, an ID number or a choice", () => {
-    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["id", "veg"]))).toBeUndefined();
-    expect(fillerTitle({ ...values, name: "" }, fields, new Set(["notes"]))).toBe("אבחנה: רגיש");
+  it("never leaks a text field the form does not link – even the first one – nor an ID number or a choice", () => {
+    expect(fillerTitle(values, fields, new Set())).toBeUndefined();
+    expect(fillerTitle(values, fields, new Set(["id", "veg"]))).toBeUndefined();
+    // The name field deleted: a diagnosis is now the first field, and still not shown unless linked.
+    expect(fillerTitle(values, fields.slice(2), new Set(["veg"]))).toBeUndefined();
   });
-  it("falls back to a linked text field when the first field is not text", () => {
-    const byId = [f("id_number", { key: "id" }), f("short_text", { key: "name" })];
-    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set())).toBeUndefined();
-    expect(fillerTitle({ id: "123456782", name: "מ.ר." }, byId, new Set(["name"]))).toBe("מ.ר.");
+});
+
+describe("a parent record's title (for 'belongs to')", () => {
+  it("is its first field when that is a short text, else nothing", () => {
+    expect(parentTitle({ name: "צפון", notes: "סודי" }, [f("short_text", { key: "name" }), f("long_text", { key: "notes" })])).toBe("צפון");
+    expect(parentTitle({ notes: "סודי", name: "צפון" }, [f("long_text", { key: "notes" }), f("short_text", { key: "name" })])).toBeUndefined();
+    expect(parentTitle({ id: "123456782" }, [f("id_number", { key: "id" })])).toBeUndefined();
   });
 });

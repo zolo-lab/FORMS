@@ -100,28 +100,29 @@ export function cleanCell(field: ListField, raw: unknown, refIds?: ReadonlySet<s
 }
 
 /**
- * A record's name as a filler may see it in a form: the first field of the list when it is plain text (that field
- * is the record's name by convention – the one the lists screen names it by), or else a plain-text field the form
- * itself links to (`used`). Never an ID number, a phone, an amount, a date or a choice, and never a text field the
- * form did not ask for beyond the name – a list may hold notes a filler must not see. Nothing when none applies.
+ * A record's name as a filler may see it in a form's picker: the first non-empty plain-text field among those the
+ * form itself links to (`used`) – a text field the form did not ask for (notes, a diagnosis) is never sent to a
+ * browser, nor is an ID number, a phone, an amount, a date or a choice. Nothing when none applies ("רשומה N").
  */
 export function fillerTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[], used: ReadonlySet<string>): string | undefined {
-  const text = (f: { key: string; kind: ListFieldKind }) => {
-    if (f.kind !== "short_text" && f.kind !== "long_text") return undefined;
-    const v = values[f.key];
-    return typeof v === "string" && v ? v : undefined;
-  };
-  const first = fields[0];
-  if (first) {
-    const v = text(first);
-    if (v) return v;
-  }
   for (const f of fields) {
-    if (!used.has(f.key)) continue;
-    const v = text(f);
-    if (v) return v;
+    if (!used.has(f.key) || (f.kind !== "short_text" && f.kind !== "long_text")) continue;
+    const v = values[f.key];
+    if (typeof v === "string" && v) return v;
   }
   return undefined;
+}
+
+/**
+ * A parent record's name, shown for a "belongs to" field the form links to (linking it is the builder's choice to
+ * show the parent's name): the parent's first field, when it is a short text – the name by the lists' convention.
+ * Never a long text (notes) or any other kind. Nothing otherwise ("רשומה N").
+ */
+export function parentTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[]): string | undefined {
+  const first = fields[0];
+  if (!first || first.kind !== "short_text") return undefined;
+  const v = values[first.key];
+  return typeof v === "string" && v ? v : undefined;
 }
 
 /** What a list is called in a dropdown: its first non-empty text value, else "ללא שם". */
