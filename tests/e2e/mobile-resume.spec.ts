@@ -4,7 +4,7 @@ import { devices, expect, test } from "@playwright/test";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb } from "pdf-lib";
 import { drawHebrew } from "../../src/lib/pdf/hebrew";
-import { login, newFormFromPdf } from "./helpers";
+import { login, newFormFromPdf, openEditView } from "./helpers";
 
 // builder-plan.md part 5 (5.6): a long form filled in parts, on a phone. Needs the dev database.
 test.skip(!process.env.DATABASE_URL, "DATABASE_URL not set");
@@ -36,10 +36,10 @@ test("a form with two steps: the employee fills step 1 on a phone, leaves, and c
   const dialog = page.getByRole("dialog", { name: "שדות שזוהו ב-PDF" });
   await expect(dialog).toBeVisible({ timeout: 45_000 });
   await dialog.getByRole("button", { name: /^הוספת 4 שדות לטופס$/ }).click();
-  await page.getByRole("tab", { name: "רספונסיבי" }).click();
+  await openEditView(page, "רספונסיבי");
   await expect(page.getByText("עמוד 2").filter({ visible: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "פורסם", exact: true })).toBeDisabled({ timeout: 20_000 });
 
   // The form carries its own route (requester → employee by default): open a request from it.
   await page.goto("/admin/requests/new");

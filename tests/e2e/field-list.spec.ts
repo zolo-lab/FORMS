@@ -12,6 +12,7 @@ test("download the field list as Excel and ask for readable ids", async ({ page 
   await page.getByText("כלים", { exact: true }).click();
   await page.getByRole("button", { name: "רשימת השדות (Excel)" }).click();
   expect((await download).suggestedFilename()).toMatch(/שדות\.xlsx$/);
+  await page.getByText("כלים", { exact: true }).click(); // choosing an item closed the menu
   await page.getByRole("button", { name: "שמות מזהים לשדות" }).click();
   await expect(page.getByText("לכל השדות כבר יש שמות מזהים.")).toBeVisible();
 });
