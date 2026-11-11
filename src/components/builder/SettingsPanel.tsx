@@ -1,4 +1,5 @@
 "use client";
+import { fits, keyFor, listSource, pickerKey, pickerOf } from "@/lib/forms/linked";
 import { StepChecks, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { prefillGroups, prefillKeys } from "@/lib/forms/prefill";
@@ -181,13 +182,15 @@ function LinkToBox({ def, field, stamps, onPatch }: { def: FormDefinition; field
 }
 
 export function FieldSettings({
-  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [], orgFields = [], orgChoices = [],
+  def, field, onPatch, onRename, onMoveToPage, onDefChange, onStartPick, groups = [], steps = DEFAULT_STEPS, stamps = [], orgFields = [], orgChoices = [], listTypes = [],
 }: {
   def: FormDefinition;
   /** The organizations' own fields: choosing one fills the field from the request's organization, read-only. */
   orgFields?: { key: string; label: string }[];
   /** The organizations' choice fields: a choice here can take its options from one (each organization sees its own). */
   orgChoices?: { key: string; label: string; options: string[] }[];
+  /** The other list types: a dropdown can pick their records (and fill the fields linked to them), or take a choice field's options. */
+  listTypes?: { id: string; name: string; fields: { key: string; label: string; kind: string; options: string[] }[] }[];
   /** The form's places on the PDF, to find the box a field belongs to ("קשר לתיבה שמעל"). */
   stamps?: PdfStamp[];
   field: FormField;
@@ -298,12 +301,20 @@ export function FieldSettings({
               onChange={(e) => {
                 const v = e.target.value || undefined;
                 const fromOrg = orgChoices.find((c) => `org.fields.${c.key}` === v);
-                // Taken from the organizations' list: a copy of all its options, for the preview and the PDF.
-                onPatch(fromOrg ? { optionsSource: v, options: fromOrg.options.map((o) => ({ value: o, label: o })) } : { optionsSource: v });
+                const fromList = listTypes.flatMap((t) => t.fields.map((f) => ({ key: keyFor(listSource(t.id), f.key), options: f.options }))).find((c) => c.key === v);
+                // Taken from a list: a copy of all its options, for the preview and the PDF.
+                const copy = fromOrg ?? fromList;
+                onPatch(copy ? { optionsSource: v, options: copy.options.map((o) => ({ value: o, label: o })) } : { optionsSource: v });
               }}
             >
               <option value="">רשימה ידנית</option>
               {orgChoices.map((c) => <option key={c.key} value={`org.fields.${c.key}`}>מהעמותה: {c.label}</option>)}
+              {listTypes.map((t) => (
+                <optgroup key={t.id} label={t.name}>
+                  {field.type === "dropdown" && <option value={pickerKey(t.id)}>בחירת רשומה מתוך {t.name}</option>}
+                  {t.fields.filter((f) => f.kind === "select").map((f) => <option key={f.key} value={keyFor(listSource(t.id), f.key)}>{f.label} – לפי הרשומה שנבחרה</option>)}
+                </optgroup>
+              ))}
               <option value="banks">בנקים</option>
               <option value="cities">יישובים (יתחבר בשלב 3)</option>
               <option value="costCenters:1">מרכזי רווח – רמה 1 (יתחבר בשלב 3)</option>
@@ -314,6 +325,12 @@ export function FieldSettings({
             </Select>
             {field.optionsSource?.startsWith("org.fields.") && (
               <p className="text-xs text-muted-foreground">כל עמותה תראה רק את האפשרויות שסומנו לה במסך הרשימות (אם לא סומן כלום – את כולן).</p>
+            )}
+            {pickerOf(field) && (
+              <p className="text-xs text-muted-foreground">הממלא מחפש ובוחר רשומה; השדות המקושרים לרשימה הזאת מתמלאים ממנה (כלים › שדות מקושרים).</p>
+            )}
+            {field.optionsSource?.startsWith("list.") && !pickerOf(field) && (
+              <p className="text-xs text-muted-foreground">מוצגות רק האפשרויות שסומנו לרשומה שנבחרה בטופס (בלי רשומה – כולן).</p>
             )}
             {groupIdOfSource(field.optionsSource) && (
               <p className="text-xs text-muted-foreground">הרשימה מציגה את חברי הקבוצה. בשלבי הטופס אפשר לבחור לשלב &quot;המייל שמולא בשדה של שלב קודם&quot; ואת השדה הזה, והנבחר יקבל את השלב.</p>
@@ -453,7 +470,16 @@ export function FieldSettings({
                   {g.options.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
                 </optgroup>
               ))}
-              {field.prefill && !keys.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
+              {!pickerOf(field) &&
+                listTypes
+                  .map((t) => ({ ...t, fields: t.fields.filter((f) => f.kind !== "select" && fits(field, { ...f, multi: false })) }))
+                  .filter((t) => t.fields.length > 0)
+                  .map((t) => (
+                    <optgroup key={t.id} label={`מתוך ${t.name} (לפי הרשומה שנבחרה בטופס)`}>
+                      {t.fields.map((f) => <option key={f.key} value={keyFor(listSource(t.id), f.key)}>{f.label}</option>)}
+                    </optgroup>
+                  ))}
+              {field.prefill && !keys.some((k) => k.key === field.prefill) && !listTypes.some((t) => t.fields.some((f) => keyFor(listSource(t.id), f.key) === field.prefill)) && <option value={field.prefill}>{field.prefill}</option>}
             </Select>
           </Row>
           <CopyFrom def={def} field={field} onPatch={onPatch} />

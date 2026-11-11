@@ -99,12 +99,44 @@ export function cleanCell(field: ListField, raw: unknown, refIds?: ReadonlySet<s
   return problem ? { ok: false, error: problem } : { ok: true, value: v };
 }
 
+/**
+ * A record's name as a filler may see it in a form's picker: the first non-empty plain-text field among those the
+ * form itself links to (`used`) – a text field the form did not ask for (notes, a diagnosis) is never sent to a
+ * browser, nor is an ID number, a phone, an amount, a date or a choice. Nothing when none applies ("רשומה N").
+ */
+export function fillerTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[], used: ReadonlySet<string>): string | undefined {
+  for (const f of fields) {
+    if (!used.has(f.key) || (f.kind !== "short_text" && f.kind !== "long_text")) continue;
+    const v = values[f.key];
+    if (typeof v === "string" && v) return v;
+  }
+  return undefined;
+}
+
+/**
+ * A parent record's name, shown for a "belongs to" field the form links to (linking it is the builder's choice to
+ * show the parent's name): the parent's first field, when it is a short text – the name by the lists' convention.
+ * Never a long text (notes) or any other kind. Nothing otherwise ("רשומה N").
+ */
+export function parentTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[]): string | undefined {
+  const first = fields[0];
+  if (!first || first.kind !== "short_text") return undefined;
+  const v = values[first.key];
+  return typeof v === "string" && v ? v : undefined;
+}
+
 /** What a list is called in a dropdown: its first non-empty text value, else "ללא שם". */
 export function listTitle(values: Record<string, CellValue>, fields: { key: string; kind: ListFieldKind }[]): string {
   for (const f of fields) {
     if (f.kind === "ref" || f.kind === "select" || f.kind === "yes_no") continue;
     const v = values[f.key];
     if (typeof v === "string" && v) return v;
+  }
+  // No text field filled: the first choice tells the records apart at least ("עגבניה, מלפפון").
+  for (const f of fields) {
+    const v = values[f.key];
+    if (f.kind === "select" && Array.isArray(v) && v.length) return v.join(", ");
+    if (f.kind === "select" && typeof v === "string" && v) return v;
   }
   return "ללא שם";
 }

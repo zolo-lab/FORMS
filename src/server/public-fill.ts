@@ -10,13 +10,13 @@ import { db, schema } from "@/db";
 import type { Answers } from "@/lib/forms/conditions";
 import { mergedDefinitionForStep } from "@/lib/forms/merge";
 import { roleView } from "@/lib/forms/role-view";
-import type { FormDefinition } from "@/lib/forms/schema";
+import { allFields, type FormDefinition } from "@/lib/forms/schema";
 import type { PdfMapping } from "@/lib/forms/pdf-mapping";
 import { validateAnswers, type FieldErrors } from "@/lib/forms/validate";
 import { allowedOrgs, linkOrg, linkProject, publicRole, publicStart, subjectFromAnswers } from "@/lib/forms/public-link";
 import { lockOrgFields, withOrgFields } from "@/lib/forms/prefill";
-import { withOrgOptions } from "@/lib/forms/linked";
-import { orgListFields } from "@/server/lists-store";
+import { lockListFields, withOrgOptions } from "@/lib/forms/linked";
+import { listLookupsFor, orgListFields } from "@/server/lists-store";
 import { createToken } from "@/lib/auth/tokens";
 import { OTP_COOKIE_TTL_MS, otpCookieName, otpCookieValue } from "@/lib/auth/otp";
 import { getFile } from "./storage";
@@ -29,7 +29,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export type PublicOrg = { id: string; name: string; slug: string | null; registrationNumber: string; primaryColor: string | null; logoFileId: string | null; fieldValues: Record<string, string> };
 
 export type PublicForm =
-  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; project: { id: string; name: string } | null; initialAnswers: Answers }
+  | { ok: true; formId: string; title: string; role: "requester" | "employee"; definition: FormDefinition; fullDefinition: FormDefinition; pdf?: { fileId: string; mapping: PdfMapping }; packageId: string; org: PublicOrg; project: { id: string; name: string } | null; initialAnswers: Answers }
   | { ok: false; title?: string; reason: "not_found" | "closed" | "not_public" | "no_fields" | "choose_org" | "org_not_allowed" | "no_organization" };
 
 /**
@@ -61,14 +61,16 @@ export async function publicForm(formId: string, orgSlug?: string | null, projec
   if (!start.ok) return { ok: false, title: form.title, reason: "not_public" };
   const o = which.org;
   const org: PublicOrg = { id: o.id, name: o.name, slug: o.slug, registrationNumber: o.registrationNumber, primaryColor: o.primaryColor, logoFileId: o.logoFileId, fieldValues: o.fieldValues ?? {} };
-  const viewFor = (role: "requester" | "employee") => roleView(mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role), {}, role).definition;
+  const fullFor = (role: "requester" | "employee") => mergedDefinitionForStep([{ title: form.title, definition: version.definition }], role);
+  const viewFor = (role: "requester" | "employee") => roleView(fullFor(role), {}, role).definition;
   const role = publicRole(route.steps, (r) => viewFor(r).pages.length > 0);
   if (!role) return { ok: false, title: form.title, reason: "no_fields" };
   // Choices linked to the organizations' list show this organization's options only (and are checked against them).
-  const definition = withOrgOptions(lockOrgFields(viewFor(role)), org.fieldValues, await orgListFields());
+  // Fields filled from a list picked in the form are locked too: the record's value, not the filler's.
+  const definition = lockListFields(withOrgOptions(lockOrgFields(viewFor(role)), org.fieldValues, await orgListFields()));
   const pdf = version.pdfFileId && version.pdfMapping ? { fileId: version.pdfFileId, mapping: version.pdfMapping } : undefined;
   const initialAnswers = withOrgFields(definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, {});
-  return { ok: true, formId, title: form.title, role, definition, pdf, packageId: pkg.id, org, project, initialAnswers };
+  return { ok: true, formId, title: form.title, role, definition, fullDefinition: fullFor(role), pdf, packageId: pkg.id, org, project, initialAnswers };
 }
 
 /** The published form's own document, for the link's on-document view. */
@@ -91,9 +93,12 @@ export async function publicSubmit(formId: string, rawInput: Answers, orgSlug?: 
   if (!view.ok) return { ok: false, error: view.reason };
   const org = view.org;
   // The organization comes from the link, never from what was sent.
-  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, rawInput);
+  // Only this role's own fields: an id sent for another role's picker must not choose that role's record.
+  const own = new Set(allFields(view.definition).map((f) => f.id));
+  const input = withOrgFields(view.definition, { name: org.name, registrationNumber: org.registrationNumber, fields: org.fieldValues }, Object.fromEntries(Object.entries(rawInput).filter(([k]) => own.has(k))));
   // Check before anything is created, so a form with mistakes leaves nothing behind.
-  const check = validateAnswers(view.definition, input, { role: view.role });
+  // The lookups the form was shown with: a list picked in it fills its fields from the record, here as there.
+  const check = validateAnswers(view.definition, input, { role: view.role, lookups: await listLookupsFor([view.fullDefinition]), fullForm: view.fullDefinition });
   if (!check.ok) return { ok: false, errors: check.errors };
 
   const subject = subjectFromAnswers(view.definition, check.cleaned);

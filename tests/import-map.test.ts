@@ -70,17 +70,17 @@ describe("records and validation", () => {
     expect(records[0]!.answers).toEqual({ salary: 9000, start: "2026-11-01", branch: "hfa" });
   });
   it("a valid row has no errors", () => {
-    expect(validateRecord(records[0]!, def, { send: true })).toEqual([]);
+    expect(validateRecord(records[0]!, def, { send: true }).errors).toEqual([]);
   });
   it("reports each problem of a bad row", () => {
-    const errs = validateRecord(records[1]!, def, { send: true });
+    const errs = validateRecord(records[1]!, def, { send: true }).errors;
     expect(errs).toEqual(expect.arrayContaining(["חסר שם", "מייל לא תקין", "טלפון לא תקין", 'ת"ז לא תקינה']));
     expect(errs.some((e) => e.startsWith("שכר"))).toBe(true);
   });
   it("sending needs a way to reach the employee", () => {
     const noContact = { ...records[2]!, subject: { name: "אבי" } };
-    expect(validateRecord(noContact, def, { send: true })).toContain("חסר מייל או טלפון לשליחה");
-    expect(validateRecord(noContact, def, { send: false })).not.toContain("חסר מייל או טלפון לשליחה");
+    expect(validateRecord(noContact, def, { send: true }).errors).toContain("חסר מייל או טלפון לשליחה");
+    expect(validateRecord(noContact, def, { send: false }).errors).not.toContain("חסר מייל או טלפון לשליחה");
   });
   it("finds duplicates inside the file", () => {
     const dup = [records[0]!, { ...records[0]!, row: 9 }];

@@ -1,7 +1,7 @@
 import { listPackagesForWizard } from "@/server/packages-store";
 import { lookupsFor } from "@/server/people-store";
 import { orgChoiceLookups } from "@/lib/forms/linked";
-import { orgListFields } from "@/server/lists-store";
+import { listLookupsFor, orgListFields } from "@/server/lists-store";
 import { listOrganizations } from "@/server/requests-store";
 import { listContacts } from "@/server/people-store";
 import { can, projectLimit, usableOrgIds } from "@/lib/auth/permissions";
@@ -19,7 +19,7 @@ export default async function NewRequestPage({ searchParams }: { searchParams: P
   const usable = ids ? orgs.filter((o) => ids.includes(o.id)) : orgs;
   const defs = packages.map((p) => p.requesterDefinition);
   // Choices linked to the organizations' list: every option, plus each organization's own (picked in the wizard).
-  const lookups = { ...(await lookupsFor(defs)), ...orgChoiceLookups(defs, usable, await orgListFields()) };
+  const lookups = await listLookupsFor(defs, { ...(await lookupsFor(defs)), ...orgChoiceLookups(defs, usable, await orgListFields()) });
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold">בקשה חדשה</h1>

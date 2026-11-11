@@ -3,6 +3,8 @@ import { OrgTheme } from "@/components/branding";
 import { Card } from "@/components/ui/card";
 import { publicForm } from "@/server/public-fill";
 import { lookupsFor } from "@/server/people-store";
+import { listLookupsFor } from "@/server/lists-store";
+import { lookupsForView } from "@/lib/forms/linked";
 import { PublicFill } from "./public-fill";
 
 const REASONS: Record<string, string> = {
@@ -38,7 +40,7 @@ export async function PublicFormView({ id, org: orgSlug, project: projectSlug }:
           definition={view.definition}
           role={view.role}
           initialAnswers={view.initialAnswers}
-          lookups={await lookupsFor([view.definition])}
+          lookups={lookupsForView(await listLookupsFor([view.definition], await lookupsFor([view.definition])), view.definition, view.fullDefinition, view.initialAnswers)}
           pdf={view.pdf ? { url: `/api/f/${view.formId}/pdf${q}`, mapping: view.pdf.mapping } : undefined}
         />
       </main>

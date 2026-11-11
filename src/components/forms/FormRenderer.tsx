@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { Answers } from "@/lib/forms/conditions";
 import { computeFormulas } from "@/lib/forms/compute";
 import { withCopies } from "@/lib/forms/copy";
+import { narrowListChoices, withListPicks } from "@/lib/forms/linked";
 import { withDefaults } from "@/lib/forms/defaults";
 import { STATIC_LOOKUPS, type Lookups } from "@/lib/forms/lookups";
 import { fillsIn, type FillerRole, type FormDefinition } from "@/lib/forms/schema";
@@ -40,12 +41,16 @@ export interface FormRendererProps {
 }
 
 export function FormRenderer({
-  definition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition, actions, fieldsOnly = false,
+  definition: baseDefinition, answers: rawAnswers, onChange, errors: serverErrors = {}, role, mode = "fill", onSubmit, lookups = STATIC_LOOKUPS, onUpload, today, pipeDefinition, actions, fieldsOnly = false,
 }: FormRendererProps) {
   const readonly = mode === "readonly";
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
-  // Defaults, iForms-style copies ("fname1" ← "fname") and computed (formula) fields are filled live; the server applies both again on submit.
-  const answers = useMemo(() => computeFormulas(definition, withCopies(definition, withDefaults(definition, rawAnswers, todayStr)), todayStr), [definition, rawAnswers, todayStr]);
+  // Defaults, the record picked from a list (its values into the linked fields, its options into linked choices),
+  // iForms-style copies ("fname1" ← "fname") and computed (formula) fields are filled live; the server applies all
+  // of them again on submit.
+  const picked = useMemo(() => withListPicks(baseDefinition, withDefaults(baseDefinition, rawAnswers, todayStr), lookups), [baseDefinition, rawAnswers, todayStr, lookups]);
+  const definition = useMemo(() => narrowListChoices(baseDefinition, picked, lookups), [baseDefinition, picked, lookups]);
+  const answers = useMemo(() => computeFormulas(definition, withCopies(definition, picked), todayStr), [definition, picked, todayStr]);
   const layout = definition.settings?.layout ?? "wizard";
   const wizard = layout === "wizard" && !readonly;
   const cardMode = layout === "card" && !readonly;

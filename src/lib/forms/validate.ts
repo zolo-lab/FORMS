@@ -11,6 +11,8 @@ import { validateGrid } from "./grid";
 import { evaluateCondition, type Answers } from "./conditions";
 import { computeFormulas } from "./compute";
 import { withCopies } from "./copy";
+import { isListFilled, narrowListChoices, withListPicks } from "./linked";
+import type { Lookups } from "./lookups";
 import { reachedPageIndexes } from "./paths";
 import { matchesMask } from "./mask";
 import { FIELD_TYPE_META } from "./field-types";
@@ -18,7 +20,7 @@ import { withDefaults } from "./defaults";
 import { isKnownBranch } from "./bank-branches";
 import { matchesCharset } from "./charset";
 import { autoRowsOn, isBlankRow } from "./rows";
-import { fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
+import { allFields, fillsIn, type FillerRole, type FormDefinition, type FormField } from "./schema";
 import {
   isValidBankAccount,
   isValidEmail,
@@ -33,6 +35,13 @@ export interface ValidateOptions {
   role?: FillerRole;
   /** Today's date as yyyy-mm-dd (injectable for tests). */
   today?: string;
+  /**
+   * The lookups the form was shown with. With them, fields linked to a list picked in the form are filled from the
+   * picked record (whatever the client sent) and linked choices accept only that record's options.
+   */
+  lookups?: Lookups;
+  /** The whole form when `form` is one role's view of it: a record picked in another step still counts here. */
+  fullForm?: FormDefinition;
 }
 
 /** A signature is a PNG data URL of reasonable size; anything else is rejected before it is stored. */
@@ -44,6 +53,7 @@ export const REQUIRED_MESSAGE = "שדה חובה";
 
 const MSG = {
   required: REQUIRED_MESSAGE,
+  listValue: "חסר ברשומה שנבחרה – צריך למלא אותו ברשימה",
   number: "יש להזין מספר",
   min: (n: number) => `ערך מינימלי: ${n}`,
   max: (n: number) => `ערך מקסימלי: ${n}`,
@@ -269,6 +279,12 @@ function validateFieldList(
 
     // Keep values of visible fields regardless of role (other signers' data is preserved).
     if (value !== undefined) cleaned[field.id] = value;
+    // A field filled from a list is locked, but a required one still needs its record to hold a value.
+    if (mine && field.readOnly && isListFilled(field) && isBlank(value)) {
+      const required = field.required || (field.requiredIf ? evaluateCondition(field.requiredIf, scopeAnswers) : false);
+      if (required) errors[key] = MSG.listValue;
+      continue;
+    }
     if (!mine || field.readOnly) continue;
 
     const required = field.required || (field.requiredIf ? evaluateCondition(field.requiredIf, scopeAnswers) : false);
@@ -310,11 +326,23 @@ export interface ValidationResult {
   cleaned: Answers;
 }
 
-export function validateAnswers(form: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
+export function validateAnswers(baseForm: FormDefinition, rawAnswers: Answers, options: ValidateOptions = {}): ValidationResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   // Formula fields are always recomputed here, whatever the client sent.
   // Defaults first (formulas may use them); read-only defaults always win over what the client sent.
-  const answers = computeFormulas(form, withCopies(form, withDefaults(form, rawAnswers, today)), today);
+  let form = baseForm;
+  let answers = withDefaults(form, rawAnswers, today);
+  if (options.lookups) {
+    answers = withListPicks(form, answers, options.lookups, options.fullForm);
+    form = narrowListChoices(form, answers, options.lookups, options.fullForm);
+    // A record's value the locked field would refuse (free text in a phone field) is left out, not stored.
+    for (const f of allFields(form)) {
+      if (!isListFilled(f) || answers[f.id] === undefined) continue;
+      const alone: FormDefinition = { schemaVersion: 1, title: "", pages: [{ id: "p", title: "", fields: [{ ...f, required: false, readOnly: false, visibleIf: undefined, disabledIf: undefined, requiredIf: undefined, fields: undefined }] }] };
+      if (!validateAnswers(alone, { [f.id]: answers[f.id] }, { today }).ok) answers = { ...answers, [f.id]: undefined } as Answers;
+    }
+  }
+  answers = computeFormulas(form, withCopies(form, answers), today);
   const errors: FieldErrors = {};
   const cleaned: Answers = {};
   // In wizard layout only the pages on the filler's path count; pages skipped by a jump are not validated and not stored.

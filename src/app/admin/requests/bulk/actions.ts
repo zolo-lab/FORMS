@@ -1,4 +1,5 @@
 "use server";
+import { listLookupsFor } from "@/server/lists-store";
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { autoMap, buildRecords, findDuplicates, targetsFor, validateRecord, type ImportRecord, type RowError, type Target } from "@/lib/import/map";
@@ -66,8 +67,9 @@ export async function checkImportAction(input: { packageId: string; rows: string
   const errors: RowError[] = [];
   const good: ImportRecord[] = [];
   const dupRows = new Map(findDuplicates(records).map((d) => [d.row, d.message]));
+  const lookups = await listLookupsFor([pkg.requesterDefinition]);
   for (const r of records) {
-    const errs = validateRecord(r, pkg.requesterDefinition, { send: input.send });
+    const { errors: errs } = validateRecord(r, pkg.requesterDefinition, { send: input.send, lookups });
     const dup = dupRows.get(r.row);
     if (dup) errs.push(dup);
     if (errs.length) errors.push({ row: r.row, message: errs.join("; ") });
@@ -99,14 +101,16 @@ export async function createImportChunkAction(input: { jobId: string; packageId:
   if (!(await mayCreate(input.packageId, input.organizationId, input.projectId))) return { created: 0, errors: [{ row: 0, message: "אין לך הרשאה לטופס, לארגון או לפרויקט האלה" }] };
   const pkg = await getWizardPackage(input.packageId);
   if (!pkg) return { created: 0, errors: [{ row: 0, message: "הטופס לא נמצא" }] };
+  const lookups = await listLookupsFor([pkg.requesterDefinition]);
   for (const rec of input.records) {
-    const errs = validateRecord(rec, pkg.requesterDefinition, { send: input.send });
+    const { errors: errs, answers } = validateRecord(rec, pkg.requesterDefinition, { send: input.send, lookups });
     if (errs.length) {
       out.errors.push({ row: rec.row, message: errs.join("; ") });
       continue;
     }
     try {
-      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, projectId: input.projectId, subject: rec.subject, requesterAnswers: rec.answers, campaign: input.campaign });
+      // The checked answers, with list-linked fields filled from their record – not the file's raw values.
+      const id = await createRequest({ packageTemplateId: pkg.id, organizationId: input.organizationId, projectId: input.projectId, subject: rec.subject, requesterAnswers: answers, campaign: input.campaign });
       if (input.send) await sendRequest(id);
       out.created++;
     } catch (e) {

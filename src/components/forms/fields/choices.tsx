@@ -3,7 +3,9 @@ import { useState } from "react";
 import { Star } from "lucide-react";
 import { Checkbox, Radio } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
+import { pickerOf } from "@/lib/forms/linked";
 import { resolveOptions } from "@/lib/forms/lookups";
+import { RecordPicker } from "./RecordPicker";
 import { cn } from "@/lib/utils";
 import type { FieldProps } from "./types";
 
@@ -71,6 +73,10 @@ export function CheckboxesInput({ field, domId, value, onChange, disabled, looku
 
 export function DropdownInput({ field, domId, value, onChange, disabled, invalid, lookups }: FieldProps) {
   const options = resolveOptions(field, lookups);
+  // A list's records: searched and picked, and the fields linked to the list follow.
+  if (pickerOf(field)) {
+    return <RecordPicker id={domId} options={options} value={typeof value === "string" ? value : ""} onChange={(v) => onChange(v || undefined)} disabled={disabled} invalid={invalid} placeholder={field.placeholder} />;
+  }
   return (
     <Select id={domId} value={typeof value === "string" ? value : ""} disabled={disabled} aria-invalid={invalid} onChange={(e) => onChange(e.target.value)}>
       <option value="">{field.placeholder ?? "בחר…"}</option>

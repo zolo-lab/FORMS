@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addLinkedField, allowedOptions, bindField, bindingOf, fits, linkReport, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
+import { addLinkedField, allowedOptions, bindField, bindingOf, fits, linkReport, sameKind, orgChoiceLookups, unbindField, withOrgOptions, type OrgListField } from "@/lib/forms/linked";
 import type { FormDefinition, FormField } from "@/lib/forms/schema";
 import { validateAnswers } from "@/lib/forms/validate";
 
@@ -69,11 +69,12 @@ describe("fits", () => {
     expect(fits({ type: "short_text" }, listFields[0]!)).toBe(true);
     expect(fits({ type: "dropdown" }, listFields[0]!)).toBe(false);
     expect(fits({ type: "dropdown" }, listFields[4]!)).toBe(true);
-    // A typed field takes only a value of its own kind: no free text into an e-mail or an ID number.
-    expect(fits({ type: "email" }, listFields[0]!)).toBe(false);
-    expect(fits({ type: "id_number" }, listFields[1]!)).toBe(true);
-    expect(fits({ type: "number" }, listFields[2]!)).toBe(true);
-    expect(fits({ type: "short_text" }, listFields[2]!)).toBe(true);
+    // Any plain-value field fits (the value is checked when filled); the same kind is the natural match.
+    expect(fits({ type: "email" }, listFields[0]!)).toBe(true);
+    expect(sameKind({ type: "email" }, listFields[0]!)).toBe(false);
+    expect(sameKind({ type: "id_number" }, listFields[1]!)).toBe(true);
+    expect(sameKind({ type: "number" }, listFields[2]!)).toBe(true);
+    expect(sameKind({ type: "short_text" }, listFields[2]!)).toBe(true);
   });
 });
 
@@ -160,5 +161,190 @@ describe("withOrgFields", () => {
     expect({ ...{ m: "bad@x" }, ...out }.m).toBeUndefined();
     expect(out.t).toBe("123");
     expect(withOrgFields(def, { name: "x", fields: { mail: "office@org.co.il" } }, {}).m).toBe("office@org.co.il");
+  });
+});
+
+describe("lists picked in the form", async () => {
+  const { withListPicks, narrowListChoices, listSource, pickerKey, keyFor, addPicker, lockListFields, linkedTypeIds } = await import("@/lib/forms/linked");
+  const T = "11111111-1111-4111-8111-111111111111";
+  const sup = (id: string, name: string, pay: string, items: string[]) => ({ value: id, label: name, data: { name, pay, items } });
+  const lookups = {
+    [pickerKey(T)]: [sup("r1", "גדע", "120", ["עגבניה"]), sup("r2", "שלום", "90", ["עגבניה", "מלפפון"])],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }, { value: "מלפפון", label: "מלפפון" }, { value: "גזר", label: "גזר" }],
+  };
+  const base = form([
+    { id: "name", type: "short_text", label: "שם הספק", prefill: keyFor(listSource(T), "name") },
+    { id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "checkboxes", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]);
+  const { def, id: pick } = addPicker(base, T, "ספקים", 0);
+
+  it("fills the linked fields from the picked record, and empties them when none is picked", () => {
+    const a = withListPicks(def, { [pick]: "r2" }, lookups);
+    expect(a).toMatchObject({ name: "שלום", pay: 90 });
+    const none = withListPicks(def, { [pick]: "nope", name: "stale" }, lookups);
+    expect(none[pick]).toBeUndefined();
+    expect(none.name).toBeUndefined();
+  });
+
+  it("a list of one record is picked by itself", () => {
+    const one = { ...lookups, [pickerKey(T)]: lookups[pickerKey(T)]!.slice(0, 1) };
+    expect(withListPicks(def, {}, one)).toMatchObject({ [pick]: "r1", name: "גדע" });
+  });
+
+  it("narrows a linked choice to the record's options, and validates against them", () => {
+    const a = { [pick]: "r1" };
+    const narrowed = narrowListChoices(def, a, lookups);
+    const items = allOf(narrowed, "items");
+    expect(items.options?.map((o) => o.value)).toEqual(["עגבניה"]);
+    expect(validateAnswers(def, { ...a, items: ["מלפפון"] }, { lookups }).ok).toBe(false);
+    expect(validateAnswers(def, { ...a, items: ["עגבניה"] }, { lookups }).ok).toBe(true);
+    // Without a record: every option.
+    expect(allOf(narrowListChoices(def, {}, lookups), "items").options).toHaveLength(3);
+  });
+
+  it("the server fills the linked fields itself, whatever the client sent, and locks them for the filler", () => {
+    const r = validateAnswers(def, { [pick]: "r1", name: "forged", pay: "1" }, { lookups });
+    expect(r.ok).toBe(true);
+    expect(r.cleaned).toMatchObject({ name: "גדע", pay: 120 });
+    expect(allOf(lockListFields(def), "name").readOnly).toBe(true);
+    expect(allOf(lockListFields(def), pick).readOnly).toBeUndefined();
+    expect(linkedTypeIds([def])).toEqual([T]);
+  });
+});
+
+function allOf(def: FormDefinition, id: string): FormField {
+  return def.pages.flatMap((p) => p.fields).find((f) => f.id === id)!;
+}
+
+describe("lists picked in another step, and what a locked field must hold", async () => {
+  const { withListPicks, narrowListChoices, listSource, pickerKey, keyFor, addPicker, bindField, lockListFields } = await import("@/lib/forms/linked");
+  const T = "22222222-2222-4222-8222-222222222222";
+  const lookups = {
+    [pickerKey(T)]: [
+      { value: "r1", label: "גדע", data: { pay: "1,200", items: ["עגבניה"] } },
+      { value: "r2", label: "שלום", data: { items: ["מלפפון"] } },
+    ],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }, { value: "מלפפון", label: "מלפפון" }],
+  };
+  const { def: full, id: pick } = addPicker(form([
+    { id: "pay", type: "currency", label: "שכר", required: true, prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "dropdown", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]), T, "ספקים", 0);
+  // The signer's view: no picker (it was the requester's).
+  const view = lockListFields(form(full.pages[0]!.fields.filter((f) => f.id !== pick)));
+
+  it("fills and narrows from a picker that is only in the whole form, numbers as numbers", () => {
+    const a = withListPicks(view, { [pick]: "r1", pay: "forged" }, lookups, full);
+    expect(a.pay).toBe(1200);
+    expect(allOf(narrowListChoices(view, a, lookups, full), "items").options?.map((o) => o.value)).toEqual(["עגבניה"]);
+    const r = validateAnswers(view, { [pick]: "r1", pay: "forged", items: "מלפפון" }, { lookups, fullForm: full });
+    expect(r.ok).toBe(false);
+    expect(r.errors.items).toBeTruthy();
+  });
+
+  it("a required field whose record has no value is refused, locked or not", () => {
+    const r = validateAnswers(view, { [pick]: "r2", items: "מלפפון" }, { lookups, fullForm: full });
+    expect(r.ok).toBe(false);
+    expect(r.errors.pay).toMatch(/ברשומה/);
+  });
+
+  it("a picker whose records are not in the lookups keeps the answers as they are", () => {
+    expect(withListPicks(full, { [pick]: "r1", pay: 5 }, {})).toEqual({ [pick]: "r1", pay: 5 });
+  });
+
+  it("a picker is never linked to a list field itself", () => {
+    const lf = { key: "items", label: "ירקות", kind: "select", options: ["עגבניה"], multi: true };
+    expect(bindField(full, pick, lf, listSource(T))).toBe(full);
+  });
+});
+
+describe("what reaches the browser, and fields with no picker", async () => {
+  const { withListPicks, lookupsForView, narrowListChoices, listSource, pickerKey, keyFor, addPicker, lockListFields } = await import("@/lib/forms/linked");
+  const T = "33333333-3333-4333-8333-333333333333";
+  const lookups = {
+    [pickerKey(T)]: [
+      { value: "r1", label: "א", data: { pay: "1", items: ["ישן"] } },
+      { value: "r2", label: "ב", data: { pay: "2" } },
+    ],
+    [keyFor(listSource(T), "items")]: [{ value: "עגבניה", label: "עגבניה" }],
+  };
+  const { def: full, id: pick } = addPicker(form([
+    { id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") },
+    { id: "items", type: "dropdown", label: "ירקות", optionsSource: keyFor(listSource(T), "items"), options: [] },
+  ]), T, "ספקים", 0);
+  const view = form(full.pages[0]!.fields.filter((f) => f.id !== pick));
+
+  it("a step without the picker gets only the picked record", () => {
+    const l = lookupsForView(lookups, view, full, { [pick]: "r2" });
+    expect(l[pickerKey(T)]!.map((r) => r.value)).toEqual(["r2"]);
+    expect(lookupsForView(lookups, view, full, {})[pickerKey(T)]).toEqual([]);
+    expect(lookupsForView(lookups, full, full, {})).toBe(lookups);
+  });
+
+  it("a linked field whose list has no picker in the form is emptied, not kept from the client", () => {
+    const noPicker = lockListFields(form([{ id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") }]));
+    expect(withListPicks(noPicker, { pay: 99 }, lookups).pay).toBeUndefined();
+    expect(validateAnswers(noPicker, { pay: 99 }, { lookups }).cleaned.pay).toBeUndefined();
+  });
+
+  it("picks no longer among the options fall back to every option", () => {
+    expect(allOf(narrowListChoices(full, { [pick]: "r1" }, lookups), "items").options).toHaveLength(1);
+  });
+
+  it("a picker is never a target of a fill, even with a list prefill on it", () => {
+    const odd = { ...full, pages: [{ ...full.pages[0]!, fields: full.pages[0]!.fields.map((f) => (f.id === pick ? { ...f, prefill: keyFor(listSource(T), "pay") } : f)) }] };
+    expect(withListPicks(odd, { [pick]: "r2" }, lookups)[pick]).toBe("r2");
+    expect(allOf(lockListFields(odd), pick).readOnly).toBeUndefined();
+  });
+});
+
+describe("a picker of another role", async () => {
+  const { withListPicks, listSource, pickerKey, keyFor, addPicker } = await import("@/lib/forms/linked");
+  const T = "44444444-4444-4444-8444-444444444444";
+  const lookups = { [pickerKey(T)]: [{ value: "r1", label: "א", data: { pay: "7" } }, { value: "r2", label: "ב", data: { pay: "8" } }] };
+  const { def: full, id: pick } = addPicker(form([{ id: "pay", type: "number", label: "שכר", prefill: keyFor(listSource(T), "pay") }]), T, "ספקים", 0);
+  const view = form(full.pages[0]!.fields.filter((f) => f.id !== pick));
+  it("fills this role's fields only from what that role already picked – an id sent now, for its picker, is dropped first", () => {
+    const own = new Set(view.pages[0]!.fields.map((f) => f.id));
+    const sent = Object.fromEntries(Object.entries({ [pick]: "r2", pay: 1 }).filter(([k]) => own.has(k)));
+    expect(withListPicks(view, sent, lookups, full).pay).toBeUndefined();
+    // With the pick already saved (by the other role), it fills.
+    expect(withListPicks(view, { ...sent, [pick]: "r1" }, lookups, full).pay).toBe(7);
+    // A list of one is picked by itself only where the picker is.
+    const one = { [pickerKey(T)]: lookups[pickerKey(T)]!.slice(0, 1) };
+    expect(withListPicks(view, {}, one, full).pay).toBeUndefined();
+    expect(withListPicks(full, {}, one).pay).toBe(7);
+  });
+});
+
+describe("addFromList", async () => {
+  const { addFromList, listSource, bindingOf, pickerFor } = await import("@/lib/forms/linked");
+  const T = "55555555-5555-4555-8555-555555555555";
+  const lfs = [
+    { key: "name", label: "שם", kind: "short_text", options: [], multi: false },
+    { key: "pay", label: "שכר", kind: "number", options: [], multi: false },
+    { key: "items", label: "ירקות", kind: "select", options: ["עגבניה", "מלפפון", "גזר"], multi: true },
+  ];
+  it("without a record: fields added and linked, a picker for the filler, an existing same-named field reused", () => {
+    const def = addFromList(form([{ id: "x", type: "short_text", label: "שם" }]), listSource(T), "ספקים", lfs, 0);
+    const fields = def.pages[0]!.fields;
+    expect(pickerFor(def, T)).toBeTruthy();
+    expect(bindingOf(fields.find((f) => f.id === "x")!, listSource(T))).toBe("name");
+    expect(fields.filter((f) => f.label === "שם")).toHaveLength(1);
+    expect(fields.find((f) => f.label === "ירקות")!.optionsSource).toContain(T);
+  });
+  it("with a record: the values are copied in as locked defaults, a choice gets the record's options, no picker", () => {
+    const rec = { id: "r1", title: "גדע", values: { name: "גדע", pay: "120", items: ["גזר", "עגבניה"] } };
+    const def = addFromList(form([]), listSource(T), "ספקים", lfs, 0, { record: rec });
+    const by = (l: string) => def.pages[0]!.fields.find((f) => f.label === l)!;
+    expect(pickerFor(def, T)).toBeUndefined();
+    expect(by("שם")).toMatchObject({ defaultValue: "גדע", readOnly: true });
+    expect(by("שכר")).toMatchObject({ defaultValue: 120, readOnly: true });
+    expect(by("ירקות").options?.map((o) => o.value)).toEqual(["עגבניה", "גזר"]);
+    expect(by("ירקות").readOnly).toBeUndefined();
+    expect(bindingOf(by("שם"), listSource(T))).toBeUndefined();
+    const open = addFromList(form([]), listSource(T), "ספקים", lfs, 0, { record: rec, readOnly: false });
+    expect(open.pages[0]!.fields.find((f) => f.label === "שם")!.readOnly).toBeUndefined();
   });
 });

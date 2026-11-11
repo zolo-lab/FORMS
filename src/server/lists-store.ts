@@ -7,8 +7,11 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { suggestKey } from "@/lib/fields/key";
 import { isOrgFieldKind } from "@/lib/fields/types";
-import type { OrgListField } from "@/lib/forms/linked";
-import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, listTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
+import { keyFor, linkedTypeIds, listSource, parseKey, pickerKey, type LinkedListField, type OrgListField, type RecordOption } from "@/lib/forms/linked";
+import type { Lookups } from "@/lib/forms/lookups";
+import { prefillOf } from "@/lib/forms/prefill";
+import { allFields, type FormDefinition } from "@/lib/forms/schema";
+import { cleanCell, cleanOptions, MAX_OPTIONS, splitPicks, tooManyOptions, isListFieldKind, fillerTitle, listTitle, parentTitle, type CellValue, type ListFieldKind } from "@/lib/lists/kinds";
 import { parseOrgInput } from "@/lib/orgs/input";
 import { createOrg, createOrgFieldDef, deleteOrgFieldDef, listOrgFieldDefs, listOrgs, takenFieldKeys, updateOrgBasics, updateOrgFieldDef } from "./orgs-store";
 
@@ -141,6 +144,99 @@ async function titlesOf(typeId: string): Promise<{ id: string; title: string }[]
     db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
   ]);
   return rows.map((r) => ({ id: r.id, title: listTitle(r.values, fields) }));
+}
+
+/** The parent records of a type by id with their names (see `parentTitle`), for a "belongs to" field the form links. */
+async function safeTitlesOf(typeId: string): Promise<Map<string, string>> {
+  if (typeId === ORG_TYPE) return new Map((await listOrgs()).map((o) => [o.id, o.name]));
+  // Ordered as the picker orders them, so "רשומה N" names the same record in both.
+  const [fields, rows] = await Promise.all([
+    fieldsOf(typeId),
+    db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt)),
+  ]);
+  return new Map(rows.map((r, i) => [r.id, parentTitle(r.values, fields) ?? `רשומה ${i + 1}`]));
+}
+
+/**
+ * Lookups for the list types a set of forms reads from: under `list.<typeId>` the records (value = id, label =
+ * title, `data` = the values of the fields the forms link to – only those, so a form never carries more of a record
+ * than it shows); under `list.<typeId>.<key>` every option of a choice field. A "belongs to" value is sent as the
+ * parent record's title. Merged over the lookups the caller already has. For what goes to a browser, pass the role's
+ * own view of the form, so `data` holds that step's fields only; the server validates with the whole form.
+ */
+export async function listLookupsFor(defs: FormDefinition[], into: Lookups = {}): Promise<Lookups> {
+  const out: Lookups = { ...into };
+  for (const typeId of linkedTypeIds(defs)) {
+    if (!/^[0-9a-f-]{36}$/i.test(typeId)) continue;
+    const source = listSource(typeId);
+    // Always present, even for a type that is gone: a picker whose records are unknown would keep what the client sent.
+    out[pickerKey(typeId)] = [];
+    const fields = await fieldsOf(typeId);
+    if (!fields.length) continue;
+    const used = new Set<string>();
+    for (const d of defs) for (const f of allFields(d)) {
+      for (const k of [f.optionsSource, prefillOf(f)]) {
+        const p = parseKey(k);
+        if (p && "key" in p && p.source === source) used.add(p.key);
+      }
+    }
+    const titles = new Map<string, Map<string, string>>();
+    for (const f of fields) if (f.kind === "ref" && f.parentTypeId && used.has(f.key)) titles.set(f.key, await safeTitlesOf(f.parentTypeId));
+    const rows = await db.select().from(listRecords).where(eq(listRecords.listTypeId, typeId)).orderBy(asc(listRecords.order), asc(listRecords.createdAt));
+    out[pickerKey(typeId)] = rows.map((r, i): RecordOption => {
+      const data: Record<string, string | string[]> = {};
+      for (const f of fields) {
+        if (!used.has(f.key)) continue;
+        const v = r.values[f.key];
+        if (v === undefined || v === "") continue;
+        data[f.key] = f.kind === "ref" && typeof v === "string" ? (titles.get(f.key)?.get(v) ?? "") : v;
+      }
+      // The title shown to the filler: a text field the form links to – nothing the form did not ask for.
+      return { value: r.id, label: fillerTitle(r.values, fields, used) ?? `רשומה ${i + 1}`, data };
+    });
+    for (const f of fields) if (f.kind === "select" && used.has(f.key)) out[keyFor(source, f.key)] = f.options.map((o) => ({ value: o, label: o }));
+  }
+  return out;
+}
+
+/** A list as the builder adds from it: its fields and its records with their titles and values. */
+export interface BuilderListData {
+  id: string;
+  name: string;
+  fields: LinkedListField[];
+  records: { id: string; title: string; values: Record<string, string | string[]> }[];
+}
+
+/**
+ * Every list the builder can add from: the organizations first, then the list types. The records go only to who may
+ * see them on the lists screen (`manageFields`; the organizations' to admins) – others get the fields alone, so they
+ * can still link, just not copy a record's values in. A "belongs to" value is given as the parent record's title.
+ */
+export async function builderLists(access: { records: boolean; orgRecords: boolean }): Promise<{ org: BuilderListData; types: BuilderListData[] }> {
+  const toList = (sheet: Sheet, id: string, name: string, withRecords: boolean): BuilderListData => {
+    const titled = (f: SheetField, v: string | string[] | undefined) =>
+      f.kind === "ref" && f.parentTypeId && typeof v === "string" ? (sheet.refs[f.parentTypeId]?.find((r) => r.id === v)?.title ?? "") : v;
+    return {
+      id,
+      name,
+      fields: sheet.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, options: f.options, multi: f.multi })),
+      records: withRecords
+        ? sheet.rows.map((r) => ({
+            id: r.id,
+            title: listTitle(r.values, sheet.fields),
+            values: Object.fromEntries(sheet.fields.map((f) => [f.key, titled(f, r.values[f.key])]).filter((e): e is [string, string | string[]] => e[1] !== undefined)),
+          }))
+        : [],
+    };
+  };
+  const orgSheet = (await loadSheet(ORG_TYPE))!;
+  const org = toList(orgSheet, ORG_TYPE, "עמותות ועסקים", access.records && access.orgRecords);
+  const types: BuilderListData[] = [];
+  for (const t of await db.select().from(listTypes).orderBy(asc(listTypes.order), asc(listTypes.name))) {
+    const sheet = await loadSheet(t.id);
+    if (sheet) types.push(toList(sheet, t.id, t.name, access.records));
+  }
+  return { org, types };
 }
 
 /** The organizations' list as forms link to it (name, number and the admin-defined fields). */
