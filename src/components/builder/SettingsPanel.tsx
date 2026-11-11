@@ -290,7 +290,7 @@ export function FieldSettings({
           collapsed
           title="עוד הגדרות"
           about="ערך התחלתי, מילוי אוטומטי, שדה פנימי, מה מופיע בהודעות, רוחב ועמוד"
-          isSet={!!(field.hint || field.placeholder || field.defaultValue !== undefined || field.readOnly || field.internal || field.identifier || field.showInMessages || field.width || field.prefill)}
+          isSet={!!(field.hint || field.placeholder || field.defaultValue !== undefined || field.readOnly || field.internal || field.identifier || field.showInMessages || field.width || field.prefill || field.settings?.noCopy === true)}
         >
           {/* One explanation for a field is enough ("הסבר" above). These two older kinds show only where a form already
               has one, so it can be read and cleared. */}
