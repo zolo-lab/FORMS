@@ -3,7 +3,7 @@ import { StepChecks, type StepView } from "./StepSelect";
 import { useState } from "react";
 import { prefillGroups, prefillKeys } from "@/lib/forms/prefill";
 import { copySourceInForm } from "@/lib/forms/copy";
-import { Link2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Link2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/checkbox";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -41,12 +41,39 @@ function Row({ label, children, hint }: { label: string; children: React.ReactNo
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A group of settings. A field shows only what most fields need; the rest sits in groups that open on a click
+ * (`collapsed`), each saying in a line what it is for. A group with something set opens by itself and says so,
+ * so nothing configured is ever hidden.
+ */
+function Section({ title, children, collapsed, about, isSet }: {
+  title: string;
+  children: React.ReactNode;
+  collapsed?: boolean;
+  /** One line under the title: what this group does. */
+  about?: string;
+  isSet?: boolean;
+}) {
+  if (!collapsed) {
+    return (
+      <section className="space-y-3 border-t pt-3">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        {children}
+      </section>
+    );
+  }
   return (
-    <section className="space-y-3 border-t pt-3">
-      <h4 className="text-sm font-semibold">{title}</h4>
-      {children}
-    </section>
+    <details className="group border-t pt-1" open={isSet || undefined}>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md px-1 text-sm hover:bg-accent [&::-webkit-details-marker]:hidden">
+        <ChevronLeft className="size-4 shrink-0 text-muted-foreground transition-transform group-open:-rotate-90" aria-hidden />
+        <span className="flex-1">
+          <span className="font-semibold">{title}</span>
+          {isSet && <span className="ms-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">מוגדר</span>}
+          {about && <span className="block text-xs text-muted-foreground">{about}</span>}
+        </span>
+      </summary>
+      <div className="space-y-3 pb-2 pt-2">{children}</div>
+    </details>
   );
 }
 
@@ -245,14 +272,6 @@ export function FieldSettings({
       {field.type !== "divider" && field.type !== "info_text" && (
         <Row label="הסבר (אופציונלי)"><Input value={field.description ?? ""} onChange={(e) => onPatch({ description: e.target.value || undefined })} /></Row>
       )}
-      {meta.hasAnswer && (
-        <Row label="הסבר מורחב (כפתור i ליד התווית)" hint="לפרטים שלא צריכים להופיע תמיד, למשל איפה מוצאים את המספר">
-          <Input value={field.hint ?? ""} maxLength={300} onChange={(e) => onPatch({ hint: e.target.value || undefined })} />
-        </Row>
-      )}
-      {TEXT_TYPES.includes(field.type) && (
-        <Row label="טקסט רמז (placeholder)"><Input value={field.placeholder ?? ""} onChange={(e) => onPatch({ placeholder: e.target.value || undefined })} /></Row>
-      )}
 
       {meta.hasAnswer && (
         <>
@@ -260,6 +279,31 @@ export function FieldSettings({
             <Switch checked={!!field.required} onCheckedChange={(c) => onPatch({ required: c || undefined })} label="שדה חובה" />
             שדה חובה
           </label>
+          <Row label="באילו שלבים השדה פתוח לעריכה">
+            <StepChecks views={steps} field={field} onChange={onPatch} />
+          </Row>
+        </>
+      )}
+
+      {meta.hasAnswer && (
+        <Section
+          collapsed
+          title="עוד הגדרות"
+          about="ערך התחלתי, מילוי אוטומטי, שדה פנימי, מה מופיע בהודעות, רוחב ועמוד"
+          isSet={!!(field.hint || field.placeholder || field.defaultValue !== undefined || field.readOnly || field.internal || field.identifier || field.showInMessages || field.width || field.prefill)}
+        >
+          {/* One explanation for a field is enough ("הסבר" above). These two older kinds show only where a form already
+              has one, so it can be read and cleared. */}
+          {field.hint && (
+            <Row label="הסבר מורחב (כפתור i ליד התווית)" hint="סוג הסבר ישן: עדיף להעביר את הטקסט ל&quot;הסבר&quot; ולמחוק מכאן">
+              <Input value={field.hint} maxLength={300} onChange={(e) => onPatch({ hint: e.target.value || undefined })} />
+            </Row>
+          )}
+          {field.placeholder && TEXT_TYPES.includes(field.type) && (
+            <Row label="טקסט רמז (placeholder)" hint="סוג הסבר ישן: עדיף להעביר את הטקסט ל&quot;הסבר&quot; ולמחוק מכאן">
+              <Input value={field.placeholder} onChange={(e) => onPatch({ placeholder: e.target.value || undefined })} />
+            </Row>
+          )}
           {DEFAULT_TYPES.includes(field.type) && <DefaultValueRow field={field} onPatch={onPatch} />}
           <label className="flex items-center gap-3 text-sm">
             <Switch checked={!!field.readOnly} onCheckedChange={(c) => onPatch({ readOnly: c || undefined })} label="לקריאה בלבד" />
@@ -277,11 +321,46 @@ export function FieldSettings({
             </span>
           </label>
           {!field.internal && <MessagesSection def={def} field={field} onPatch={onPatch} />}
-        </>
+          {onMoveToPage && def.pages.length > 1 && (
+            <Row label="עמוד בטופס">
+              <Select
+                aria-label="עמוד בטופס"
+                value={def.pages.findIndex((p) => p.fields.some((f) => f.id === field.id))}
+                onChange={(e) => onMoveToPage(Number(e.target.value))}
+              >
+                {def.pages.map((p, i) => <option key={p.id} value={i}>{`${i + 1}. ${p.title || "ללא כותרת"}`}</option>)}
+              </Select>
+            </Row>
+          )}
+          <Row label="רוחב בדסקטופ">
+            <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>
+              <option value="">אוטומטי</option><option value="full">מלא</option><option value="half">חצי</option><option value="third">שליש</option>
+            </Select>
+          </Row>
+          <Row
+            label="מילוי אוטומטי"
+            hint={
+              isOrgField(field)
+                ? "שדה של העמותה: המערכת ממלאת אותו לפי העמותה שממנה יצאה הבקשה, והוא מוצג לקריאה בלבד"
+                : "מנתוני העובד והבקשה, או משדה שהוגדר בעמותות (הגדרות ← עמותות ועסקים)"
+            }
+          >
+            <Select aria-label="מילוי אוטומטי" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })}>
+              <option value="">ללא</option>
+              {prefillOptions.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                </optgroup>
+              ))}
+              {field.prefill && !keys.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
+            </Select>
+          </Row>
+          <CopyFrom def={def} field={field} onPatch={onPatch} />
+                </Section>
       )}
 
       {field.type !== "divider" && field.type !== "image" && field.type !== "hidden" && (
-        <Section title="עיצוב">
+        <Section collapsed title="עיצוב" about="בולד והדגשת רקע לשדה" isSet={!!(field.style && Object.keys(field.style).length)}>
           <StyleControls
             style={field.style}
             sample={field.label || "תווית לדוגמה"}
@@ -400,7 +479,7 @@ export function FieldSettings({
       {meta.hasAnswer && <ValidationSection field={field} v={v} setV={setV} />}
 
       {field.type === "short_text" && (
-        <Section title="מסכת קלט וייחודיות">
+        <Section collapsed title="מסכת קלט וייחודיות" about="תבנית הקלדה קבועה (למשל טלפון), וחסימת ערך שכבר הוגש" isSet={!!(field.mask || field.unique)}>
           <Row label="מסכה" hint='9 = ספרה, a = אות, * = אות או ספרה. למשל 999-9999999'>
             <Input dir="ltr" aria-label="מסכה" value={field.mask ?? ""} onChange={(e) => onPatch({ mask: e.target.value || undefined })} />
           </Row>
@@ -412,55 +491,12 @@ export function FieldSettings({
       )}
 
       {meta.hasAnswer && !["signature", "file_upload", "repeating_table", "consent"].includes(field.type) && (
-        <Section title="נוסחה (שדה מחושב)">
+        <Section collapsed title="נוסחה (שדה מחושב)" about="ערך שמחושב משדות אחרים, למשל סכום או הפרש תאריכים" isSet={!!field.formula}>
           <FormulaEditor def={def} field={field} onChange={(formula) => onPatch({ formula })} />
         </Section>
       )}
 
-      {meta.hasAnswer && (
-        <Section title="מי ממלא ומיקום">
-          {onMoveToPage && def.pages.length > 1 && (
-            <Row label="עמוד בטופס">
-              <Select
-                aria-label="עמוד בטופס"
-                value={def.pages.findIndex((p) => p.fields.some((f) => f.id === field.id))}
-                onChange={(e) => onMoveToPage(Number(e.target.value))}
-              >
-                {def.pages.map((p, i) => <option key={p.id} value={i}>{`${i + 1}. ${p.title || "ללא כותרת"}`}</option>)}
-              </Select>
-            </Row>
-          )}
-          <Row label="באילו שלבים השדה פתוח לעריכה">
-            <StepChecks views={steps} field={field} onChange={onPatch} />
-          </Row>
-          <Row label="רוחב בדסקטופ">
-            <Select value={field.width ?? ""} onChange={(e) => onPatch({ width: (e.target.value || undefined) as FormField["width"] })}>
-              <option value="">אוטומטי</option><option value="full">מלא</option><option value="half">חצי</option><option value="third">שליש</option>
-            </Select>
-          </Row>
-          <Row
-            label="מילוי אוטומטי"
-            hint={
-              isOrgField(field)
-                ? "שדה של העמותה: המערכת ממלאת אותו לפי העמותה שממנה יצאה הבקשה, והוא מוצג לקריאה בלבד"
-                : "מנתוני העובד והבקשה, או משדה שהוגדר בעמותות (הגדרות ← עמותות ועסקים)"
-            }
-          >
-            <Select aria-label="מילוי אוטומטי" value={field.prefill ?? ""} onChange={(e) => onPatch({ prefill: e.target.value || undefined })}>
-              <option value="">ללא</option>
-              {prefillOptions.map((g) => (
-                <optgroup key={g.label} label={g.label}>
-                  {g.options.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-                </optgroup>
-              ))}
-              {field.prefill && !keys.some((k) => k.key === field.prefill) && <option value={field.prefill}>{field.prefill}</option>}
-            </Select>
-          </Row>
-          <CopyFrom def={def} field={field} onPatch={onPatch} />
-        </Section>
-      )}
-
-      <Section title="תנאים">
+      <Section collapsed title="תנאים" about="מתי השדה מוצג, ננעל או חובה, ואילו שדות הוא פותח" isSet={!!(field.visibleIf || field.disabledIf || field.requiredIf)}>
         {onDefChange && meta.hasAnswer && <OpensFields def={def} field={field} onDefChange={onDefChange} onStartPick={onStartPick} />}
         <LinkToBox def={def} field={field} stamps={stamps} onPatch={onPatch} />
         <ConditionEditor def={def} selfId={field.id} value={field.visibleIf} onChange={(c) => onPatch({ visibleIf: c })} lead="הצג שדה זה אם" />
@@ -470,7 +506,7 @@ export function FieldSettings({
         )}
       </Section>
 
-      <Section title="מתקדם">
+      <Section collapsed title="מתקדם" about="שם טכני באנגלית ומפתח ייצוא, לייצוא ולחיבורים" isSet={!!field.exportKey}>
         <Row label="שם מזהה" hint={idError ?? "השם הטכני של השדה (באנגלית), לתנאים, ייבוא מגיליון, API וייצוא. שם כמו ב-iForms מאפשר לשלוח את אותם נתונים לשתי המערכות. עדיף לא לשנות אחרי שמתחילים למלא."}>
           <Input
             dir="ltr"
@@ -638,7 +674,7 @@ function ValidationSection({ field, v, setV }: { field: FormField; v: FieldValid
     );
   }
   if (!rows.length) return null;
-  return <Section title="בדיקות תקינות">{rows}</Section>;
+  return <Section collapsed title="בדיקות תקינות" about="אורך, טווח, סוג תווים ועוד: מה ייחשב תשובה תקינה" isSet={!!(field.validation && Object.keys(field.validation).length)}>{rows}</Section>;
 }
 
 const TABLE_COLUMN_TYPES = FIELD_TYPES.filter((t) => FIELD_TYPE_META[t].hasAnswer && !["repeating_table", "radio_grid", "checkbox_grid", "signature", "file_upload", "hidden", "bank_account", "full_name"].includes(t));
