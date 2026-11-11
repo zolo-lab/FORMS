@@ -85,7 +85,7 @@ test("a form linked to a list: pick a record, its fields fill and its options na
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "פרסום" }).click();
-  await expect(page.getByText("גרסה 1 פורסמה")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "פורסם", exact: true })).toBeDisabled({ timeout: 20_000 });
 
   // --- Filling from the public link, not logged in. ---
   await page.goto("/admin/forms");
