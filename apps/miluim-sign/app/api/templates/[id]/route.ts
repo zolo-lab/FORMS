@@ -40,7 +40,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const pages = patch.pages ?? current.pages;
   const fields = patch.fields ?? current.fields;
   if (!fieldsFitPages(fields, pages.length)) return NextResponse.json({ error: "שדה מצביע על עמוד שאינו קיים" }, { status: 400 });
-  await updateTemplate(id, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
+  const saved = await updateTemplate(id, current.updatedAt, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
+  if (!saved) return NextResponse.json({ error: "התבנית השתנתה. רעננו ונסו שוב." }, { status: 409 });
   return NextResponse.json({ ok: true });
 }
 

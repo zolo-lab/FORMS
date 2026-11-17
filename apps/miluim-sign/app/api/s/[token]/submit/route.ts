@@ -15,8 +15,23 @@ function pngFromDataUrl(value: unknown): Uint8Array | null {
   const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(value);
   if (!match?.[1]) return null;
   const bytes = Buffer.from(match[1], "base64");
-  if (bytes.length < 32 || bytes.length > 500_000 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+  if (bytes.length < 24 || bytes.length > 500_000 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+  if (bytes.subarray(12, 16).toString() !== "IHDR") return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (width === 0 || height === 0 || width > 2000 || height > 2000) return null;
   return new Uint8Array(bytes);
+}
+
+function asAnswers(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item !== "string") return null;
+    out[key] = item;
+  }
+  return out;
 }
 
 function check(fields: Field[], answers: Record<string, string>, signatures: Record<string, Uint8Array>): string | null {
@@ -43,7 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   if (!doc) return NextResponse.json({ error: "הקישור אינו תקף" }, { status: 404 });
   if (doc.status === "signed") return NextResponse.json({ error: "הטופס כבר נחתם", signedAt: doc.signedAt }, { status: 409 });
   const body = await req.json().catch(() => null) as { answers?: unknown; signatures?: unknown } | null;
-  const answers = body?.answers && typeof body.answers === "object" ? body.answers as Record<string, string> : null;
+  const answers = asAnswers(body?.answers);
   const rawSignatures = body?.signatures && typeof body.signatures === "object" ? body.signatures as Record<string, unknown> : null;
   if (!answers || !rawSignatures) return NextResponse.json({ error: "בקשה לא תקינה" }, { status: 400 });
   const signatures: Record<string, Uint8Array> = {};

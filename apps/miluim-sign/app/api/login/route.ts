@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE, checkPasscode, createSessionToken } from "@/lib/auth";
-import { clearLoginFailures, loginLocked, recordLoginFailure } from "@/lib/db";
+import { claimLoginAttempt, clearLoginFailures } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,8 @@ export async function POST(req: Request) {
   if (!process.env.OFFICER_PASSCODE || !process.env.SESSION_SECRET) {
     return NextResponse.json({ error: "המערכת עדיין לא הוגדרה" }, { status: 500 });
   }
-  if (await loginLocked(ip)) return NextResponse.json({ error: "יותר מדי ניסיונות. נסו שוב בעוד רבע שעה." }, { status: 429 });
+  if (await claimLoginAttempt(ip) === "locked") return NextResponse.json({ error: "יותר מדי ניסיונות. נסו שוב בעוד רבע שעה." }, { status: 429 });
   if (!checkPasscode(passcode, process.env.OFFICER_PASSCODE)) {
-    await recordLoginFailure(ip);
     return NextResponse.json({ error: "קוד הכניסה שגוי" }, { status: 401 });
   }
   await clearLoginFailures(ip);

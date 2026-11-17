@@ -58,7 +58,10 @@ export function SettingsClient() {
           const endpoint = subscription?.endpoint;
           await subscription?.unsubscribe().catch(() => undefined);
           if (endpoint) {
-            await fetch("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint }) }).catch(() => undefined);
+            await Promise.race([
+              fetch("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint }) }).catch(() => undefined),
+              new Promise((resolve) => setTimeout(resolve, 3000)),
+            ]);
           }
         } catch { /* logout still proceeds */ }
         await fetch("/api/logout", { method: "POST" });

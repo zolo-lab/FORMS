@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import SignaturePad from "signature_pad";
-import { burnPage } from "@/lib/burn";
 import { isValidIsraeliId } from "@/lib/id";
 import { formatWhen, todayIL, type Field, type FieldKind } from "@/lib/types";
 import { Banner, Button, TextField, controlClass } from "@/components/ui";
@@ -81,8 +80,6 @@ export function SignerClient({ token }: { token: string }) {
     try {
       const signatures: Record<string, string> = {};
       for (const field of fields) if (field.kind === "signature") signatures[field.id] = signatureFor(field);
-      const first = data.pages[0];
-      if (first) setPreview(URL.createObjectURL(await burnPage(first.url, fields.filter((field) => field.page === 0), values, signatures)));
       const res = await fetch(`/api/s/${token}/submit`, {
         method: "POST",
         headers: { "content-type": "application/json" },

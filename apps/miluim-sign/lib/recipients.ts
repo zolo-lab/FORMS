@@ -6,12 +6,32 @@ export interface ParsedRecipient extends RecipientInput {
   error?: string;
 }
 
+/** Comma, semicolon, or tab. A quoted cell may contain those separators. */
+function splitRow(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i] ?? "";
+    if (quoted) {
+      if (char === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else quoted = false;
+      } else cur += char;
+    } else if (char === '"') quoted = true;
+    else if (char === "," || char === ";" || char === "\t") { out.push(cur.trim()); cur = ""; }
+    else cur += char;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
 /** Lines of `שם, טלפון` or `שם, טלפון, ת"ז`. A header row is skipped. */
 export function parseRecipients(text: string): ParsedRecipient[] {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const out: ParsedRecipient[] = [];
   for (const line of lines) {
-    const parts = line.split(/[,;\t]/).map((part) => part.trim());
+    const parts = splitRow(line);
     if (!parts.length) continue;
     const head = parts[0] ?? "";
     if (/^(שם|name|טלפון|phone)$/i.test(head)) continue;

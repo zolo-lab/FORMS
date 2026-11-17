@@ -140,14 +140,27 @@ export async function insertTemplate(input: { id: string; name: string; pages: P
     values (${input.id}, ${input.name}, ${JSON.stringify(input.pages)}::jsonb, ${JSON.stringify(input.fields)}::jsonb, ${input.thumbPath})`;
 }
 
-/** Writes only the columns that were sent, so a rename cannot roll back a field edit. */
-export async function updateTemplate(id: string, patch: { name?: string; fields?: Field[]; pages?: PageRef[]; thumbPath?: string | null }): Promise<void> {
+/**
+ * One update of only the columns that were sent, and only if `expectedUpdatedAt` still matches.
+ * A concurrent edit changes `updated_at`, so this write does not land on a stale template.
+ */
+export async function updateTemplate(id: string, expectedUpdatedAt: string, patch: { name?: string; fields?: Field[]; pages?: PageRef[]; thumbPath?: string | null }): Promise<boolean> {
   await ensureSchema();
   const sql = client();
-  if (patch.name !== undefined) await sql`update miluim_templates set name = ${patch.name}, updated_at = now() where id = ${id}`;
-  if (patch.fields !== undefined) await sql`update miluim_templates set fields = ${JSON.stringify(patch.fields)}::jsonb, updated_at = now() where id = ${id}`;
-  if (patch.pages !== undefined) await sql`update miluim_templates set pages = ${JSON.stringify(patch.pages)}::jsonb, updated_at = now() where id = ${id}`;
-  if (patch.thumbPath !== undefined) await sql`update miluim_templates set thumb_path = ${patch.thumbPath}, updated_at = now() where id = ${id}`;
+  const nameOn = patch.name !== undefined;
+  const fieldsOn = patch.fields !== undefined;
+  const pagesOn = patch.pages !== undefined;
+  const thumbOn = patch.thumbPath !== undefined;
+  if (!nameOn && !fieldsOn && !pagesOn && !thumbOn) return true;
+  const rows = await sql`update miluim_templates set
+      name = case when ${nameOn} then ${patch.name ?? ""} else name end,
+      fields = case when ${fieldsOn} then ${JSON.stringify(patch.fields ?? [])}::jsonb else fields end,
+      pages = case when ${pagesOn} then ${JSON.stringify(patch.pages ?? [])}::jsonb else pages end,
+      thumb_path = case when ${thumbOn} then ${patch.thumbPath ?? null} else thumb_path end,
+      updated_at = now()
+    where id = ${id} and updated_at = ${expectedUpdatedAt}
+    returning id`;
+  return rows.length > 0;
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
@@ -263,23 +276,25 @@ export async function deletePush(endpoint: string): Promise<void> {
   await sql`delete from miluim_push_subs where endpoint = ${endpoint}`;
 }
 
-export async function loginLocked(ip: string): Promise<boolean> {
-  await ensureSchema();
-  const sql = client();
-  const rows = await sql`select locked_until from miluim_login_attempts where ip = ${ip}`;
-  const until = rows[0]?.locked_until;
-  return until ? new Date(String(until)).getTime() > Date.now() : false;
-}
-
-export async function recordLoginFailure(ip: string): Promise<void> {
+/** Counts this try before the passcode is checked. Parallel guesses cannot share one counter. */
+export async function claimLoginAttempt(ip: string): Promise<"locked" | "ok"> {
   await ensureSchema();
   const sql = client();
   const rows = await sql`insert into miluim_login_attempts (ip, failures) values (${ip}, 1)
-    on conflict (ip) do update set failures = miluim_login_attempts.failures + 1
-    returning failures`;
-  if (Number(rows[0]?.failures ?? 1) >= 8) {
+    on conflict (ip) do update set
+      failures = case
+        when miluim_login_attempts.locked_until > now() then miluim_login_attempts.failures
+        else miluim_login_attempts.failures + 1
+      end
+    returning failures, locked_until`;
+  const failures = Number(rows[0]?.failures ?? 1);
+  const until = rows[0]?.locked_until;
+  if (until && new Date(String(until)).getTime() > Date.now()) return "locked";
+  if (failures >= 8) {
     await sql`update miluim_login_attempts set failures = 0, locked_until = now() + interval '15 minutes' where ip = ${ip}`;
+    return "locked";
   }
+  return "ok";
 }
 
 export async function clearLoginFailures(ip: string): Promise<void> {
