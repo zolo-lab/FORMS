@@ -33,7 +33,7 @@ jobs:
       - name: Neon branch for this run
         if: env.NEON_API_KEY != ''
         id: neon
-        uses: neondatabase/create-branch-action@v6
+        uses: ./.github/actions/neon-ci-branch
         with:
           api_key: ${{ env.NEON_API_KEY }}
           project_id: ${{ env.NEON_PROJECT_ID }}
@@ -96,7 +96,7 @@ jobs:
       - name: Neon branch for this run
         if: env.NEON_API_KEY != ''
         id: neon
-        uses: neondatabase/create-branch-action@v6
+        uses: ./.github/actions/neon-ci-branch
         with:
           api_key: ${{ env.NEON_API_KEY }}
           project_id: ${{ env.NEON_PROJECT_ID }}

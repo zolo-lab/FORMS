@@ -1,0 +1,75 @@
+name: Neon CI branch
+description: Create this run's Neon branch, retrying while an archived parent unarchives.
+inputs:
+  api_key:
+    required: true
+  project_id:
+    required: true
+  parent_branch:
+    required: true
+  branch_name:
+    required: true
+  database:
+    required: true
+  role:
+    required: true
+  expires_at:
+    required: true
+outputs:
+  db_url:
+    description: Connection string for the branch
+    value: ${{ steps.try3.outputs.db_url || steps.try2.outputs.db_url || steps.try1.outputs.db_url }}
+runs:
+  using: composite
+  steps:
+    # Creating a child of an archived branch starts an unarchive and Neon answers 423 until that finishes.
+    # The create action does not retry, so a second and third attempt run after the parent is ready.
+    - name: Create branch
+      id: try1
+      continue-on-error: true
+      uses: neondatabase/create-branch-action@v6
+      with:
+        api_key: ${{ inputs.api_key }}
+        project_id: ${{ inputs.project_id }}
+        parent_branch: ${{ inputs.parent_branch }}
+        branch_name: ${{ inputs.branch_name }}
+        database: ${{ inputs.database }}
+        role: ${{ inputs.role }}
+        expires_at: ${{ inputs.expires_at }}
+    - name: Wait for the parent branch to leave the archive
+      if: steps.try1.outcome == 'failure'
+      shell: bash
+      run: sleep 15
+    - name: Create branch after unarchive
+      id: try2
+      if: steps.try1.outcome == 'failure'
+      continue-on-error: true
+      uses: neondatabase/create-branch-action@v6
+      with:
+        api_key: ${{ inputs.api_key }}
+        project_id: ${{ inputs.project_id }}
+        parent_branch: ${{ inputs.parent_branch }}
+        branch_name: ${{ inputs.branch_name }}
+        database: ${{ inputs.database }}
+        role: ${{ inputs.role }}
+        expires_at: ${{ inputs.expires_at }}
+    - name: Wait once more for the parent branch
+      if: steps.try1.outcome == 'failure' && steps.try2.outcome == 'failure'
+      shell: bash
+      run: sleep 30
+    - name: Create branch, last attempt
+      id: try3
+      if: steps.try1.outcome == 'failure' && steps.try2.outcome == 'failure'
+      uses: neondatabase/create-branch-action@v6
+      with:
+        api_key: ${{ inputs.api_key }}
+        project_id: ${{ inputs.project_id }}
+        parent_branch: ${{ inputs.parent_branch }}
+        branch_name: ${{ inputs.branch_name }}
+        database: ${{ inputs.database }}
+        role: ${{ inputs.role }}
+        expires_at: ${{ inputs.expires_at }}
+    - name: Require a connection string
+      if: always() && !steps.try1.outputs.db_url && !steps.try2.outputs.db_url && !steps.try3.outputs.db_url
+      shell: bash
+      run: echo "Neon did not return a connection string for this run." >&2 && exit 1
