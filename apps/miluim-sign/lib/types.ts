@@ -49,6 +49,8 @@ export interface TemplateRow {
   thumbPath: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Exact `updated_at` text from the database, sent back on save. */
+  version: string;
 }
 
 export interface DocumentRow {

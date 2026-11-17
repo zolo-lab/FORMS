@@ -18,7 +18,7 @@ function splitRow(line: string): string[] {
         if (line[i + 1] === '"') { cur += '"'; i++; }
         else quoted = false;
       } else cur += char;
-    } else if (char === '"') quoted = true;
+    } else if (char === '"' && cur.trim() === "") quoted = true;
     else if (char === "," || char === ";" || char === "\t") { out.push(cur.trim()); cur = ""; }
     else cur += char;
   }

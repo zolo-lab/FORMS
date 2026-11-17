@@ -87,6 +87,7 @@ function templateFrom(row: Record<string, unknown>): TemplateRow {
     thumbPath: row.thumb_path ? String(row.thumb_path) : null,
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
+    version: String(row.version ?? row.updated_at),
   };
 }
 
@@ -122,14 +123,14 @@ function docFrom(row: Record<string, unknown>): DocumentRow {
 export async function listTemplates(): Promise<TemplateRow[]> {
   await ensureSchema();
   const sql = client();
-  const rows = await sql`select * from miluim_templates order by updated_at desc`;
+  const rows = await sql`select *, updated_at::text as version from miluim_templates order by updated_at desc`;
   return rows.map((row) => templateFrom(row));
 }
 
 export async function getTemplate(id: string): Promise<TemplateRow | null> {
   await ensureSchema();
   const sql = client();
-  const rows = await sql`select * from miluim_templates where id = ${id}`;
+  const rows = await sql`select *, updated_at::text as version from miluim_templates where id = ${id}`;
   return rows[0] ? templateFrom(rows[0]) : null;
 }
 
@@ -158,7 +159,7 @@ export async function updateTemplate(id: string, expectedUpdatedAt: string, patc
       pages = case when ${pagesOn} then ${JSON.stringify(patch.pages ?? [])}::jsonb else pages end,
       thumb_path = case when ${thumbOn} then ${patch.thumbPath ?? null} else thumb_path end,
       updated_at = now()
-    where id = ${id} and updated_at = ${expectedUpdatedAt}
+    where id = ${id} and updated_at::text = ${expectedUpdatedAt}
     returning id`;
   return rows.length > 0;
 }

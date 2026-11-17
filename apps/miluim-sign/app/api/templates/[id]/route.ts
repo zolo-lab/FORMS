@@ -16,7 +16,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const current = await getTemplate(id);
   if (!current) return NextResponse.json({ error: "התבנית לא נמצאה" }, { status: 404 });
-  const body = await req.json().catch(() => null) as { name?: unknown; fields?: unknown; pages?: unknown; thumbPath?: unknown } | null;
+  const body = await req.json().catch(() => null) as { name?: unknown; fields?: unknown; pages?: unknown; thumbPath?: unknown; version?: unknown } | null;
   const patch: { name?: string; fields?: ReturnType<typeof cleanFields>; pages?: ReturnType<typeof cleanPages>; thumbPath?: string | null } = {};
   if (typeof body?.name === "string") {
     const name = body.name.trim().slice(0, 80);
@@ -40,7 +40,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const pages = patch.pages ?? current.pages;
   const fields = patch.fields ?? current.fields;
   if (!fieldsFitPages(fields, pages.length)) return NextResponse.json({ error: "שדה מצביע על עמוד שאינו קיים" }, { status: 400 });
-  const saved = await updateTemplate(id, current.updatedAt, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
+  const version = typeof body?.version === "string" ? body.version : "";
+  if (!version) return NextResponse.json({ error: "חסרה גרסת התבנית. רעננו ונסו שוב." }, { status: 400 });
+  const saved = await updateTemplate(id, version, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
   if (!saved) return NextResponse.json({ error: "התבנית השתנתה. רעננו ונסו שוב." }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

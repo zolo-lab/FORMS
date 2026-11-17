@@ -220,7 +220,7 @@ export function Wizard() {
       const res = await fetch(`/api/templates/${template.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: nameToSave, fields: clean }),
+        body: JSON.stringify({ name: nameToSave, fields: clean, version: template.version }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "שמירת התבנית נכשלה");

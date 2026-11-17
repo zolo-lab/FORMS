@@ -53,7 +53,7 @@ export function TemplatesClient() {
                 {rename === row.id ? (
                   <form className="flex gap-2" onSubmit={async (event) => {
                     event.preventDefault();
-                    const res = await fetch(`/api/templates/${row.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) });
+                    const res = await fetch(`/api/templates/${row.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, version: row.version }) });
                     const body = await res.json().catch(() => ({}));
                     if (!res.ok) { setError(body.error || "שינוי השם נכשל"); return; }
                     setRename(null);

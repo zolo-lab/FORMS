@@ -41,7 +41,7 @@ export function TemplateEditor({ id }: { id: string }) {
       const res = await fetch(`/api/templates/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), fields: clean }),
+        body: JSON.stringify({ name: name.trim(), fields: clean, version: template?.version }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) { setError(body.error || "השמירה נכשלה"); return; }
