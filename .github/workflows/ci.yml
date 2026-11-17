@@ -33,12 +33,15 @@ jobs:
       - name: Neon branch for this run
         if: env.NEON_API_KEY != ''
         id: neon
-        env:
-          NEON_PARENT: dev
-          NEON_DATABASE: forms
-          NEON_ROLE: forms_owner
-          NEON_EXPIRES_AT: ${{ steps.expiry.outputs.at }}
-        run: python3 scripts/ci-neon-branch.py
+        uses: neondatabase/create-branch-action@v6
+        with:
+          api_key: ${{ env.NEON_API_KEY }}
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          parent_branch: dev
+          branch_name: ${{ env.NEON_BRANCH }}
+          database: forms
+          role: forms_owner
+          expires_at: ${{ steps.expiry.outputs.at }}
       - run: pnpm typecheck
       - run: node scripts/eslint-annotations.mjs
       - run: pnpm test
@@ -93,12 +96,15 @@ jobs:
       - name: Neon branch for this run
         if: env.NEON_API_KEY != ''
         id: neon
-        env:
-          NEON_PARENT: dev
-          NEON_DATABASE: forms
-          NEON_ROLE: forms_owner
-          NEON_EXPIRES_AT: ${{ steps.expiry.outputs.at }}
-        run: python3 scripts/ci-neon-branch.py
+        uses: neondatabase/create-branch-action@v6
+        with:
+          api_key: ${{ env.NEON_API_KEY }}
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          parent_branch: dev
+          branch_name: ${{ env.NEON_BRANCH }}
+          database: forms
+          role: forms_owner
+          expires_at: ${{ steps.expiry.outputs.at }}
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
         env:
@@ -115,13 +121,11 @@ jobs:
     if: always() && needs.check.outputs.isolated == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Delete this run's Neon branch
-        env:
-          NEON_API_KEY: ${{ secrets.NEON }}
-          NEON_PROJECT_ID: damp-wildflower-79510538
-          NEON_BRANCH: ci-${{ github.run_id }}-${{ github.run_attempt }}
-        run: python3 scripts/ci-neon-delete-branch.py
+      - uses: neondatabase/delete-branch-action@v3
+        with:
+          api_key: ${{ secrets.NEON }}
+          project_id: damp-wildflower-79510538
+          branch: ci-${{ github.run_id }}-${{ github.run_attempt }}
   # Publishes rendered PDF previews to the `ci-previews` branch so they can be
   # reviewed from environments that cannot download Actions artifacts.
   previews:
