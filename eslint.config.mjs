@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate app with its own toolchain. The root check must not lint or typecheck it.
+    "apps/**",
   ]),
 ]);
 
