@@ -44,7 +44,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!version) return NextResponse.json({ error: "חסרה גרסת התבנית. רעננו ונסו שוב." }, { status: 400 });
   const saved = await updateTemplate(id, version, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
   if (!saved) return NextResponse.json({ error: "התבנית השתנתה. רעננו ונסו שוב." }, { status: 409 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, version: saved });
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {

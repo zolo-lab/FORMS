@@ -224,6 +224,9 @@ export function Wizard() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "שמירת התבנית נכשלה");
+      const nextVersion = typeof body.version === "string" ? body.version : "";
+      if (!nextVersion) throw new Error("שמירת התבנית נכשלה");
+      setTemplate((current) => (current && current.id === template.id ? { ...current, name: nameToSave, version: nextVersion } : current));
       return template.id as string;
     }
     const res = await fetch("/api/templates", {

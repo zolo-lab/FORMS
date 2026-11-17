@@ -144,15 +144,16 @@ export async function insertTemplate(input: { id: string; name: string; pages: P
 /**
  * One update of only the columns that were sent, and only if `expectedUpdatedAt` still matches.
  * A concurrent edit changes `updated_at`, so this write does not land on a stale template.
+ * Returns the exact `updated_at` text written, or null when the stored version no longer matches.
  */
-export async function updateTemplate(id: string, expectedUpdatedAt: string, patch: { name?: string; fields?: Field[]; pages?: PageRef[]; thumbPath?: string | null }): Promise<boolean> {
+export async function updateTemplate(id: string, expectedUpdatedAt: string, patch: { name?: string; fields?: Field[]; pages?: PageRef[]; thumbPath?: string | null }): Promise<string | null> {
   await ensureSchema();
   const sql = client();
   const nameOn = patch.name !== undefined;
   const fieldsOn = patch.fields !== undefined;
   const pagesOn = patch.pages !== undefined;
   const thumbOn = patch.thumbPath !== undefined;
-  if (!nameOn && !fieldsOn && !pagesOn && !thumbOn) return true;
+  if (!nameOn && !fieldsOn && !pagesOn && !thumbOn) return expectedUpdatedAt;
   const rows = await sql`update miluim_templates set
       name = case when ${nameOn} then ${patch.name ?? ""} else name end,
       fields = case when ${fieldsOn} then ${JSON.stringify(patch.fields ?? [])}::jsonb else fields end,
@@ -160,8 +161,9 @@ export async function updateTemplate(id: string, expectedUpdatedAt: string, patc
       thumb_path = case when ${thumbOn} then ${patch.thumbPath ?? null} else thumb_path end,
       updated_at = now()
     where id = ${id} and updated_at::text = ${expectedUpdatedAt}
-    returning id`;
-  return rows.length > 0;
+    returning updated_at::text as version`;
+  const written = rows[0]?.version;
+  return typeof written === "string" && written ? written : null;
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
