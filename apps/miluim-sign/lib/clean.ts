@@ -45,3 +45,7 @@ export function cleanPages(value: unknown): PageRef[] | null {
   }
   return out;
 }
+
+export function fieldsFitPages(fields: { page: number }[], pageCount: number): boolean {
+  return fields.every((field) => field.page < pageCount);
+}

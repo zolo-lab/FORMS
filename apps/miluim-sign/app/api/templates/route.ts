@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cleanFields, cleanPages } from "@/lib/clean";
+import { cleanFields, cleanPages, fieldsFitPages } from "@/lib/clean";
 import { insertTemplate, listTemplates } from "@/lib/db";
 import { isBlobUrl } from "@/lib/storage";
 
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!name) return NextResponse.json({ error: "תנו שם לתבנית" }, { status: 400 });
   const pages = cleanPages(body?.pages);
   const fields = cleanFields(body?.fields);
-  if (!pages || !fields?.length) return NextResponse.json({ error: "התבנית חסרה דף או שדות" }, { status: 400 });
+  if (!pages || !fields?.length || !fieldsFitPages(fields, pages.length)) return NextResponse.json({ error: "התבנית חסרה דף או שדות" }, { status: 400 });
   const thumbPath = typeof body?.thumbPath === "string" && isBlobUrl(body.thumbPath) ? body.thumbPath : null;
   const id = crypto.randomUUID();
   await insertTemplate({ id, name, pages, fields, thumbPath });

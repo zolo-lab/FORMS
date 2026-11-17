@@ -79,21 +79,18 @@ export function SignerClient({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const signatureMap: Record<string, string> = {};
-      for (const field of fields) if (field.kind === "signature") signatureMap[field.id] = signatureFor(field);
-      const blobs: Blob[] = [];
-      for (let i = 0; i < data.pages.length; i++) {
-        const page = data.pages[i]!;
-        blobs.push(await burnPage(page.url, fields.filter((field) => field.page === i), values, signatureMap));
-      }
-      setPreview(URL.createObjectURL(blobs[0]!));
-      const form = new FormData();
-      form.set("answers", JSON.stringify(values));
-      form.set("covered", JSON.stringify(fields.filter((field) => field.kind === "signature").map((field) => field.id)));
-      blobs.forEach((blob, index) => form.set(`page-${index}`, blob, `page-${index}.jpg`));
-      const res = await fetch(`/api/s/${token}/submit`, { method: "POST", body: form });
+      const signatures: Record<string, string> = {};
+      for (const field of fields) if (field.kind === "signature") signatures[field.id] = signatureFor(field);
+      const first = data.pages[0];
+      if (first) setPreview(URL.createObjectURL(await burnPage(first.url, fields.filter((field) => field.page === 0), values, signatures)));
+      const res = await fetch(`/api/s/${token}/submit`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answers: values, signatures }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "השמירה נכשלה");
+      setPreview(`/api/s/${token}/file?signed=1`);
       setDone(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "השמירה נכשלה");

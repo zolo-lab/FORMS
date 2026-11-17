@@ -11,7 +11,7 @@ export function parseRecipients(text: string): ParsedRecipient[] {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const out: ParsedRecipient[] = [];
   for (const line of lines) {
-    const parts = line.split(/[,;\t]/).map((part) => part.trim()).filter((part) => part.length > 0);
+    const parts = line.split(/[,;\t]/).map((part) => part.trim());
     if (!parts.length) continue;
     const head = parts[0] ?? "";
     if (/^(שם|name|טלפון|phone)$/i.test(head)) continue;

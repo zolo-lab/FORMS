@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cleanFields, cleanPages } from "@/lib/clean";
+import { cleanFields, cleanPages, fieldsFitPages } from "@/lib/clean";
 import { deleteTemplate, getTemplate, updateTemplate } from "@/lib/db";
 import { isBlobUrl } from "@/lib/storage";
 
@@ -37,6 +37,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!isBlobUrl(body.thumbPath)) return NextResponse.json({ error: "תמונה לא תקינה" }, { status: 400 });
     patch.thumbPath = body.thumbPath;
   }
+  const pages = patch.pages ?? current.pages;
+  const fields = patch.fields ?? current.fields;
+  if (!fieldsFitPages(fields, pages.length)) return NextResponse.json({ error: "שדה מצביע על עמוד שאינו קיים" }, { status: 400 });
   await updateTemplate(id, { name: patch.name, fields: patch.fields ?? undefined, pages: patch.pages ?? undefined, thumbPath: patch.thumbPath });
   return NextResponse.json({ ok: true });
 }

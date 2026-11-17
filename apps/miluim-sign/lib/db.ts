@@ -57,6 +57,11 @@ async function migrate(): Promise<void> {
     created_at timestamptz not null default now()
   )`;
   await sql`create index if not exists miluim_documents_created on miluim_documents (created_at desc)`;
+  await sql`create table if not exists miluim_login_attempts (
+    ip text primary key,
+    failures int not null default 0,
+    locked_until timestamptz
+  )`;
   await sql`create table if not exists miluim_push_subs (
     id text primary key,
     endpoint text not null unique,
@@ -135,16 +140,14 @@ export async function insertTemplate(input: { id: string; name: string; pages: P
     values (${input.id}, ${input.name}, ${JSON.stringify(input.pages)}::jsonb, ${JSON.stringify(input.fields)}::jsonb, ${input.thumbPath})`;
 }
 
+/** Writes only the columns that were sent, so a rename cannot roll back a field edit. */
 export async function updateTemplate(id: string, patch: { name?: string; fields?: Field[]; pages?: PageRef[]; thumbPath?: string | null }): Promise<void> {
   await ensureSchema();
-  const current = await getTemplate(id);
-  if (!current) return;
   const sql = client();
-  const name = patch.name ?? current.name;
-  const fields = patch.fields ?? current.fields;
-  const pages = patch.pages ?? current.pages;
-  const thumb = patch.thumbPath === undefined ? current.thumbPath : patch.thumbPath;
-  await sql`update miluim_templates set name = ${name}, fields = ${JSON.stringify(fields)}::jsonb, pages = ${JSON.stringify(pages)}::jsonb, thumb_path = ${thumb}, updated_at = now() where id = ${id}`;
+  if (patch.name !== undefined) await sql`update miluim_templates set name = ${patch.name}, updated_at = now() where id = ${id}`;
+  if (patch.fields !== undefined) await sql`update miluim_templates set fields = ${JSON.stringify(patch.fields)}::jsonb, updated_at = now() where id = ${id}`;
+  if (patch.pages !== undefined) await sql`update miluim_templates set pages = ${JSON.stringify(patch.pages)}::jsonb, updated_at = now() where id = ${id}`;
+  if (patch.thumbPath !== undefined) await sql`update miluim_templates set thumb_path = ${patch.thumbPath}, updated_at = now() where id = ${id}`;
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
@@ -258,4 +261,29 @@ export async function deletePush(endpoint: string): Promise<void> {
   await ensureSchema();
   const sql = client();
   await sql`delete from miluim_push_subs where endpoint = ${endpoint}`;
+}
+
+export async function loginLocked(ip: string): Promise<boolean> {
+  await ensureSchema();
+  const sql = client();
+  const rows = await sql`select locked_until from miluim_login_attempts where ip = ${ip}`;
+  const until = rows[0]?.locked_until;
+  return until ? new Date(String(until)).getTime() > Date.now() : false;
+}
+
+export async function recordLoginFailure(ip: string): Promise<void> {
+  await ensureSchema();
+  const sql = client();
+  const rows = await sql`insert into miluim_login_attempts (ip, failures) values (${ip}, 1)
+    on conflict (ip) do update set failures = miluim_login_attempts.failures + 1
+    returning failures`;
+  if (Number(rows[0]?.failures ?? 1) >= 8) {
+    await sql`update miluim_login_attempts set failures = 0, locked_until = now() + interval '15 minutes' where ip = ${ip}`;
+  }
+}
+
+export async function clearLoginFailures(ip: string): Promise<void> {
+  await ensureSchema();
+  const sql = client();
+  await sql`delete from miluim_login_attempts where ip = ${ip}`;
 }

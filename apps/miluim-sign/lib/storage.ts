@@ -1,9 +1,11 @@
 import { get, put } from "@vercel/blob";
 
+/** Only objects this app stored (`miluim/…` on a Vercel Blob host). */
 export function isBlobUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.endsWith(".blob.vercel-storage.com");
+    const host = parsed.hostname.toLowerCase();
+    return parsed.protocol === "https:" && host.endsWith(".blob.vercel-storage.com") && parsed.pathname.includes("/miluim");
   } catch {
     return false;
   }

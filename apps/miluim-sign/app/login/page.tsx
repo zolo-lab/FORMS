@@ -19,7 +19,9 @@ function LoginForm() {
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setError(body.error || "הכניסה נכשלה"); return; }
-    router.push(params.get("next") || "/");
+    const next = params.get("next") ?? "";
+    const target = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+    router.push(target);
     router.refresh();
   };
   return (

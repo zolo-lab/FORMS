@@ -4,16 +4,25 @@ import { getByToken, markSigned } from "@/lib/db";
 import { normalizeIsraeliId } from "@/lib/id";
 import { notifySigned } from "@/lib/notify";
 import { imagesToPdf } from "@/lib/pdf-pack";
-import { putBytes } from "@/lib/storage";
+import { stampPage } from "@/lib/stamp";
+import { readBytes, putBytes } from "@/lib/storage";
 import type { Field } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-function check(fields: Field[], answers: Record<string, string>, covered: string[]): string | null {
-  const have = new Set(covered);
+function pngFromDataUrl(value: unknown): Uint8Array | null {
+  if (typeof value !== "string") return null;
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!match?.[1]) return null;
+  const bytes = Buffer.from(match[1], "base64");
+  if (bytes.length < 32 || bytes.length > 500_000 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+  return new Uint8Array(bytes);
+}
+
+function check(fields: Field[], answers: Record<string, string>, signatures: Record<string, Uint8Array>): string | null {
   for (const field of fields) {
     if (field.kind === "signature") {
-      if (!have.has(field.id)) return "חסרה חתימה";
+      if (!signatures[field.id]) return "חסרה חתימה";
       continue;
     }
     const value = (answers[field.id] ?? "").trim();
@@ -33,17 +42,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const doc = await getByToken(token);
   if (!doc) return NextResponse.json({ error: "הקישור אינו תקף" }, { status: 404 });
   if (doc.status === "signed") return NextResponse.json({ error: "הטופס כבר נחתם", signedAt: doc.signedAt }, { status: 409 });
-  const form = await req.formData();
-  const answers = JSON.parse(typeof form.get("answers") === "string" ? form.get("answers") as string : "{}") as Record<string, string>;
-  const covered = JSON.parse(typeof form.get("covered") === "string" ? form.get("covered") as string : "[]") as string[];
-  if (!answers || typeof answers !== "object" || !Array.isArray(covered)) return NextResponse.json({ error: "בקשה לא תקינה" }, { status: 400 });
-  const problem = check(doc.fields, answers, covered);
+  const body = await req.json().catch(() => null) as { answers?: unknown; signatures?: unknown } | null;
+  const answers = body?.answers && typeof body.answers === "object" ? body.answers as Record<string, string> : null;
+  const rawSignatures = body?.signatures && typeof body.signatures === "object" ? body.signatures as Record<string, unknown> : null;
+  if (!answers || !rawSignatures) return NextResponse.json({ error: "בקשה לא תקינה" }, { status: 400 });
+  const signatures: Record<string, Uint8Array> = {};
+  for (const field of doc.fields) {
+    if (field.kind !== "signature") continue;
+    const png = pngFromDataUrl(rawSignatures[field.id]);
+    if (!png) return NextResponse.json({ error: "חסרה חתימה" }, { status: 422 });
+    signatures[field.id] = png;
+  }
+  const problem = check(doc.fields, answers, signatures);
   if (problem) return NextResponse.json({ error: problem }, { status: 422 });
   const images: Uint8Array[] = [];
   for (let i = 0; i < doc.pages.length; i++) {
-    const file = form.get(`page-${i}`);
-    if (!(file instanceof File) || file.size < 1000 || file.size > 8_000_000) return NextResponse.json({ error: "התמונה החתומה חסרה" }, { status: 400 });
-    images.push(new Uint8Array(await file.arrayBuffer()));
+    const page = doc.pages[i];
+    if (!page) return NextResponse.json({ error: "עמוד המקור חסר" }, { status: 500 });
+    const original = await readBytes(page.path);
+    if (!original) return NextResponse.json({ error: "עמוד המקור חסר" }, { status: 500 });
+    const fields = doc.fields.filter((field) => field.page === i);
+    images.push(await stampPage(original.bytes, fields, answers, signatures));
   }
   const pdf = await imagesToPdf(images);
   const hash = createHash("sha256").update(pdf).digest("hex");

@@ -51,7 +51,19 @@ export function SettingsClient() {
         <h2 className="font-semibold">הוספה למסך הבית</h2>
         <p className="text-sm text-muted-foreground">באייפון: כפתור השיתוף, ואז «הוספה למסך הבית». באנדרואיד: תפריט הדפדפן, «התקנת אפליקציה».</p>
       </section>
-      <Button variant="quiet" onClick={async () => { await fetch("/api/logout", { method: "POST" }); router.push("/login"); }}>יציאה</Button>
+      <Button variant="quiet" onClick={async () => {
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration();
+          const subscription = await registration?.pushManager.getSubscription();
+          const endpoint = subscription?.endpoint;
+          await subscription?.unsubscribe().catch(() => undefined);
+          if (endpoint) {
+            await fetch("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint }) }).catch(() => undefined);
+          }
+        } catch { /* logout still proceeds */ }
+        await fetch("/api/logout", { method: "POST" });
+        router.push("/login");
+      }}>יציאה</Button>
     </div>
   );
 }

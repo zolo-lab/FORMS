@@ -36,16 +36,21 @@ export function TemplateEditor({ id }: { id: string }) {
     if (!name.trim()) { setError("תנו שם לתבנית"); return; }
     setBusy(true);
     setError(null);
-    const clean: Field[] = fields.map(({ source: _s, proposed: _p, ...field }) => field);
-    const res = await fetch(`/api/templates/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), fields: clean }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) { setError(body.error || "השמירה נכשלה"); return; }
-    router.push("/templates");
+    try {
+      const clean: Field[] = fields.map(({ source: _s, proposed: _p, ...field }) => field);
+      const res = await fetch(`/api/templates/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), fields: clean }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(body.error || "השמירה נכשלה"); return; }
+      router.push("/templates");
+    } catch {
+      setError("השמירה נכשלה");
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (error && !template) return <Banner tone="error">{error}</Banner>;

@@ -44,8 +44,14 @@ export function FieldStage({
     const canvas = canvasRef.current;
     const frame = frameRef.current;
     if (!canvas || !frame || mode !== "marker") return;
-    canvas.width = frame.clientWidth;
-    canvas.height = frame.clientHeight;
+    const fit = () => {
+      canvas.width = frame.clientWidth;
+      canvas.height = frame.clientHeight;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(frame);
+    return () => observer.disconnect();
   }, [mode, src]);
 
   const point = (event: React.PointerEvent) => {

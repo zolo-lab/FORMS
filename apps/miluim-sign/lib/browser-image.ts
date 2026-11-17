@@ -57,9 +57,9 @@ export async function pdfToPages(file: File): Promise<{ raster: Raster; fields: 
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjs.getDocument({ data }).promise;
+  if (doc.numPages > 6) throw new Error("אפשר עד 6 עמודים בקובץ");
   const pages: { raster: Raster; fields: DetectedField[] }[] = [];
-  const limit = Math.min(doc.numPages, 6);
-  for (let number = 1; number <= limit; number++) {
+  for (let number = 1; number <= doc.numPages; number++) {
     const page = await doc.getPage(number);
     const base = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(2, 1500 / base.width) });

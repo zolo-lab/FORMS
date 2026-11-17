@@ -109,10 +109,13 @@ export function Wizard() {
     setBusy("טוענים את התבנית…");
     setError(null);
     try {
-      const page = template.pages[0];
-      const raster = await urlToRaster(`/api/file?url=${encodeURIComponent(page.path)}`);
-      const blob = await rasterToBlob(raster);
-      setPages([{ url: URL.createObjectURL(blob), width: raster.width, height: raster.height, raster }]);
+      const local: LocalPage[] = [];
+      for (const page of template.pages) {
+        const raster = await urlToRaster(`/api/file?url=${encodeURIComponent(page.path)}`);
+        const blob = await rasterToBlob(raster);
+        local.push({ url: URL.createObjectURL(blob), width: raster.width, height: raster.height, raster });
+      }
+      setPages(local);
       setFields(template.fields.map((field) => ({ ...field, source: "template", proposed: false })));
       setOrigin("template");
       setStep("fields");
@@ -172,6 +175,10 @@ export function Wizard() {
 
   const straighten = async () => {
     if (!shown || !corners) return;
+    if (template && template.pages.length > 1) {
+      setError("תבנית של כמה עמודים נשלחת מהתמונה השמורה. צילום חדש מתאים לתבנית של עמוד אחד.");
+      return;
+    }
     setBusy("מיישרים את הצילום ומזהים חתימות…");
     setError(null);
     await wait(30);
@@ -179,7 +186,7 @@ export function Wizard() {
       const aspect = template?.pages[0] ? template.pages[0].width / template.pages[0].height : undefined;
       const prepared = prepareScan(shown, corners, template ? aspect : undefined);
       let next = template
-        ? template.fields.map((field) => ({ ...field, id: crypto.randomUUID(), source: "template" as const, proposed: false }))
+        ? template.fields.filter((field) => field.page === 0).map((field) => ({ ...field, id: crypto.randomUUID(), source: "template" as const, proposed: false }))
         : detectFields(prepared).map((field) => makeField(field.kind, 0, field.x, field.y, field.w, field.h, "auto", true));
       let didAlign = false;
       if (template?.pages[0]) {

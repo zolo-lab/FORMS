@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@napi-rs/canvas':
+        specifier: 1.1.1
+        version: 1.1.1
       '@neondatabase/serverless':
         specifier: 1.2.0
         version: 1.2.0
@@ -1346,7 +1349,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 1.1.1
       '@napi-rs/canvas-win32-arm64-msvc': 1.1.1
       '@napi-rs/canvas-win32-x64-msvc': 1.1.1
-    optional: true
 
   '@neondatabase/serverless@1.2.0': {}
 

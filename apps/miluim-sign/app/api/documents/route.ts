@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { newSigningToken } from "@/lib/auth";
-import { cleanFields, cleanPages } from "@/lib/clean";
+import { cleanFields, cleanPages, fieldsFitPages } from "@/lib/clean";
 import { insertDocuments, listDocuments } from "@/lib/db";
 import { normalizeIsraeliId, isValidIsraeliId } from "@/lib/id";
 import { toWaDigits } from "@/lib/phone";
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const title = typeof body?.title === "string" && body.title.trim() ? body.title.trim().slice(0, 80) : "כתב הסכמה";
   const pages = cleanPages(body?.pages);
   const fields = cleanFields(body?.fields);
-  if (!pages || !fields) return NextResponse.json({ error: "הטופס אינו שלם" }, { status: 400 });
+  if (!pages || !fields || !fieldsFitPages(fields, pages.length)) return NextResponse.json({ error: "הטופס אינו שלם" }, { status: 400 });
   if (!fields.some((field) => field.kind === "signature")) return NextResponse.json({ error: "צריך לפחות שדה חתימה אחד" }, { status: 400 });
   if (!Array.isArray(body?.recipients) || body.recipients.length === 0) return NextResponse.json({ error: "חסר נמען" }, { status: 400 });
   if (body.recipients.length > 40) return NextResponse.json({ error: "אפשר לשלוח עד 40 חיילים בבת אחת" }, { status: 400 });
