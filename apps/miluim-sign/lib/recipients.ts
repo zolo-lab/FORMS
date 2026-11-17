@@ -1,0 +1,53 @@
+import { isValidIsraeliId } from "./id";
+import { toWaDigits } from "./phone";
+import type { RecipientInput } from "./types";
+
+export interface ParsedRecipient extends RecipientInput {
+  error?: string;
+}
+
+/** Comma, semicolon, or tab. A quoted cell may contain those separators. */
+function splitRow(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i] ?? "";
+    if (quoted) {
+      if (char === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else quoted = false;
+      } else cur += char;
+    } else if (char === '"' && cur.trim() === "") quoted = true;
+    else if (char === "," || char === ";" || char === "\t") { out.push(cur.trim()); cur = ""; }
+    else cur += char;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+/** Lines of `שם, טלפון` or `שם, טלפון, ת"ז`. A header row is skipped. */
+export function parseRecipients(text: string): ParsedRecipient[] {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const out: ParsedRecipient[] = [];
+  for (const line of lines) {
+    const parts = splitRow(line);
+    if (!parts.length) continue;
+    const head = parts[0] ?? "";
+    if (/^(שם|name|טלפון|phone)$/i.test(head)) continue;
+    let name = "";
+    let phone = "";
+    let idNumber = "";
+    if (parts.length === 1 && toWaDigits(head)) phone = head;
+    else {
+      name = head;
+      phone = parts[1] ?? "";
+      idNumber = parts[2] ?? "";
+    }
+    let error: string | undefined;
+    if (!toWaDigits(phone)) error = "טלפון לא תקין";
+    else if (idNumber && !isValidIsraeliId(idNumber)) error = "ת\"ז לא תקינה";
+    out.push({ name, phone, idNumber, error });
+  }
+  return out;
+}
