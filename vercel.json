@@ -5,11 +5,5 @@
       "main": true,
       "*": true
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/deliver",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  }
 }
